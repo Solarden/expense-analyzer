@@ -1,0 +1,10 @@
+# Reverse proxy in front of the FastAPI app. LAN only — no public exposure.
+# Remote access is meant to go through Tailscale, not a port forward.
+# See internal_docs/expense-analyzer-design.md §10.
+:80 {
+	# Restrict to private LAN ranges and Tailscale's CGNAT range.
+	@notlan not remote_ip 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12 100.64.0.0/10 127.0.0.1/8
+	respond @notlan "Forbidden" 403
+
+	reverse_proxy app:8000
+}

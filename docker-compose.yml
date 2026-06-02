@@ -1,0 +1,56 @@
+# Expense Analyzer — runs alongside Home Assistant on the Raspberry Pi.
+# See internal_docs/expense-analyzer-design.md §3.
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      EA_DATABASE_PATH: /data/expense_analyzer.db
+    volumes:
+      - ./data:/data
+    # Run migrations, then start the server. Bind only to localhost; Caddy is
+    # the only thing that should reach the app directly.
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn expense_analyzer.main:app --host 0.0.0.0 --port 8000"
+    expose:
+      - "8000"
+    healthcheck:
+      # /health turns 200 only after migrations ran and the server is up, so a
+      # healthy app is the signal that the DB is migrated and reachable.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    build: .
+    restart: unless-stopped
+    environment:
+      EA_DATABASE_PATH: /data/expense_analyzer.db
+    volumes:
+      - ./data:/data
+    command: ["python", "-m", "expense_analyzer.worker"]
+    depends_on:
+      app:
+        # Wait until migrations have run (app is healthy) before touching the DB.
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      # LAN only. Bind to the Pi's LAN interface in production if desired.
+      - "8080:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:
