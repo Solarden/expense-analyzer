@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from functools import lru_cache
 
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
@@ -7,7 +8,13 @@ from sqlmodel import Session, create_engine
 from expense_analyzer.config import get_settings
 
 
-def _build_engine() -> Engine:
+@lru_cache
+def get_engine() -> Engine:
+    """Build (once) and return the SQLite engine.
+
+    Lazy on purpose: importing this module must not open a connection, so the
+    database path can still be overridden (e.g. by tests) before first use.
+    """
     settings = get_settings()
     settings.database_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -31,10 +38,7 @@ def _build_engine() -> Engine:
     return engine
 
 
-engine = _build_engine()
-
-
 def get_session() -> Iterator[Session]:
     """FastAPI dependency yielding a database session."""
-    with Session(engine) as session:
+    with Session(get_engine()) as session:
         yield session

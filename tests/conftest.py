@@ -1,8 +1,9 @@
 """Shared test fixtures.
 
-The database path is redirected to a throwaway temp file *at import time* —
-before any test module imports the app (which builds the engine at import).
-This keeps tests off the real ``data/`` database.
+The database path is redirected to a throwaway temp file so tests never touch
+the real ``data/`` database. This is safe to do after imports because the
+engine is built lazily (see expense_analyzer.db.get_engine) — nothing opens a
+connection at import time.
 """
 
 import os
@@ -10,13 +11,14 @@ import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
-# Must run before `expense_analyzer` is imported anywhere in the test session.
-_TMP_DIR = Path(tempfile.mkdtemp(prefix="ea-test-"))
-os.environ.setdefault("EA_DATABASE_PATH", str(_TMP_DIR / "test.db"))
+import pytest
+from fastapi.testclient import TestClient
+from sqlmodel import Session, SQLModel
 
-import pytest  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-from sqlmodel import Session, SQLModel  # noqa: E402
+from expense_analyzer.config import get_settings
+
+os.environ["EA_DATABASE_PATH"] = str(Path(tempfile.mkdtemp(prefix="ea-test-")) / "test.db")
+get_settings.cache_clear()  # drop any settings cached before the override
 
 
 @pytest.fixture
@@ -33,8 +35,9 @@ def db_session() -> Iterator[Session]:
     after each test, so model tests start from a clean slate.
 
     In Phase 0 there are no models yet, so this just exercises the engine."""
-    from expense_analyzer.db import engine
+    from expense_analyzer.db import get_engine
 
+    engine = get_engine()
     SQLModel.metadata.create_all(engine)
     try:
         with Session(engine) as session:

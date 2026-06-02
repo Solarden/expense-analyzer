@@ -4,7 +4,7 @@ from sqlmodel import Session
 
 from expense_analyzer import __version__
 from expense_analyzer.config import get_settings
-from expense_analyzer.db import engine
+from expense_analyzer.db import get_engine
 
 router = APIRouter(tags=["meta"])
 
@@ -21,7 +21,7 @@ def health() -> dict[str, str]:
     db_ok = True
     journal_mode = None
     try:
-        with Session(engine) as session:
+        with Session(get_engine()) as session:
             journal_mode = session.exec(text("PRAGMA journal_mode")).scalar()  # type: ignore[arg-type]
     except Exception:
         db_ok = False
