@@ -5,9 +5,9 @@ import pytest
 from expense_analyzer.money import (
     MoneyParseError,
     format_pln,
-    from_grosze,
+    from_minor_units,
     parse_pln,
-    to_grosze,
+    to_minor_units,
 )
 
 
@@ -22,13 +22,13 @@ from expense_analyzer.money import (
         (5, 500),
     ],
 )
-def test_to_grosze(value, expected):
-    assert to_grosze(value) == expected
+def test_to_minor_units(value, expected):
+    assert to_minor_units(value) == expected
 
 
-def test_to_grosze_rounds_half_up():
-    # 0.005 zł -> 0.5 grosza, rounds to 1
-    assert to_grosze(Decimal("0.005")) == 1
+def test_to_minor_units_rounds_half_up():
+    # 0.005 PLN -> 0.5 of a minor unit, rounds to 1
+    assert to_minor_units(Decimal("0.005")) == 1
 
 
 @pytest.mark.parametrize(
@@ -53,9 +53,9 @@ def test_parse_pln_rejects_garbage(bad):
         parse_pln(bad)
 
 
-def test_roundtrip_grosze_decimal():
-    assert from_grosze(123456) == Decimal("1234.56")
-    assert from_grosze(-1) == Decimal("-0.01")
+def test_roundtrip_minor_units_decimal():
+    assert from_minor_units(123456) == Decimal("1234.56")
+    assert from_minor_units(-1) == Decimal("-0.01")
 
 
 def test_format_pln_uses_comma():

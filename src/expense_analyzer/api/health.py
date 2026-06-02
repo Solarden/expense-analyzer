@@ -12,6 +12,7 @@ router = APIRouter(tags=["meta"])
 @router.get("/")
 def root() -> dict[str, str]:
     settings = get_settings()
+
     return {"app": settings.app_name, "version": __version__}
 
 
@@ -25,6 +26,7 @@ def health() -> dict[str, str]:
             journal_mode = session.execute(text("PRAGMA journal_mode")).scalar()
     except Exception:
         db_ok = False
+
     return {
         "status": "ok" if db_ok else "degraded",
         "database": "ok" if db_ok else "unreachable",

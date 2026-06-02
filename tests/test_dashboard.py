@@ -32,7 +32,6 @@ def fake_importer() -> Iterator[None]:
     try:
         yield
     finally:
-        importer_registry.available().pop("fake", None)
         importer_registry._REGISTRY.pop("fake", None)
 
 
@@ -53,9 +52,9 @@ def test_create_account_then_listed(client: TestClient, db_session: Session):
 
 
 def test_create_category(client: TestClient, db_session: Session):
-    client.post("/dashboard/categories", data={"name": "Jedzenie", "kind": "expense"})
+    client.post("/dashboard/categories", data={"name": "Food", "kind": "expense"})
     cats = db_session.exec(select(Category)).all()
-    assert [c.name for c in cats] == ["Jedzenie"]
+    assert [c.name for c in cats] == ["Food"]
     assert cats[0].kind == CategoryKind.expense
 
 
@@ -80,9 +79,8 @@ def test_upload_imports_transactions(client: TestClient, db_session: Session, fa
 
 def test_categorize_sets_category_and_scope(client: TestClient, db_session: Session, fake_importer):
     acc = Account(name="PKO", type=AccountType.bank)
-    cat = Category(name="Jedzenie", kind=CategoryKind.expense)
-    db_session.add(acc)
-    db_session.add(cat)
+    cat = Category(name="Food", kind=CategoryKind.expense)
+    db_session.add_all([acc, cat])
     db_session.commit()
     db_session.refresh(acc)
     db_session.refresh(cat)
@@ -128,3 +126,95 @@ def test_rollback_hides_transactions_from_list(
     # Soft-deleted rows drop out of the transaction list.
     assert "Biedronka" not in client.get("/dashboard/transactions").text
     assert up.status_code == 200
+
+
+def _account(db_session: Session) -> Account:
+    acc = Account(name="PKO", type=AccountType.bank)
+    db_session.add(acc)
+    db_session.commit()
+    db_session.refresh(acc)
+
+    return acc
+
+
+def test_upload_unknown_account_shows_error(client: TestClient, db_session: Session, fake_importer):
+    resp = client.post(
+        "/dashboard/upload",
+        data={"account_id": "999", "importer": "fake"},
+        files={"file": ("may.csv", b"x", "text/csv")},
+    )
+    assert resp.status_code == 200
+    assert "Unknown account" in resp.text
+    assert len(db_session.exec(select(Transaction)).all()) == 0  # nothing imported
+
+
+def test_upload_unknown_importer_shows_error(client: TestClient, db_session: Session):
+    acc = _account(db_session)
+    resp = client.post(
+        "/dashboard/upload",
+        data={"account_id": str(acc.id), "importer": "nope"},
+        files={"file": ("may.csv", b"x", "text/csv")},
+    )
+    assert resp.status_code == 200
+    assert "Unknown importer" in resp.text
+
+
+def test_upload_unparseable_file_shows_error(client: TestClient, db_session: Session):
+    from expense_analyzer.importers.base import ImporterError
+
+    class BoomImporter:
+        source = "Boom csv"
+
+        def parse(self, data: bytes):
+            raise ImporterError("line 7: bad amount")
+
+    importer_registry.register("boom", BoomImporter())
+    try:
+        acc = _account(db_session)
+        resp = client.post(
+            "/dashboard/upload",
+            data={"account_id": str(acc.id), "importer": "boom"},
+            files={"file": ("bad.csv", b"x", "text/csv")},
+        )
+        assert resp.status_code == 200
+        assert "Could not parse the file" in resp.text
+        assert "line 7: bad amount" in resp.text
+        assert len(db_session.exec(select(Transaction)).all()) == 0
+    finally:
+        importer_registry._REGISTRY.pop("boom", None)
+
+
+def test_categorize_rejects_non_numeric_category(client: TestClient, db_session: Session):
+    resp = client.post(
+        "/dashboard/transactions/1/categorize",
+        data={"category_id": "abc", "scope": "private"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+
+
+def test_categorize_rejects_unknown_category(
+    client: TestClient, db_session: Session, fake_importer
+):
+    acc = _account(db_session)
+    client.post(
+        "/dashboard/upload",
+        data={"account_id": str(acc.id), "importer": "fake"},
+        files={"file": ("may.csv", b"x", "text/csv")},
+    )
+    tx = db_session.exec(select(Transaction)).first()
+    resp = client.post(
+        f"/dashboard/transactions/{tx.id}/categorize",
+        data={"category_id": "9999", "scope": "private"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 404
+
+
+def test_categorize_unknown_transaction_404(client: TestClient, db_session: Session):
+    resp = client.post(
+        "/dashboard/transactions/12345/categorize",
+        data={"category_id": "", "scope": "private"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 404

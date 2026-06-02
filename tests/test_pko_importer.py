@@ -10,6 +10,7 @@ from datetime import date
 
 import pytest
 
+from expense_analyzer.importers.base import ImporterError
 from expense_analyzer.importers.pko import PKOCsvImporter
 
 # Synthetic PKO export. Encoded to cp1250 in the fixture below so the decoding
@@ -84,3 +85,32 @@ def test_fx_row_keeps_pln_amount_and_extra_fragments(sample_bytes: bytes):
 
 def test_empty_input_yields_nothing():
     assert PKOCsvImporter().parse(b"") == []
+
+
+def test_utf8_file_decodes_polish_characters():
+    # A genuine UTF-8 export must decode via the UTF-8 path, not get mojibaked.
+    txns = PKOCsvImporter().parse(_SAMPLE.encode("utf-8"))
+    assert len(txns) == 4
+    assert "Łódź" in txns[0].raw_description
+
+
+def test_malformed_amount_raises_importer_error():
+    bad = (
+        '"Data operacji","Data waluty","Typ transakcji","Kwota","Waluta",'
+        '"Saldo po transakcji","Opis transakcji","","","","","",""\n'
+        '"2026-05-31","2026-05-31","Płatność kartą","not-a-number","PLN","+325.76",'
+        '"Tytuł: x","","","","","",""\n'
+    ).encode("cp1250")
+    with pytest.raises(ImporterError, match="line 2"):
+        PKOCsvImporter().parse(bad)
+
+
+def test_malformed_date_raises_importer_error():
+    bad = (
+        '"Data operacji","Data waluty","Typ transakcji","Kwota","Waluta",'
+        '"Saldo po transakcji","Opis transakcji","","","","","",""\n'
+        '"2026-13-99","2026-05-31","Płatność kartą","-1.00","PLN","+1.00",'
+        '"Tytuł: x","","","","","",""\n'
+    ).encode("cp1250")
+    with pytest.raises(ImporterError):
+        PKOCsvImporter().parse(bad)

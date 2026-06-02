@@ -15,6 +15,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name, version=__version__)
     app.include_router(health.router)
     app.include_router(dashboard.router)
+
     return app
 
 

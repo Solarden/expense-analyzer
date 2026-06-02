@@ -2,8 +2,8 @@
 
 See internal_docs/expense-analyzer-design.md §5. Decisions baked in here:
 
-- Money is stored as **integer minor units (grosze)**, never float. ``amount``
-  is negative for expenses, positive for inflows.
+- Money is stored as **integer minor units** (1/100 PLN), never float.
+  ``amount`` is negative for expenses, positive for inflows.
 - Every transaction carries a ``fingerprint`` (unique) for import idempotency
   and belongs to an :class:`ImportBatch` so a bad import rolls back in one move.
 - Soft delete via ``deleted_at`` — nothing is ever truly destroyed.
@@ -111,7 +111,7 @@ class Transaction(SQLModel, table=True):
     account_id: int = Field(foreign_key="account.id", index=True)
     import_batch_id: int = Field(foreign_key="import_batch.id", index=True)
 
-    # grosze: negative = expense, positive = inflow. Never a float.
+    # minor units (1/100 PLN): negative = expense, positive = inflow. Never a float.
     amount: int
     # Running balance from the CSV, used for reconciliation (design §6).
     balance_after: int | None = Field(default=None)

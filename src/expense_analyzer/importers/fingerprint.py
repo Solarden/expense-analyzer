@@ -20,4 +20,5 @@ def compute_fingerprint(
     raw_description: str,
 ) -> str:
     payload = f"{account_id}|{booked_date.isoformat()}|{amount}|{raw_description}"
+
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()

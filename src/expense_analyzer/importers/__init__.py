@@ -6,12 +6,13 @@ replace a single :class:`~expense_analyzer.importers.base.Importer` instead of
 rewriting the app.
 """
 
-from expense_analyzer.importers.base import Importer, NormalizedTransaction
+from expense_analyzer.importers.base import Importer, ImporterError, NormalizedTransaction
 from expense_analyzer.importers.fingerprint import compute_fingerprint
 from expense_analyzer.importers.pipeline import ImportSummary, rollback_batch, run_import
 
 __all__ = [
     "Importer",
+    "ImporterError",
     "ImportSummary",
     "NormalizedTransaction",
     "compute_fingerprint",

@@ -23,7 +23,7 @@ from expense_analyzer.models import ImportBatch, ImportStatus, Transaction, TxSo
 
 @dataclass(frozen=True, slots=True)
 class ImportSummary:
-    batch_id: int
+    batch_id: int | None  # None when nothing new was imported (no batch created)
     parsed: int  # records the parser produced
     new: int  # inserted this run
     skipped: int  # duplicates (fingerprint already known)
@@ -39,22 +39,13 @@ def run_import(
 ) -> ImportSummary:
     """Parse ``data`` with ``importer`` and idempotently upsert into ``account_id``.
 
-    Commits the batch and its new transactions atomically. Re-importing the same
-    file opens a fresh (empty) batch and skips every row — nothing duplicates.
+    Commits the batch and its new transactions atomically. The batch is created
+    lazily — only on the first new transaction — so re-importing the same file
+    (all duplicates) adds nothing and leaves no empty batch behind.
     """
     parsed = importer.parse(data)
 
-    batch = ImportBatch(
-        source=importer.source,
-        filename=filename,
-        record_count=0,
-        status=ImportStatus.active,
-    )
-    session.add(batch)
-    session.flush()  # assign batch.id
-    if batch.id is None:  # pragma: no cover - flush always assigns the PK
-        raise RuntimeError("ImportBatch id was not assigned after flush")
-
+    batch: ImportBatch | None = None
     new = 0
     skipped = 0
     for nt in parsed:
@@ -65,6 +56,16 @@ def run_import(
         if already is not None:
             skipped += 1
             continue
+
+        if batch is None:
+            batch = ImportBatch(
+                source=importer.source,
+                filename=filename,
+                record_count=0,
+                status=ImportStatus.active,
+            )
+            session.add(batch)
+            session.flush()  # assign batch.id
 
         session.add(
             Transaction(
@@ -81,11 +82,18 @@ def run_import(
         )
         new += 1
 
-    batch.record_count = new  # rows this batch owns (what a rollback would remove)
-    session.add(batch)
+    if batch is not None:
+        batch.record_count = new  # rows this batch owns (what a rollback would remove)
+        session.add(batch)
+
     session.commit()
 
-    return ImportSummary(batch_id=batch.id, parsed=len(parsed), new=new, skipped=skipped)
+    return ImportSummary(
+        batch_id=batch.id if batch else None,
+        parsed=len(parsed),
+        new=new,
+        skipped=skipped,
+    )
 
 
 def rollback_batch(session: Session, batch_id: int) -> int:
@@ -112,4 +120,5 @@ def rollback_batch(session: Session, batch_id: int) -> int:
     batch.status = ImportStatus.rolled_back
     session.add(batch)
     session.commit()
+
     return len(rows)

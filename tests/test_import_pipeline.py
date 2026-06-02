@@ -89,9 +89,10 @@ def test_reimport_same_file_is_idempotent(db_session: Session, account: Account)
     assert first.new == 3
     assert second.new == 0
     assert second.skipped == 3
-    # Re-import opens a (now empty) batch but creates no duplicate rows.
+    # Re-import creates no duplicate rows and — since nothing was new — no batch.
     assert len(db_session.exec(select(Transaction)).all()) == 3
-    assert db_session.get(ImportBatch, second.batch_id).record_count == 0
+    assert second.batch_id is None
+    assert len(db_session.exec(select(ImportBatch)).all()) == 1
 
 
 def test_overlapping_import_inserts_only_the_new_rows(db_session: Session, account: Account):

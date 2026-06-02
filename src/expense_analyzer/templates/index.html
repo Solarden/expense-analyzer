@@ -73,7 +73,7 @@
         <td>
           {% if b.status.value == "active" %}
           <form class="inline" method="post" action="/dashboard/batches/{{ b.id }}/rollback"
-                onsubmit="return confirm('Roll back import {{ b.filename }}? Its transactions will be marked deleted.');">
+                onsubmit="return confirm('Roll back this import? Its transactions will be marked deleted.');">
             <button class="ghost" type="submit">Roll back</button>
           </form>
           {% endif %}

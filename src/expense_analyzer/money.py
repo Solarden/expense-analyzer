@@ -1,35 +1,36 @@
 """Money handling.
 
-Policy (design §5): money is stored as **integer minor units (grosze)**, never
-float. 100 zł == ``10000``. Summing hundreds of floats drifts by a grosz and
+Policy (design §5): money is stored as **integer minor units**, never float.
+100 PLN == ``10000``. Summing hundreds of floats drifts by a minor unit and
 balances stop reconciling — so we parse to :class:`~decimal.Decimal` only at the
-edges (CSV in, display out) and keep ``int`` grosze everywhere in between.
+edges (CSV in, display out) and keep ``int`` minor units everywhere in between.
 """
 
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
-_GROSZE_PER_ZLOTY = Decimal(100)
+_MINOR_UNITS_PER_PLN = Decimal(100)
 
 
 class MoneyParseError(ValueError):
-    """Raised when a text amount cannot be parsed into grosze."""
+    """Raised when a text amount cannot be parsed into minor units."""
 
 
-def to_grosze(amount: Decimal | int | str) -> int:
-    """Convert a złoty amount to integer grosze, rounding half-up.
+def to_minor_units(amount: Decimal | int | str) -> int:
+    """Convert a major-unit (PLN) amount to integer minor units, rounding half-up.
 
-    Accepts a :class:`~decimal.Decimal`, an ``int`` (whole złoty) or a plain
+    Accepts a :class:`~decimal.Decimal`, an ``int`` (whole PLN) or a plain
     numeric string like ``"123.45"``. For locale-formatted bank strings
     (``"1 234,56 zł"``) use :func:`parse_pln` instead.
     """
     if isinstance(amount, str):
         amount = Decimal(amount)
-    grosze = (Decimal(amount) * _GROSZE_PER_ZLOTY).quantize(Decimal(1), rounding=ROUND_HALF_UP)
-    return int(grosze)
+    minor = (Decimal(amount) * _MINOR_UNITS_PER_PLN).quantize(Decimal(1), rounding=ROUND_HALF_UP)
+
+    return int(minor)
 
 
 def parse_pln(text: str) -> int:
-    """Parse a Polish-formatted money string into signed integer grosze.
+    """Parse a Polish-formatted money string into signed integer minor units.
 
     Handles what Polish bank CSVs throw at us: comma decimal separator, space /
     non-breaking-space thousands separators, a trailing ``zł``/``PLN`` and a
@@ -38,7 +39,7 @@ def parse_pln(text: str) -> int:
     cleaned = (
         text.strip()
         .replace("\xa0", "")  # non-breaking space (common in PL exports)
-        .replace(" ", "")  # narrow no-break space
+        .replace(" ", "")  # narrow no-break space
         .replace(" ", "")
         .replace("zł", "")
         .replace("PLN", "")
@@ -48,16 +49,16 @@ def parse_pln(text: str) -> int:
     if not cleaned:
         raise MoneyParseError(f"empty money value: {text!r}")
     try:
-        return to_grosze(Decimal(cleaned))
+        return to_minor_units(Decimal(cleaned))
     except (InvalidOperation, ArithmeticError) as exc:
         raise MoneyParseError(f"cannot parse money value: {text!r}") from exc
 
 
-def from_grosze(grosze: int) -> Decimal:
-    """Convert integer grosze back to a złoty :class:`~decimal.Decimal`."""
-    return (Decimal(grosze) / _GROSZE_PER_ZLOTY).quantize(Decimal("0.01"))
+def from_minor_units(minor: int) -> Decimal:
+    """Convert integer minor units back to a major-unit (PLN) :class:`~decimal.Decimal`."""
+    return (Decimal(minor) / _MINOR_UNITS_PER_PLN).quantize(Decimal("0.01"))
 
 
-def format_pln(grosze: int) -> str:
-    """Format integer grosze for display, e.g. ``-123456`` -> ``"-1234,56 zł"``."""
-    return f"{from_grosze(grosze)} zł".replace(".", ",")
+def format_pln(minor: int) -> str:
+    """Format integer minor units for display, e.g. ``-123456`` -> ``"-1234,56 zł"``."""
+    return f"{from_minor_units(minor)} zł".replace(".", ",")

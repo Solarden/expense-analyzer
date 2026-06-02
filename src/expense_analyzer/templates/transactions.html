@@ -52,7 +52,9 @@
       {% endfor %}
     </tbody>
   </table>
-  <p class="muted" style="margin-top:12px">{{ transactions | length }} transactions{% if account_id %} (filter: account #{{ account_id }}){% endif %}.</p>
+  <p class="muted" style="margin-top:12px">
+    {{ transactions | length }} transactions{% if account_id %} (filter: account #{{ account_id }}){% endif %}{% if transactions | length == limit %} (latest {{ limit }} shown){% endif %}.
+  </p>
   {% else %}
   <p class="muted">No transactions. <a href="/dashboard/upload">Import a CSV →</a></p>
   {% endif %}
