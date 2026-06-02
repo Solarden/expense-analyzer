@@ -45,3 +45,13 @@ repos:
     hooks:
       # Runs hadolint via Docker, so no local binary needed.
       - id: hadolint-docker
+
+  - repo: local
+    hooks:
+      # Fail if models drifted from migrations (autogenerate would be non-empty).
+      - id: alembic-check
+        name: alembic check (model/migration drift)
+        entry: scripts/alembic_check.sh
+        language: script
+        pass_filenames: false
+        files: ^(src/expense_analyzer/models\.py$|alembic/)

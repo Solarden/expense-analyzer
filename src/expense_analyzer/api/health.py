@@ -22,7 +22,7 @@ def health() -> dict[str, str]:
     journal_mode = None
     try:
         with Session(get_engine()) as session:
-            journal_mode = session.exec(text("PRAGMA journal_mode")).scalar()  # type: ignore[arg-type]
+            journal_mode = session.execute(text("PRAGMA journal_mode")).scalar()
     except Exception:
         db_ok = False
     return {
