@@ -51,6 +51,12 @@ class TransferConfirmForm(BaseModel):
     tx_b_id: int
 
 
+class FetchPositionsForm(BaseModel):
+    """Pick the portfolio account to import investment positions into."""
+
+    account_id: int
+
+
 class RateChangeForm(BaseModel):
     effective_date: date  # ISO date from <input type="date">; Pydantic parses it
     base_rate_percent: str  # % per year -> basis points (parsed via parse_pln)

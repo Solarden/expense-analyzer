@@ -11,12 +11,14 @@ import os
 import tempfile
 from collections.abc import Callable, Iterator
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel
 
+from expense_analyzer.clock import utc_now
 from expense_analyzer.config import get_settings
 from expense_analyzer.importers import NormalizedTransaction, ParseResult
 from expense_analyzer.importers import registry as importer_registry
@@ -27,6 +29,7 @@ from expense_analyzer.models import (
     CategoryKind,
     ImportBatch,
     InstallmentType,
+    InvestmentPosition,
     Loan,
     RateType,
     Transaction,
@@ -252,6 +255,216 @@ def make_loan(db_session: Session) -> Callable[..., Loan]:
         db_session.commit()
         db_session.refresh(loan)
         return loan
+
+    return _make
+
+
+_XLSX_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+_XLSX_NS_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+
+
+def _build_xtb_xlsx(
+    *,
+    sheet_name: str = "OPEN POSITION 15042026",
+    balance: str = "16.57",
+    equity: str = "2181.69",
+    lots: list[dict] | None = None,
+) -> bytes:
+    """Build an XTB-shaped .xlsx in memory (stdlib zip + XML).
+
+    Faithful to a real export: a blank leading column, the full ``Position..Comment``
+    table starting at column B, the ``Name/Account`` + ``Balance/Equity`` header
+    block, inline strings (no sharedStrings), and four sheets so the parser must
+    pick ``OPEN POSITION`` among siblings. Numbers are raw strings (as real exports
+    store them) so the parser exercises its Decimal path. ``lots`` items:
+    ``{symbol, volume, market, purchase, pl}``; the default set sums to the default
+    ``equity`` (cash + Σ value) so reconciliation passes. No real account/holdings.
+
+    Used by the XTB parser tests, the upload API test, and to (re)generate the
+    committed regression fixtures in ``tests/fixtures/xtb/`` (see its README).
+    """
+    import io
+    import zipfile
+
+    if lots is None:
+        lots = [
+            {
+                "symbol": "SXR8.DE",
+                "volume": "1",
+                "market": "632.56",
+                "purchase": "565.78",
+                "pl": "66.78",
+            },
+            {
+                "symbol": "SXR8.DE",
+                "volume": "1",
+                "market": "632.56",
+                "purchase": "595.72",
+                "pl": "36.84",
+            },
+            {
+                "symbol": "SNT.PL",
+                "volume": "3",
+                "market": "300.00",
+                "purchase": "777.00",
+                "pl": "123.00",
+            },
+        ]
+
+    # Real XTB layout: a blank leading column A, the positions table runs B..Q,
+    # and a header block sits above it (cols by 0-based index; F=5, I=8, P=15, Q=16).
+    cols = "ABCDEFGHIJKLMNOPQR"
+    T, N = True, False
+    rows: list[str] = []
+
+    def emit(r: int, cells: dict[int, tuple[str, bool]]) -> None:
+        inner = "".join(
+            (
+                f'<c r="{cols[i]}{r}" t="inlineStr"><is><t>{v}</t></is></c>'
+                if text
+                else f'<c r="{cols[i]}{r}"><v>{v}</v></c>'
+            )
+            for i, (v, text) in sorted(cells.items())
+            if v != ""
+        )
+        rows.append(f'<row r="{r}">{inner}</row>')
+
+    # Header block — labels one row above their values, exactly as a real export.
+    emit(
+        3, {5: ("Name and surname", T), 8: ("Account", T), 11: ("Currency", T), 16: ("45762.5", N)}
+    )
+    emit(4, {8: ("00000000", T)})  # account number — anonymized
+    emit(
+        5,
+        {
+            5: ("Balance", T),
+            8: ("Equity", T),
+            11: ("Margin", T),
+            13: ("Free margin", T),
+            16: ("Margin level", T),
+        },
+    )
+    emit(6, {5: (balance, N), 8: (equity, N), 11: ("0.00", N), 13: (balance, N), 16: ("0.00", N)})
+    emit(8, {1: ("45762.5", N)})  # export timestamp serial (ignored by the parser)
+    # Positions table header — located by the "Position"/"Symbol" cells.
+    emit(
+        9,
+        {
+            1: ("Position", T),
+            2: ("Symbol", T),
+            3: ("Type", T),
+            4: ("Volume", T),
+            5: ("Open time", T),
+            6: ("Open price", T),
+            7: ("Market price", T),
+            8: ("Purchase value", T),
+            9: ("SL", T),
+            10: ("TP", T),
+            11: ("Margin", T),
+            12: ("Commission", T),
+            13: ("Swap", T),
+            14: ("Rollover", T),
+            15: ("Gross P/L", T),
+            16: ("Comment", T),
+        },
+    )
+    for i, lot in enumerate(lots):
+        emit(
+            10 + i,
+            {
+                1: (str(1900000000 + i), N),
+                2: (lot["symbol"], T),
+                3: ("BUY", T),
+                4: (lot["volume"], N),
+                5: ("45800.0", N),
+                6: (lot.get("open", "100.00"), N),
+                7: (lot["market"], N),
+                8: (lot["purchase"], N),
+                11: ("0.00", N),
+                12: ("0.00", N),
+                13: ("0.00", N),
+                14: ("0.00", N),
+                15: (lot["pl"], N),
+            },
+        )
+
+    open_sheet = (
+        f'<?xml version="1.0"?><worksheet xmlns="{_XLSX_NS}"><sheetData>'
+        + "".join(rows)
+        + "</sheetData></worksheet>"
+    )
+    empty_sheet = f'<?xml version="1.0"?><worksheet xmlns="{_XLSX_NS}"><sheetData/></worksheet>'
+
+    # Four sheets like a real export; OPEN POSITION carries the data, the others
+    # are present-but-empty so the parser must select the right one among siblings.
+    sheet_defs = [
+        ("CLOSED POSITION HISTORY", "sheet1.xml", empty_sheet),
+        (sheet_name, "sheet2.xml", open_sheet),
+        ("PENDING ORDERS HISTORY", "sheet3.xml", empty_sheet),
+        ("CASH OPERATION HISTORY", "sheet4.xml", empty_sheet),
+    ]
+    sheets_xml = "".join(
+        f'<sheet name="{name}" sheetId="{i + 1}" r:id="rId{i + 1}"/>'
+        for i, (name, _f, _x) in enumerate(sheet_defs)
+    )
+    rels_xml = "".join(
+        f'<Relationship Id="rId{i + 1}" '
+        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+        f'Target="worksheets/{f}"/>'
+        for i, (_name, f, _x) in enumerate(sheet_defs)
+    )
+    workbook = (
+        f'<?xml version="1.0"?><workbook xmlns="{_XLSX_NS}" xmlns:r="{_XLSX_NS_REL}">'
+        f"<sheets>{sheets_xml}</sheets></workbook>"
+    )
+    rels = (
+        '<?xml version="1.0"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        f"{rels_xml}</Relationships>"
+    )
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("xl/workbook.xml", workbook)
+        zf.writestr("xl/_rels/workbook.xml.rels", rels)
+        for _name, f, x in sheet_defs:
+            zf.writestr(f"xl/worksheets/{f}", x)
+
+    return buf.getvalue()
+
+
+@pytest.fixture
+def xtb_xlsx() -> Callable[..., bytes]:
+    """Returns the in-memory XTB .xlsx builder (see :func:`_build_xtb_xlsx`)."""
+    return _build_xtb_xlsx
+
+
+@pytest.fixture
+def make_investment(db_session: Session) -> Callable[..., InvestmentPosition]:
+    def _make(
+        *,
+        account_id: int,
+        ticker: str = "SXR8.DE",
+        quantity: Decimal | str = "1",
+        value: int = 100_00,
+        snapshot_date: date | None = None,
+        source: str = "xtb",
+        **kw,
+    ) -> InvestmentPosition:
+        pos = InvestmentPosition(
+            account_id=account_id,
+            ticker=ticker,
+            quantity=Decimal(str(quantity)),
+            value=value,
+            snapshot_date=snapshot_date or date(2026, 4, 15),
+            source=source,
+            fetched_at=utc_now(),
+            **kw,
+        )
+        db_session.add(pos)
+        db_session.commit()
+        db_session.refresh(pos)
+        return pos
 
     return _make
 

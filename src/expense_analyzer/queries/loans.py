@@ -137,6 +137,30 @@ def loan_schedule(session: Session, loan_id: int) -> Schedule | None:
     )
 
 
+def outstanding_principal(
+    session: Session, loan_id: int, *, as_of: date | None = None
+) -> int | None:
+    """Remaining principal (minor units) as of ``as_of`` (default: today, local).
+
+    Uses the *planned* schedule: principal still owed is the initial principal
+    minus the principal portion of every installment due on or before the date.
+    This is the plan's view of the debt (it ignores missed/extra payments), which
+    is what the net-worth view wants — a clean snapshot from the amortization plan.
+    Returns None if the loan is missing or its schedule can't be built.
+    """
+    from expense_analyzer.clock import local_today
+
+    schedule = loan_schedule(session, loan_id)
+    loan = session.get(Loan, loan_id)
+    if schedule is None or loan is None:
+        return None
+
+    cutoff = as_of or local_today()
+    paid = sum(row.principal_paid for row in schedule.rows if row.due_date <= cutoff)
+
+    return loan.principal - paid
+
+
 def linked_payments(session: Session, loan_id: int) -> list[Transaction]:
     """Non-deleted transactions linked to this loan as installment payments."""
     return list(

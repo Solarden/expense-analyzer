@@ -13,7 +13,9 @@ from expense_analyzer.api.endpoints import (
     auth,
     health,
     home,
+    investments,
     loans,
+    net_worth,
     overview,
     transactions,
     transfers,
@@ -30,6 +32,8 @@ routers = (
     transactions.router,
     transfers.router,
     loans.router,
+    investments.router,
+    net_worth.router,
     upload.router,
     users.router,
 )
