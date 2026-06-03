@@ -39,6 +39,12 @@
       <td>Reconciliation</td>
       <td class="num {{ 'pos' if summary.reconciliation.ok else 'neg' }}">{{ summary.reconciliation.label }}</td>
     </tr>
+    {% if summary.transfers_auto_linked %}
+    <tr>
+      <td>Transfers auto-linked</td>
+      <td class="num pos">{{ summary.transfers_auto_linked }}</td>
+    </tr>
+    {% endif %}
   </table>
   {% if summary.reconciliation.details %}
   <ul class="muted" style="margin-top:8px">
