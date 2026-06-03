@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Log in — Expense Analyzer{% endblock %}
 {% block content %}
-
-<div class="panel" style="max-width:360px; margin:40px auto;">
-  <h2 style="margin-top:0">Log in</h2>
-  <form method="post" action="/login">
-    <label>Username</label>
-    <input name="username" autofocus required>
-    <label style="margin-top:12px">Password</label>
-    <input name="password" type="password" required>
-    <p style="margin-top:16px"><button type="submit">Log in</button></p>
-  </form>
-</div>
-
+  <div class="panel" style="max-width:360px; margin:40px auto;">
+    <h2 style="margin-top:0">Log in</h2>
+    <form method="post" action="/login">
+      <label for="username">Username</label>
+      <input id="username" name="username" autofocus required>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" required>
+      <p style="margin-top:16px">
+        <button type="submit">Log in</button>
+      </p>
+    </form>
+  </div>
 {% endblock %}

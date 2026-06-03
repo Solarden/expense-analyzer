@@ -49,7 +49,7 @@
   }
 
   main {
-    @apply mx-auto max-w-[1000px] p-5;
+    @apply mx-auto max-w-[1400px] px-6 py-5;
   }
   /* In-content links read as links (Preflight strips the browser default). */
   main a {
@@ -77,18 +77,44 @@
     @apply text-[13px] font-semibold text-muted;
   }
 
+  /* Vertical rhythm: a label binds to the field BELOW it (small gap under) and is
+   * separated from the field ABOVE by a larger gap. Inline forms (filters, row
+   * actions) opt out — their labels, if any, shouldn't carry this spacing. */
   label {
     @apply mb-1 block text-[13px] text-muted;
   }
+  form:not(.hstack) label {
+    @apply mt-4;
+  }
+  /* First control group in a form shouldn't get a leading gap (the panel/heading
+   * already provides it). */
+  form:not(.hstack) > label:first-child,
+  form:not(.hstack) > *:first-child label:first-child {
+    @apply mt-0;
+  }
+  /* h-9 on every control so selects (forced line-height:normal), text inputs and
+   * buttons line up at the same height in a row — without it buttons render ~3px
+   * taller than selects. */
   input,
   select,
   button {
-    @apply max-w-full rounded-md border border-line bg-bg px-2 py-1.5 text-fg;
+    @apply h-9 max-w-full rounded-md border border-line bg-bg px-2 text-fg;
     font: inherit;
   }
-  /* Vertical (non-inline) forms: controls fill their column instead of rendering
-   * at the browser's tiny default width. Inline forms keep their natural size. */
-  form:not(.inline) :is(input, select, textarea) {
+  /* Custom dropdown chevron: the native arrow crowds the right border at our
+   * padding. Drop it (appearance:none) and draw our own (muted SVG), with room
+   * via pr-7 so it never touches the border. */
+  select {
+    @apply appearance-none pr-7;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%239aa3b2' stroke-width='1.5'><path d='M4 6l4 4 4-4'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 1rem;
+  }
+  /* Vertical (non-hstack) forms: controls fill their column instead of rendering
+   * at the browser's tiny default width. Horizontal (.hstack) forms keep their
+   * natural size. */
+  form:not(.hstack) :is(input, select, textarea) {
     @apply w-full;
   }
   button {
@@ -169,20 +195,61 @@
   }
 
   .pager {
-    @apply mt-3 flex items-center gap-2.5;
+    @apply mt-3 flex flex-wrap items-center justify-center gap-2.5;
   }
   .pager .muted {
     @apply m-0;
   }
 
-  form.inline {
+  /* Horizontal control row (filters, row actions, nav). NOT named `.inline` —
+   * that collides with Tailwind's built-in `inline` (display:inline) utility,
+   * which wins by @layer order (utilities after components) regardless of
+   * specificity — silently breaking the flex layout. Same trap as `.cols`. */
+  .hstack {
     @apply m-0 inline-flex flex-wrap items-center gap-1.5;
   }
 
+  /* Link styled as a button — inline-flex + h-9 so it matches real <button>/select
+   * height and centres its label (an inline-block link would top-align at h-9). */
   a.btn {
-    @apply inline-block rounded-md border border-line bg-bg px-2.5 py-1.5 text-fg no-underline;
+    @apply inline-flex h-9 items-center whitespace-nowrap rounded-md border border-line bg-bg px-2 text-fg no-underline;
   }
   a.btn[aria-disabled="true"] {
     @apply pointer-events-none text-muted opacity-50;
+  }
+}
+
+/* Responsive data tables: below the md breakpoint a wide table is unreadable and
+ * nobody scrolls it sideways, so .table-cards collapses each row into a stacked
+ * card. The header is hidden and each cell shows its column name from data-label.
+ * Unlayered (after @layer blocks) so it wins over the base th/td rules on mobile. */
+@media (max-width: 767px) {
+  .table-cards thead {
+    display: none;
+  }
+  .table-cards tr {
+    display: block;
+    padding: 10px 0;
+  }
+  .table-cards tbody tr + tr {
+    border-top: 1px solid var(--color-line);
+  }
+  .table-cards td {
+    display: block;
+    border: 0;
+    padding: 2px 0;
+  }
+  /* Numbers read left-aligned in a stacked card, not pushed to the right edge. */
+  .table-cards td.num {
+    text-align: left;
+  }
+  .table-cards td[data-label]::before {
+    content: attr(data-label) ": ";
+    color: var(--color-muted);
+    font-size: 13px;
+  }
+  /* The inline editor cell gets a little breathing room above it. */
+  .table-cards td[colspan] {
+    margin-top: 6px;
   }
 }

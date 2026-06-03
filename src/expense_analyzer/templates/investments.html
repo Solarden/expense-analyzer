@@ -1,81 +1,98 @@
 {% extends "base.html" %}
 {% block content %}
-
-<h2 style="margin-top:0">Investments</h2>
-
-{% if not portfolios %}
-  <div class="panel">
-    <p class="muted">First <a href="/dashboard">add an account</a> of type <strong>portfolio</strong>
-    (e.g. "IKE XTB") so there's somewhere to import positions into.</p>
-  </div>
-{% else %}
-
-<div class="cols">
-  {% if myfund_configured %}
-  <div class="panel">
-    <h2 style="margin-top:0">Fetch from myFund</h2>
-    <form method="post" action="/dashboard/investments/fetch">
-      <label>Portfolio account</label>
-      <select name="account_id" required>
-        {% for a in portfolios %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
-      </select>
-      <p style="margin-top:12px"><button type="submit">Fetch now</button></p>
-    </form>
-    <p class="muted">Pulls your portfolio from the myFund.pl API (the only network call this app makes).</p>
-  </div>
-  {% endif %}
-
-  <div class="panel">
-    <h2 style="margin-top:0">Upload XTB export</h2>
-    <form method="post" action="/dashboard/investments/upload" enctype="multipart/form-data">
-      <label>Portfolio account</label>
-      <select name="account_id" required>
-        {% for a in portfolios %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
-      </select>
-      <label style="margin-top:12px">XTB .xlsx file</label>
-      <input type="file" name="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
-      <p style="margin-top:16px"><button type="submit">Import</button></p>
-    </form>
-    <p class="muted">Reads the "OPEN POSITION" sheet. Re-importing the same day updates, never duplicates.</p>
-  </div>
-</div>
-
-{% for h in holdings %}
-<h2>{{ h.account.name }}
-  {% if h.snapshot_date %}<span class="muted" style="text-transform:none">— as of {{ h.snapshot_date }}</span>{% endif %}
-</h2>
-<div class="panel">
-  {% if h.positions %}
-  {% if loop.first and allocation_chart.labels %}
-  <canvas id="allocationChart" height="220"></canvas>
-  {% endif %}
-  <table style="margin-top:12px">
-    <thead><tr>
-      <th>Ticker</th><th class="num">Quantity</th><th class="num">Avg price</th>
-      <th class="num">Price</th><th class="num">Value</th>
-    </tr></thead>
-    <tbody>
-      {% for p in h.positions %}
-      <tr>
-        <td>{{ p.ticker }}</td>
-        <td class="num">{{ p.quantity | qty }}</td>
-        <td class="num muted">{{ p.avg_price | pln if p.avg_price is not none else "—" }}</td>
-        <td class="num muted">{{ p.current_price | pln if p.current_price is not none else "—" }}</td>
-        <td class="num">{{ p.value | pln }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-    <tfoot><tr><th colspan="4">Total</th><th class="num">{{ h.total | pln }}</th></tr></tfoot>
-  </table>
+  <h2 style="margin-top:0">Investments</h2>
+  {% if not portfolios %}
+    <div class="panel">
+      <p class="muted">
+        First <a href="/dashboard">add an account</a> of type <strong>portfolio</strong>
+        (e.g. "IKE XTB") so there's somewhere to import positions into.
+      </p>
+    </div>
   {% else %}
-  <p class="muted">No positions yet. Fetch from myFund or upload an XTB export above.</p>
-  {% endif %}
-</div>
-{% endfor %}
-
-{% if allocation_chart.labels %}
-<script src="/static/chart.min.js"></script>
-<script>
+    <div class="cols">
+      {% if myfund_configured %}
+        <div class="panel">
+          <h2 style="margin-top:0">Fetch from myFund</h2>
+          <form method="post" action="/dashboard/investments/fetch">
+            <label for="fetch_account_id">Portfolio account</label>
+            <select id="fetch_account_id" name="account_id" required>
+              {% for a in portfolios %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+            </select>
+            <p style="margin-top:12px">
+              <button type="submit">Fetch now</button>
+            </p>
+          </form>
+          <p class="muted">Pulls your portfolio from the myFund.pl API (the only network call this app makes).</p>
+        </div>
+      {% endif %}
+      <div class="panel">
+        <h2 style="margin-top:0">Upload XTB export</h2>
+        <form method="post"
+              action="/dashboard/investments/upload"
+              enctype="multipart/form-data">
+          <label for="upload_account_id">Portfolio account</label>
+          <select id="upload_account_id" name="account_id" required>
+            {% for a in portfolios %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+          </select>
+          <label for="upload_file">XTB .xlsx file</label>
+          <input id="upload_file"
+                 type="file"
+                 name="file"
+                 accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                 required>
+          <p style="margin-top:16px">
+            <button type="submit">Import</button>
+          </p>
+        </form>
+        <p class="muted">Reads the "OPEN POSITION" sheet. Re-importing the same day updates, never duplicates.</p>
+      </div>
+    </div>
+    {% for h in holdings %}
+      <h2>
+        {{ h.account.name }}
+        {% if h.snapshot_date %}
+          <span class="muted" style="text-transform:none">— as of {{ h.snapshot_date }}</span>
+        {% endif %}
+      </h2>
+      <div class="panel">
+        {% if h.positions %}
+          {% if loop.first and allocation_chart.labels %}<canvas id="allocationChart" height="220"></canvas>{% endif %}
+          <table style="margin-top:12px">
+            <thead>
+              <tr>
+                <th>Ticker</th>
+                <th class="num">Quantity</th>
+                <th class="num">Avg price</th>
+                <th class="num">Price</th>
+                <th class="num">Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in h.positions %}
+                <tr>
+                  <td>{{ p.ticker }}</td>
+                  <td class="num">{{ p.quantity | qty }}</td>
+                  <td class="num muted">{{ p.avg_price | pln if p.avg_price is not none else "—" }}</td>
+                  <td class="num muted">{{ p.current_price | pln if p.current_price is not none else "—" }}</td>
+                  <td class="num">{{ p.value | pln }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr>
+                <th colspan="4">Total</th>
+                <th class="num">{{ h.total | pln }}</th>
+              </tr>
+            </tfoot>
+          </table>
+        {% else %}
+          <p class="muted">No positions yet. Fetch from myFund or upload an XTB export above.</p>
+        {% endif %}
+      </div>
+    {% endfor %}
+    {% if allocation_chart.labels %}
+      <script src="/static/chart.min.js"></script>
+      <script>
   const allocation = {{ allocation_chart | tojson }};
   // Amounts are integer minor units (1/100 PLN); fmt divides by 100 in one place.
   const fmt = (minor) => (minor / 100).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' });
@@ -89,9 +106,7 @@
       plugins: { tooltip: { callbacks: { label: (c) => `${c.label}: ${fmt(c.parsed)}` } } },
     },
   });
-</script>
-{% endif %}
-
-{% endif %}
-
+      </script>
+    {% endif %}
+  {% endif %}
 {% endblock %}
