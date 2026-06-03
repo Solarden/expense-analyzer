@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2 style="margin-top:0">Home Assistant</h2>
+  <div class="panel">
+    {% if mqtt_configured %}
+      <p>
+        Pushing household metrics to MQTT at <strong>{{ mqtt_host }}:{{ mqtt_port }}</strong>.
+        Sensors auto-appear in Home Assistant under the <strong>Expense Analyzer</strong> device via
+        MQTT discovery (prefix <code>{{ discovery_prefix }}</code>).
+        {% if mqtt_interval %}
+          The worker also publishes every <strong>{{ mqtt_interval }} min</strong>.
+        {% else %}
+          <span class="muted">The background worker is not auto-publishing
+          (set <code>EA_MQTT_PUBLISH_INTERVAL_MINUTES</code>); use the button below.</span>
+        {% endif %}
+      </p>
+      <form class="hstack"
+            method="post"
+            action="/dashboard/home-assistant/publish">
+        <button type="submit">Publish now</button>
+      </form>
+    {% else %}
+      <p class="muted">
+        The MQTT push is off. It's one-directional and stays on your LAN
+        (your Home Assistant broker) — no internet, no cloud. To enable it, set
+        <code>EA_MQTT_HOST</code> (and restart), then this page publishes
+        auto-discovered sensors to Home Assistant.
+      </p>
+    {% endif %}
+  </div>
+  <h2>Metrics</h2>
+  <div class="panel">
+    {% if metrics %}
+      <p class="muted" style="margin-top:0">
+        Published as one retained JSON document to <code>{{ state_topic }}</code>; each row is one HA sensor.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Sensor</th>
+            <th>Key</th>
+            <th class="num">Value (PLN)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in metrics %}
+            <tr>
+              <td>{{ m.name }}</td>
+              <td class="muted">
+                <code>{{ m.key }}</code>
+              </td>
+              <td class="num">{{ m.value }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">Nothing to publish yet — add accounts and import some transactions first.</p>
+    {% endif %}
+  </div>
+{% endblock %}

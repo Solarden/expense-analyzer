@@ -21,6 +21,10 @@ dependencies = [
     # Outbound HTTP client for the opt-in myFund.pl investment pull (Phase 6).
     # Off by default (no API key -> no calls); also what the test client uses.
     "httpx>=0.28",
+    # MQTT client for the opt-in Home Assistant push (Phase 7). Off by default
+    # (no EA_MQTT_HOST -> the worker never connects); the broker lives on the LAN
+    # (your HA broker), so this is not internet egress.
+    "paho-mqtt>=2.1",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +32,9 @@ dev = [
     "pytest>=8.3",
     "ruff>=0.8",
     "pre-commit>=4.0",
+    # Jinja template formatter (used as a *formatter*, like ruff-format — not as a
+    # linter: djlint's lint rules are mostly inapplicable here, see PROGRESS.md).
+    "djlint>=1.36",
 ]
 
 [build-system]
@@ -43,6 +50,13 @@ testpaths = ["tests"]
 
 [tool.bandit]
 exclude_dirs = ["tests", ".venv"]
+
+[tool.djlint]
+# Used as a formatter only (pre-commit hook djlint-reformat-jinja). The lint rules
+# are not run — for this FastAPI + LAN app most are inapplicable (J018 url_for,
+# H030/H031 SEO meta) or stylistic (H021 inline style, T003 endblock names).
+profile = "jinja"
+indent = 2
 
 [tool.ruff]
 line-length = 100

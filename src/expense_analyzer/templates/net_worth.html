@@ -1,51 +1,67 @@
 {% extends "base.html" %}
 {% block content %}
-
-<h2 style="margin-top:0">Net worth</h2>
-
-<div class="cards">
-  <div class="card">
-    <div class="k">Net worth</div>
-    <div class="v {{ 'pos' if total >= 0 else 'neg' }}">{{ total | pln }}</div>
+  <h2 style="margin-top:0">Net worth</h2>
+  <div class="cards">
+    <div class="card">
+      <div class="k">Net worth</div>
+      <div class="v {{ 'pos' if total >= 0 else 'neg' }}">{{ total | pln }}</div>
+    </div>
   </div>
-</div>
-
-<div class="grid" style="margin-top:16px">
-  <div class="panel">
-    <h2 style="margin-top:0">By account</h2>
-    {% if balances %}
-    <table>
-      <thead><tr><th>Account</th><th>Type</th><th class="num">Balance</th></tr></thead>
-      <tbody>
-        {% for b in balances %}
-        <tr>
-          <td>{{ b.name }}{% if b.note %}<br><span class="muted" style="font-size:12px">{{ b.note }}</span>{% endif %}</td>
-          <td class="muted">{{ b.type }}</td>
-          <td class="num {{ 'neg' if b.balance < 0 else 'pos' if b.balance > 0 else 'muted' }}">{{ b.balance | pln }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-      <tfoot><tr><th colspan="2">Total</th><th class="num {{ 'pos' if total >= 0 else 'neg' }}">{{ total | pln }}</th></tr></tfoot>
-    </table>
-    <p class="muted" style="margin-top:8px">Bank/cash from transactions, portfolio from the latest snapshot, loans as outstanding principal. All figures treated as PLN.</p>
-    {% else %}
-    <p class="muted">No accounts yet. <a href="/dashboard">Add an account →</a></p>
-    {% endif %}
+  <div class="cols" style="margin-top:16px">
+    <div class="panel">
+      <h2 style="margin-top:0">By account</h2>
+      {% if balances %}
+        <table>
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th>Type</th>
+              <th class="num">Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for b in balances %}
+              <tr>
+                <td>
+                  {{ b.name }}
+                  {% if b.note %}
+                    <br>
+                    <span class="muted" style="font-size:12px">{{ b.note }}</span>
+                  {% endif %}
+                </td>
+                <td class="muted">{{ b.type }}</td>
+                <td class="num {{ 'neg' if b.balance < 0 else 'pos' if b.balance > 0 else 'muted' }}">{{ b.balance | pln }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th colspan="2">Total</th>
+              <th class="num {{ 'pos' if total >= 0 else 'neg' }}">{{ total | pln }}</th>
+            </tr>
+          </tfoot>
+        </table>
+        <p class="muted" style="margin-top:8px">
+          Bank/cash from transactions, portfolio from the latest snapshot, loans as outstanding principal. All figures treated as PLN.
+        </p>
+      {% else %}
+        <p class="muted">
+          No accounts yet. <a href="/dashboard">Add an account →</a>
+        </p>
+      {% endif %}
+    </div>
+    <div class="panel">
+      <h2 style="margin-top:0">Breakdown</h2>
+      {% if balances %}
+        <canvas id="breakdownChart" height="220"></canvas>
+      {% else %}
+        <p class="muted">Nothing to chart yet.</p>
+      {% endif %}
+    </div>
   </div>
-
-  <div class="panel">
-    <h2 style="margin-top:0">Breakdown</h2>
-    {% if balances %}
-    <canvas id="breakdownChart" height="220"></canvas>
-    {% else %}
-    <p class="muted">Nothing to chart yet.</p>
-    {% endif %}
-  </div>
-</div>
-
-{% if balances %}
-<script src="/static/chart.min.js"></script>
-<script>
+  {% if balances %}
+    <script src="/static/chart.min.js"></script>
+    <script>
   const breakdown = {{ breakdown_chart | tojson }};
   // Integer minor units (1/100 PLN); fmt divides by 100 in one place.
   const fmt = (minor) => (minor / 100).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' });
@@ -65,7 +81,6 @@
       scales: { x: { ticks: { callback: fmt } } },
     },
   });
-</script>
-{% endif %}
-
+    </script>
+  {% endif %}
 {% endblock %}

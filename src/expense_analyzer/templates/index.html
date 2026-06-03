@@ -1,90 +1,125 @@
 {% extends "base.html" %}
 {% block content %}
-
-<div class="grid">
-  <div class="panel">
-    <h2 style="margin-top:0">Accounts</h2>
-    {% if accounts %}
-    <table>
-      <thead><tr><th>Name</th><th>Type</th><th>Currency</th></tr></thead>
-      <tbody>
-        {% for a in accounts %}
-        <tr><td>{{ a.name }}</td><td class="muted">{{ a.type.value }}</td><td class="muted">{{ a.currency }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <p class="muted">No accounts yet. Add one to import a CSV.</p>
-    {% endif %}
-
-    <h2>Add account</h2>
-    <form method="post" action="/dashboard/accounts">
-      <label>Name</label>
-      <input name="name" placeholder="PKO checking" required>
-      <label>Type</label>
-      <select name="type">
-        {% for t in account_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
-      </select>
-      <p><button type="submit">Add account</button></p>
-    </form>
+  <div class="cols">
+    <div class="panel">
+      <h2 style="margin-top:0">Accounts</h2>
+      {% if accounts %}
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Currency</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in accounts %}
+              <tr>
+                <td>{{ a.name }}</td>
+                <td class="muted">{{ a.type.value }}</td>
+                <td class="muted">{{ a.currency }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">No accounts yet. Add one to import a CSV.</p>
+      {% endif %}
+      <h2>Add account</h2>
+      <form method="post" action="/dashboard/accounts">
+        <label for="acct_name">Name</label>
+        <input id="acct_name" name="name" placeholder="PKO checking" required>
+        <label for="acct_type">Type</label>
+        <select id="acct_type" name="type">
+          {% for t in account_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+        </select>
+        <p>
+          <button type="submit">Add account</button>
+        </p>
+      </form>
+    </div>
+    <div class="panel">
+      <h2 style="margin-top:0">Categories</h2>
+      {% if categories %}
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Kind</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in categories %}
+              <tr>
+                <td>{{ c.name }}</td>
+                <td class="muted">{{ c.kind.value }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">No categories yet. Add some to categorize transactions manually.</p>
+      {% endif %}
+      <h2>Add category</h2>
+      <form method="post" action="/dashboard/categories">
+        <label for="cat_name">Name</label>
+        <input id="cat_name" name="name" placeholder="Food" required>
+        <label for="cat_kind">Kind</label>
+        <select id="cat_kind" name="kind">
+          {% for k in category_kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}
+        </select>
+        <p>
+          <button type="submit">Add category</button>
+        </p>
+      </form>
+    </div>
   </div>
-
+  <h2>Recent imports</h2>
   <div class="panel">
-    <h2 style="margin-top:0">Categories</h2>
-    {% if categories %}
-    <table>
-      <thead><tr><th>Name</th><th>Kind</th></tr></thead>
-      <tbody>
-        {% for c in categories %}
-        <tr><td>{{ c.name }}</td><td class="muted">{{ c.kind.value }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    {% if batches %}
+      <table class="table-cards">
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Source</th>
+            <th>When</th>
+            <th class="num">Records</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in batches %}
+            <tr>
+              <td data-label="File">{{ b.filename }}</td>
+              <td class="muted" data-label="Source">{{ b.source }}</td>
+              <td class="muted" data-label="When">{{ b.imported_at.strftime("%d.%m.%Y %H:%M") }}</td>
+              <td class="num" data-label="Records">{{ b.record_count }}</td>
+              <td data-label="Status">
+                {% if b.status.value == "active" %}
+                  {{ b.status.value }}
+                {% else %}
+                  <span class="muted">{{ b.status.value }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if b.status.value == "active" %}
+                  <form class="hstack"
+                        method="post"
+                        action="/dashboard/batches/{{ b.id }}/rollback"
+                        onsubmit="return confirm('Roll back this import? Its transactions will be marked deleted.');">
+                    <button class="ghost" type="submit">Roll back</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     {% else %}
-    <p class="muted">No categories yet. Add some to categorize transactions manually.</p>
+      <p class="muted">
+        Nothing imported yet. <a href="/dashboard/upload">Import a CSV →</a>
+      </p>
     {% endif %}
-
-    <h2>Add category</h2>
-    <form method="post" action="/dashboard/categories">
-      <label>Name</label>
-      <input name="name" placeholder="Food" required>
-      <label>Kind</label>
-      <select name="kind">
-        {% for k in category_kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}
-      </select>
-      <p><button type="submit">Add category</button></p>
-    </form>
   </div>
-</div>
-
-<h2>Recent imports</h2>
-<div class="panel">
-  {% if batches %}
-  <table>
-    <thead><tr><th>File</th><th>Source</th><th>When</th><th class="num">Records</th><th>Status</th><th></th></tr></thead>
-    <tbody>
-      {% for b in batches %}
-      <tr>
-        <td>{{ b.filename }}</td>
-        <td class="muted">{{ b.source }}</td>
-        <td class="muted">{{ b.imported_at.strftime("%Y-%m-%d %H:%M") }}</td>
-        <td class="num">{{ b.record_count }}</td>
-        <td>{% if b.status.value == "active" %}{{ b.status.value }}{% else %}<span class="muted">{{ b.status.value }}</span>{% endif %}</td>
-        <td>
-          {% if b.status.value == "active" %}
-          <form class="inline" method="post" action="/dashboard/batches/{{ b.id }}/rollback"
-                onsubmit="return confirm('Roll back this import? Its transactions will be marked deleted.');">
-            <button class="ghost" type="submit">Roll back</button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="muted">Nothing imported yet. <a href="/dashboard/upload">Import a CSV →</a></p>
-  {% endif %}
-</div>
-
 {% endblock %}

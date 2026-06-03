@@ -147,8 +147,17 @@ def from_minor_units(minor: int) -> Decimal:
 
 
 def format_pln(minor: int) -> str:
-    """Format integer minor units for display, e.g. ``-123456`` -> ``"-1234,56 zł"``."""
-    return f"{from_minor_units(minor)} zł".replace(".", ",")
+    """Format integer minor units for display, e.g. ``-123456`` -> ``"-1 234,56 zł"``.
+
+    Polish convention: thousands grouped with a non-breaking space (so the number
+    never wraps mid-amount), comma as the decimal separator. Computed straight from
+    the integer minor units — never via a binary float.
+    """
+    sign = "-" if minor < 0 else ""
+    whole, frac = divmod(abs(minor), 100)
+    grouped = f"{whole:,}".replace(",", " ")
+
+    return f"{sign}{grouped},{frac:02d} zł"
 
 
 def format_quantity(quantity: Decimal) -> str:

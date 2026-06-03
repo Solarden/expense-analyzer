@@ -1,0 +1,256 @@
+/* Tailwind CSS source for the dashboard (the working surface, design §8).
+ *
+ * Build with the standalone CLI (no Node needed) -> committed, vendored output
+ * served offline via StaticFiles, exactly like chart.min.js:
+ *
+ *     make css          # one-shot minified build into src/.../static/app.css
+ *     make css-watch    # rebuild on template/theme changes while developing
+ *
+ * Approach: the existing hand-rolled design system is recreated as @theme tokens
+ * + component classes (@apply), so the 12 templates keep their class names and
+ * only the genuinely-responsive bits change. New markup can use the palette as
+ * plain utilities (bg-panel, text-muted, border-line, ...). See
+ * internal_docs/PROGRESS.md (Tailwind adoption).
+ */
+@import "tailwindcss";
+
+/* Scan the Jinja templates for class names (relative to this file). */
+@source "./src/expense_analyzer/templates";
+
+/* The dark palette, ported 1:1 from the previous inline <style>. Each token
+ * generates utilities: --color-foo -> bg-foo / text-foo / border-foo. */
+@theme {
+  --color-bg: #0f1115;
+  --color-panel: #1a1d24;
+  --color-line: #2a2f3a;
+  --color-fg: #e6e9ef;
+  --color-muted: #9aa3b2;
+  --color-accent: #4f8cff;
+  --color-pos: #3fb950;
+  --color-neg: #f0686b;
+  --font-sans: system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply m-0 bg-bg text-fg font-sans leading-normal;
+    font-size: 15px;
+  }
+
+  /* Header wraps on narrow screens so the nav links never overflow. */
+  header {
+    @apply flex flex-wrap items-baseline gap-x-4 gap-y-3 border-b border-line px-5 py-3;
+  }
+  header h1 {
+    @apply m-0 text-base;
+  }
+  header nav a {
+    @apply mr-3.5 text-muted no-underline hover:text-fg;
+  }
+
+  main {
+    @apply mx-auto max-w-[1400px] px-6 py-5;
+  }
+  /* In-content links read as links (Preflight strips the browser default). */
+  main a {
+    @apply text-accent no-underline hover:underline;
+  }
+  main p {
+    @apply my-2;
+  }
+  main ul {
+    @apply my-2 list-disc pl-5;
+  }
+
+  h2 {
+    @apply mb-2 mt-6 text-[15px] uppercase tracking-wider text-muted;
+  }
+
+  table {
+    @apply w-full border-collapse;
+  }
+  th,
+  td {
+    @apply border-b border-line px-2.5 py-1.5 text-left;
+  }
+  th {
+    @apply text-[13px] font-semibold text-muted;
+  }
+
+  /* Vertical rhythm: a label binds to the field BELOW it (small gap under) and is
+   * separated from the field ABOVE by a larger gap. Inline forms (filters, row
+   * actions) opt out — their labels, if any, shouldn't carry this spacing. */
+  label {
+    @apply mb-1 block text-[13px] text-muted;
+  }
+  form:not(.hstack) label {
+    @apply mt-4;
+  }
+  /* First control group in a form shouldn't get a leading gap (the panel/heading
+   * already provides it). */
+  form:not(.hstack) > label:first-child,
+  form:not(.hstack) > *:first-child label:first-child {
+    @apply mt-0;
+  }
+  /* h-9 on every control so selects (forced line-height:normal), text inputs and
+   * buttons line up at the same height in a row — without it buttons render ~3px
+   * taller than selects. */
+  input,
+  select,
+  button {
+    @apply h-9 max-w-full rounded-md border border-line bg-bg px-2 text-fg;
+    font: inherit;
+  }
+  /* Custom dropdown chevron: the native arrow crowds the right border at our
+   * padding. Drop it (appearance:none) and draw our own (muted SVG), with room
+   * via pr-7 so it never touches the border. */
+  select {
+    @apply appearance-none pr-7;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%239aa3b2' stroke-width='1.5'><path d='M4 6l4 4 4-4'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 1rem;
+  }
+  /* Vertical (non-hstack) forms: controls fill their column instead of rendering
+   * at the browser's tiny default width. Horizontal (.hstack) forms keep their
+   * natural size. */
+  form:not(.hstack) :is(input, select, textarea) {
+    @apply w-full;
+  }
+  button {
+    @apply cursor-pointer border-accent bg-accent text-white;
+  }
+  button.ghost {
+    @apply border-line bg-transparent text-muted;
+  }
+
+  code {
+    @apply rounded bg-bg px-1 text-[0.9em];
+  }
+
+  footer {
+    @apply border-t border-line px-5 py-3.5 text-center text-xs text-muted;
+  }
+  footer a {
+    @apply text-muted hover:text-fg;
+  }
+}
+
+@layer components {
+  /* overflow-x-auto: a wide table scrolls inside its panel on a phone instead of
+   * blowing out the page width. Paired with .num (nowrap) so numeric columns
+   * stay on one line and the scroll is meaningful. */
+  .panel {
+    @apply mb-4 overflow-x-auto rounded-lg border border-line bg-panel p-4;
+  }
+
+  .num {
+    @apply whitespace-nowrap text-right tabular-nums;
+  }
+  .muted {
+    @apply text-muted;
+  }
+  .pos {
+    @apply text-pos;
+  }
+  .neg {
+    @apply text-neg;
+  }
+
+  /* Multi-column layout row. NOT named `.grid` — that collides with Tailwind's
+   * built-in `grid` (display:grid) utility, which would win by cascade order. */
+  .cols {
+    @apply flex flex-wrap gap-4;
+  }
+  .cols > .panel {
+    @apply min-w-[280px] flex-1;
+  }
+
+  .cards {
+    @apply flex flex-wrap gap-4;
+  }
+  .card {
+    @apply min-w-[160px] flex-1 rounded-lg border border-line bg-panel px-4 py-3.5;
+  }
+  .card .k {
+    @apply text-[13px] uppercase tracking-wider text-muted;
+  }
+  .card .v {
+    @apply mt-1 text-[22px] tabular-nums;
+  }
+
+  .userbox {
+    @apply ml-auto flex items-center gap-2.5 text-[13px] text-muted;
+  }
+  .linkbtn {
+    @apply cursor-pointer border-none bg-transparent p-0 text-accent hover:underline;
+    font: inherit;
+  }
+
+  .flash {
+    @apply mb-4 rounded-md border border-pos bg-[#16321f] px-3.5 py-2.5 text-[#b9f6ca];
+  }
+  .flash.error {
+    @apply border-neg bg-[#3a1c1e] text-[#ffd5d6];
+  }
+
+  .pager {
+    @apply mt-3 flex flex-wrap items-center justify-center gap-2.5;
+  }
+  .pager .muted {
+    @apply m-0;
+  }
+
+  /* Horizontal control row (filters, row actions, nav). NOT named `.inline` —
+   * that collides with Tailwind's built-in `inline` (display:inline) utility,
+   * which wins by @layer order (utilities after components) regardless of
+   * specificity — silently breaking the flex layout. Same trap as `.cols`. */
+  .hstack {
+    @apply m-0 inline-flex flex-wrap items-center gap-1.5;
+  }
+
+  /* Link styled as a button — inline-flex + h-9 so it matches real <button>/select
+   * height and centres its label (an inline-block link would top-align at h-9). */
+  a.btn {
+    @apply inline-flex h-9 items-center whitespace-nowrap rounded-md border border-line bg-bg px-2 text-fg no-underline;
+  }
+  a.btn[aria-disabled="true"] {
+    @apply pointer-events-none text-muted opacity-50;
+  }
+}
+
+/* Responsive data tables: below the md breakpoint a wide table is unreadable and
+ * nobody scrolls it sideways, so .table-cards collapses each row into a stacked
+ * card. The header is hidden and each cell shows its column name from data-label.
+ * Unlayered (after @layer blocks) so it wins over the base th/td rules on mobile. */
+@media (max-width: 767px) {
+  .table-cards thead {
+    display: none;
+  }
+  .table-cards tr {
+    display: block;
+    padding: 10px 0;
+  }
+  /* Separate each card and the footer (totals) row. */
+  .table-cards tbody tr + tr,
+  .table-cards tfoot tr {
+    border-top: 1px solid var(--color-line);
+  }
+  .table-cards td,
+  .table-cards tfoot th {
+    display: block;
+    border: 0;
+    padding: 2px 0;
+    text-align: left;
+  }
+  .table-cards td[data-label]::before,
+  .table-cards tfoot th[data-label]::before {
+    content: attr(data-label) ": ";
+    color: var(--color-muted);
+    font-size: 13px;
+  }
+  /* The inline editor / spanning cell gets a little breathing room above it. */
+  .table-cards td[colspan] {
+    margin-top: 6px;
+  }
+}

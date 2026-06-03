@@ -1,78 +1,88 @@
 {% extends "base.html" %}
 {% block content %}
-
-{% macro leg(tx) %}
-<span class="muted">{{ tx.booked_date.isoformat() }}</span>
-· {{ accounts.get(tx.account_id, "account #" ~ tx.account_id) }}
-· <span class="num {{ 'neg' if tx.amount < 0 else 'pos' }}">{{ tx.amount | pln }}</span>
-· <span class="muted">{{ tx.merchant_normalized or tx.raw_description }}</span>
-{% endmacro %}
-
-<h2 style="margin-top:0">Transfers</h2>
-
-<div class="panel">
-  <p class="muted" style="margin-top:0">
-    Internal transfers between your own accounts — not spending, not income.
-    Unambiguous pairs are linked automatically on import; anything with a choice
-    is suggested below for you to confirm.
-  </p>
-  <form class="inline" method="post" action="/dashboard/transfers/rescan">
-    <button class="ghost" type="submit">Rescan now</button>
-  </form>
-</div>
-
-<h2>Suggested pairs</h2>
-<div class="panel">
-  {% if suggestions %}
-  <table>
-    <thead><tr><th>Out</th><th>In</th><th class="num">Gap</th><th></th></tr></thead>
-    <tbody>
-      {% for pair in suggestions %}
-      <tr>
-        <td>{{ leg(pair.outflow) }}</td>
-        <td>{{ leg(pair.inflow) }}</td>
-        <td class="num muted">{{ pair.date_gap_days }}d</td>
-        <td>
-          <form class="inline" method="post" action="/dashboard/transfers/confirm">
-            <input type="hidden" name="tx_a_id" value="{{ pair.outflow.id }}">
-            <input type="hidden" name="tx_b_id" value="{{ pair.inflow.id }}">
-            <button type="submit">Confirm</button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="muted">No pairs to confirm.</p>
-  {% endif %}
-</div>
-
-<h2>Confirmed transfers</h2>
-<div class="panel">
-  {% if groups %}
-  <table>
-    <thead><tr><th>Legs</th><th></th></tr></thead>
-    <tbody>
-      {% for group in groups %}
-      <tr>
-        <td>
-          {% for tx in group %}{{ leg(tx) }}{% if not loop.last %}<br>{% endif %}{% endfor %}
-        </td>
-        <td>
-          <form class="inline" method="post"
-                action="/dashboard/transfers/{{ group[0].transfer_group_id }}/unlink"
-                onsubmit="return confirm('Unlink this transfer? Both legs go back to uncategorized.');">
-            <button class="ghost" type="submit">Unlink</button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="muted">No confirmed transfers yet.</p>
-  {% endif %}
-</div>
-
+  {% macro leg(tx) %}
+    <span class="muted">{{ tx.booked_date | dpl }}</span>
+    · {{ accounts.get(tx.account_id, "account #" ~ tx.account_id) }}
+    · <span class="num {{ 'neg' if tx.amount < 0 else 'pos' }}">{{ tx.amount | pln }}</span>
+    · <span class="muted">{{ tx.merchant_normalized or tx.raw_description }}</span>
+  {% endmacro %}
+  <h2 style="margin-top:0">Transfers</h2>
+  <div class="panel">
+    <p class="muted" style="margin-top:0">
+      Internal transfers between your own accounts — not spending, not income.
+      Unambiguous pairs are linked automatically on import; anything with a choice
+      is suggested below for you to confirm.
+    </p>
+    <form class="hstack" method="post" action="/dashboard/transfers/rescan">
+      <button class="ghost" type="submit">Rescan now</button>
+    </form>
+  </div>
+  <h2>Suggested pairs</h2>
+  <div class="panel">
+    {% if suggestions %}
+      <table class="table-cards">
+        <thead>
+          <tr>
+            <th>Out</th>
+            <th>In</th>
+            <th class="num">Gap</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for pair in suggestions %}
+            <tr>
+              <td data-label="Out">{{ leg(pair.outflow) }}</td>
+              <td data-label="In">{{ leg(pair.inflow) }}</td>
+              <td class="num muted" data-label="Gap">{{ pair.date_gap_days }}d</td>
+              <td>
+                <form class="hstack" method="post" action="/dashboard/transfers/confirm">
+                  <input type="hidden" name="tx_a_id" value="{{ pair.outflow.id }}">
+                  <input type="hidden" name="tx_b_id" value="{{ pair.inflow.id }}">
+                  <button type="submit">Confirm</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">No pairs to confirm.</p>
+    {% endif %}
+  </div>
+  <h2>Confirmed transfers</h2>
+  <div class="panel">
+    {% if groups %}
+      <table class="table-cards">
+        <thead>
+          <tr>
+            <th>Legs</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for group in groups %}
+            <tr>
+              <td data-label="Legs">
+                {% for tx in group %}
+                  {{ leg(tx) }}
+                  {% if not loop.last %}<br>{% endif %}
+                {% endfor %}
+              </td>
+              <td>
+                <form class="hstack"
+                      method="post"
+                      action="/dashboard/transfers/{{ group[0].transfer_group_id }}/unlink"
+                      onsubmit="return confirm('Unlink this transfer? Both legs go back to uncategorized.');">
+                  <button class="ghost" type="submit">Unlink</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">No confirmed transfers yet.</p>
+    {% endif %}
+  </div>
 {% endblock %}

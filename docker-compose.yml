@@ -11,6 +11,15 @@ services:
       EA_SECRET_KEY: ${EA_SECRET_KEY:?set EA_SECRET_KEY in your environment or .env}
       # Session cookie is Secure — the browser only sends it over HTTPS (Caddy).
       EA_SECURE_COOKIES: "true"
+      # Home Assistant MQTT push (Phase 7). OFF unless EA_MQTT_HOST is set; the
+      # broker is your HA broker on the LAN (not internet egress). The app uses
+      # these for the manual "Publish now" button; the worker auto-publishes.
+      EA_MQTT_HOST: ${EA_MQTT_HOST:-}
+      EA_MQTT_PORT: ${EA_MQTT_PORT:-1883}
+      EA_MQTT_USERNAME: ${EA_MQTT_USERNAME:-}
+      EA_MQTT_PASSWORD: ${EA_MQTT_PASSWORD:-}
+      EA_MQTT_BASE_TOPIC: ${EA_MQTT_BASE_TOPIC:-expense_analyzer}
+      EA_MQTT_DISCOVERY_PREFIX: ${EA_MQTT_DISCOVERY_PREFIX:-homeassistant}
     volumes:
       - ./data:/data
     # Run migrations, then start the server. Bind only to localhost; Caddy is
@@ -34,6 +43,16 @@ services:
     restart: unless-stopped
     environment:
       EA_DATABASE_PATH: /data/expense_analyzer.db
+      # Home Assistant MQTT push (Phase 7). The worker publishes household metrics
+      # every EA_MQTT_PUBLISH_INTERVAL_MINUTES. OFF unless both the host and a
+      # positive interval are set; the broker is your HA broker on the LAN.
+      EA_MQTT_HOST: ${EA_MQTT_HOST:-}
+      EA_MQTT_PORT: ${EA_MQTT_PORT:-1883}
+      EA_MQTT_USERNAME: ${EA_MQTT_USERNAME:-}
+      EA_MQTT_PASSWORD: ${EA_MQTT_PASSWORD:-}
+      EA_MQTT_BASE_TOPIC: ${EA_MQTT_BASE_TOPIC:-expense_analyzer}
+      EA_MQTT_DISCOVERY_PREFIX: ${EA_MQTT_DISCOVERY_PREFIX:-homeassistant}
+      EA_MQTT_PUBLISH_INTERVAL_MINUTES: ${EA_MQTT_PUBLISH_INTERVAL_MINUTES:-}
     volumes:
       - ./data:/data
     command: ["python", "-m", "expense_analyzer.worker"]
