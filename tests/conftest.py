@@ -26,6 +26,9 @@ from expense_analyzer.models import (
     Category,
     CategoryKind,
     ImportBatch,
+    InstallmentType,
+    Loan,
+    RateType,
     Transaction,
 )
 
@@ -218,6 +221,37 @@ def make_transaction(
         db_session.commit()
         db_session.refresh(tx)
         return tx
+
+    return _make
+
+
+@pytest.fixture
+def make_loan(db_session: Session) -> Callable[..., Loan]:
+    def _make(
+        *,
+        account_id: int,
+        principal: int = 30_000_000,
+        rate_type: RateType = RateType.fixed,
+        rate_bp: int = 720,
+        installment_type: InstallmentType = InstallmentType.equal,
+        start_date: date | None = None,
+        term_months: int = 12,
+        **kw,
+    ) -> Loan:
+        loan = Loan(
+            account_id=account_id,
+            principal=principal,
+            rate_type=rate_type,
+            rate_bp=rate_bp,
+            installment_type=installment_type,
+            start_date=start_date or date(2026, 1, 15),
+            term_months=term_months,
+            **kw,
+        )
+        db_session.add(loan)
+        db_session.commit()
+        db_session.refresh(loan)
+        return loan
 
     return _make
 
