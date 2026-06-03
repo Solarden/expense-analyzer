@@ -77,7 +77,7 @@
   <h2>Recent imports</h2>
   <div class="panel">
     {% if batches %}
-      <table>
+      <table class="table-cards">
         <thead>
           <tr>
             <th>File</th>
@@ -91,11 +91,11 @@
         <tbody>
           {% for b in batches %}
             <tr>
-              <td>{{ b.filename }}</td>
-              <td class="muted">{{ b.source }}</td>
-              <td class="muted">{{ b.imported_at.strftime("%d.%m.%Y %H:%M") }}</td>
-              <td class="num">{{ b.record_count }}</td>
-              <td>
+              <td data-label="File">{{ b.filename }}</td>
+              <td class="muted" data-label="Source">{{ b.source }}</td>
+              <td class="muted" data-label="When">{{ b.imported_at.strftime("%d.%m.%Y %H:%M") }}</td>
+              <td class="num" data-label="Records">{{ b.record_count }}</td>
+              <td data-label="Status">
                 {% if b.status.value == "active" %}
                   {{ b.status.value }}
                 {% else %}

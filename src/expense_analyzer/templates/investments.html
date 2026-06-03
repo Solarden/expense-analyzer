@@ -57,7 +57,7 @@
       <div class="panel">
         {% if h.positions %}
           {% if loop.first and allocation_chart.labels %}<canvas id="allocationChart" height="220"></canvas>{% endif %}
-          <table style="margin-top:12px">
+          <table class="table-cards" style="margin-top:12px">
             <thead>
               <tr>
                 <th>Ticker</th>
@@ -70,11 +70,11 @@
             <tbody>
               {% for p in h.positions %}
                 <tr>
-                  <td>{{ p.ticker }}</td>
-                  <td class="num">{{ p.quantity | qty }}</td>
-                  <td class="num muted">{{ p.avg_price | pln if p.avg_price is not none else "—" }}</td>
-                  <td class="num muted">{{ p.current_price | pln if p.current_price is not none else "—" }}</td>
-                  <td class="num">{{ p.value | pln }}</td>
+                  <td data-label="Ticker">{{ p.ticker }}</td>
+                  <td class="num" data-label="Quantity">{{ p.quantity | qty }}</td>
+                  <td class="num muted" data-label="Avg price">{{ p.avg_price | pln if p.avg_price is not none else "—" }}</td>
+                  <td class="num muted" data-label="Price">{{ p.current_price | pln if p.current_price is not none else "—" }}</td>
+                  <td class="num" data-label="Value">{{ p.value | pln }}</td>
                 </tr>
               {% endfor %}
             </tbody>

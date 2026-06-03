@@ -20,7 +20,7 @@
   <h2>Suggested pairs</h2>
   <div class="panel">
     {% if suggestions %}
-      <table>
+      <table class="table-cards">
         <thead>
           <tr>
             <th>Out</th>
@@ -32,9 +32,9 @@
         <tbody>
           {% for pair in suggestions %}
             <tr>
-              <td>{{ leg(pair.outflow) }}</td>
-              <td>{{ leg(pair.inflow) }}</td>
-              <td class="num muted">{{ pair.date_gap_days }}d</td>
+              <td data-label="Out">{{ leg(pair.outflow) }}</td>
+              <td data-label="In">{{ leg(pair.inflow) }}</td>
+              <td class="num muted" data-label="Gap">{{ pair.date_gap_days }}d</td>
               <td>
                 <form class="hstack" method="post" action="/dashboard/transfers/confirm">
                   <input type="hidden" name="tx_a_id" value="{{ pair.outflow.id }}">
@@ -53,7 +53,7 @@
   <h2>Confirmed transfers</h2>
   <div class="panel">
     {% if groups %}
-      <table>
+      <table class="table-cards">
         <thead>
           <tr>
             <th>Legs</th>
@@ -63,7 +63,7 @@
         <tbody>
           {% for group in groups %}
             <tr>
-              <td>
+              <td data-label="Legs">
                 {% for tx in group %}
                   {{ leg(tx) }}
                   {% if not loop.last %}<br>{% endif %}

@@ -58,6 +58,9 @@ def test_roundtrip_minor_units_decimal():
     assert from_minor_units(-1) == Decimal("-0.01")
 
 
-def test_format_pln_uses_comma():
-    assert format_pln(-123456) == "-1234,56 zł"
-    assert format_pln(100) == "1,00 zł"
+def test_format_pln_groups_thousands_and_uses_comma():
+    # Thousands grouped with a non-breaking space, comma decimal (Polish style).
+    assert format_pln(-123456) == "-1\xa0234,56 zł"
+    assert format_pln(100) == "1,00 zł"  # under 1000: no grouping
+    assert format_pln(-28561571) == "-285\xa0615,71 zł"
+    assert format_pln(0) == "0,00 zł"

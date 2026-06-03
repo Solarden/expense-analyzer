@@ -231,24 +231,25 @@
     display: block;
     padding: 10px 0;
   }
-  .table-cards tbody tr + tr {
+  /* Separate each card and the footer (totals) row. */
+  .table-cards tbody tr + tr,
+  .table-cards tfoot tr {
     border-top: 1px solid var(--color-line);
   }
-  .table-cards td {
+  .table-cards td,
+  .table-cards tfoot th {
     display: block;
     border: 0;
     padding: 2px 0;
-  }
-  /* Numbers read left-aligned in a stacked card, not pushed to the right edge. */
-  .table-cards td.num {
     text-align: left;
   }
-  .table-cards td[data-label]::before {
+  .table-cards td[data-label]::before,
+  .table-cards tfoot th[data-label]::before {
     content: attr(data-label) ": ";
     color: var(--color-muted);
     font-size: 13px;
   }
-  /* The inline editor cell gets a little breathing room above it. */
+  /* The inline editor / spanning cell gets a little breathing room above it. */
   .table-cards td[colspan] {
     margin-top: 6px;
   }

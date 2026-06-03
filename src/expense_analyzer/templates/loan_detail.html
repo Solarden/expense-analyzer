@@ -78,7 +78,7 @@
         · interest: <span class="num">{{ (reconciliation.rows | map(attribute="scheduled.interest") | sum) | pln }}</span>.
         Link a real outflow to an installment to track plan vs reality.
       </p>
-      <table>
+      <table class="table-cards">
         <thead>
           <tr>
             <th class="num">#</th>
@@ -95,20 +95,19 @@
         <tbody>
           {% for row in reconciliation.rows %}
             <tr>
-              <td class="num muted">{{ row.scheduled.index }}</td>
-              <td class="muted">{{ row.scheduled.due_date | dpl }}</td>
-              <td class="num">{{ row.scheduled.payment | pln }}</td>
-              <td class="num muted">{{ row.scheduled.interest | pln }}</td>
-              <td class="num">{{ row.scheduled.principal_paid | pln }}</td>
-              <td class="num muted">{{ row.scheduled.balance_after | pln }}</td>
+              <td class="num muted" data-label="#">{{ row.scheduled.index }}</td>
+              <td class="muted" data-label="Due">{{ row.scheduled.due_date | dpl }}</td>
+              <td class="num" data-label="Payment">{{ row.scheduled.payment | pln }}</td>
+              <td class="num muted" data-label="Interest">{{ row.scheduled.interest | pln }}</td>
+              <td class="num" data-label="Principal">{{ row.scheduled.principal_paid | pln }}</td>
+              <td class="num muted" data-label="Balance after">{{ row.scheduled.balance_after | pln }}</td>
               {% if row.payment %}
-                <td>
+                <td data-label="Actual">
                   <span class="muted">{{ row.payment.booked_date | dpl }}</span>
                   · {{ row.payment.amount | abs | pln }}
                 </td>
-                <td class="num {{ 'neg' if row.amount_diff and row.amount_diff > 0 else ('pos' if row.amount_diff and row.amount_diff < 0 else 'muted') }}">
-                  {{ row.amount_diff | pln }}
-                </td>
+                <td class="num {{ 'neg' if row.amount_diff and row.amount_diff > 0 else ('pos' if row.amount_diff and row.amount_diff < 0 else 'muted') }}"
+                    data-label="Diff">{{ row.amount_diff | pln }}</td>
                 <td>
                   <form class="hstack"
                         method="post"
@@ -117,8 +116,8 @@
                   </form>
                 </td>
               {% else %}
-                <td class="muted">—</td>
-                <td class="num muted">—</td>
+                <td class="muted" data-label="Actual">—</td>
+                <td class="num muted" data-label="Diff">—</td>
                 <td></td>
               {% endif %}
             </tr>
@@ -132,7 +131,7 @@
         <p class="muted" style="margin-top:0">
           Payments linked to this loan that don't map to a scheduled installment (e.g. an overpayment).
         </p>
-        <table>
+        <table class="table-cards">
           <thead>
             <tr>
               <th>Date</th>
@@ -144,9 +143,9 @@
           <tbody>
             {% for tx in reconciliation.unmatched_payments %}
               <tr>
-                <td class="muted">{{ tx.booked_date | dpl }}</td>
-                <td class="muted">{{ accounts.get(tx.account_id, "#" ~ tx.account_id) }}</td>
-                <td class="num">{{ tx.amount | abs | pln }}</td>
+                <td class="muted" data-label="Date">{{ tx.booked_date | dpl }}</td>
+                <td class="muted" data-label="Account">{{ accounts.get(tx.account_id, "#" ~ tx.account_id) }}</td>
+                <td class="num" data-label="Amount">{{ tx.amount | abs | pln }}</td>
                 <td>
                   <form class="hstack"
                         method="post"
@@ -166,7 +165,7 @@
         <p class="muted" style="margin-top:0">
           Outflows near an unpaid installment's due date and amount. Confirm to link them.
         </p>
-        <table>
+        <table class="table-cards">
           <thead>
             <tr>
               <th class="num">Installment</th>
@@ -180,15 +179,15 @@
           <tbody>
             {% for s in suggestions %}
               <tr>
-                <td class="num">#{{ s.installment_index }}</td>
-                <td>
+                <td class="num" data-label="Installment">#{{ s.installment_index }}</td>
+                <td data-label="Transaction">
                   <span class="muted">{{ s.transaction.booked_date | dpl }}</span>
                   · {{ accounts.get(s.transaction.account_id, "#" ~ s.transaction.account_id) }}
                   · <span class="muted">{{ s.transaction.merchant_normalized or s.transaction.raw_description }}</span>
                 </td>
-                <td class="num">{{ s.transaction.amount | abs | pln }}</td>
-                <td class="num muted">{{ s.amount_diff | pln }}</td>
-                <td class="num muted">{{ s.date_gap_days }}d</td>
+                <td class="num" data-label="Amount">{{ s.transaction.amount | abs | pln }}</td>
+                <td class="num muted" data-label="Diff">{{ s.amount_diff | pln }}</td>
+                <td class="num muted" data-label="Gap">{{ s.date_gap_days }}d</td>
                 <td>
                   <form class="hstack"
                         method="post"

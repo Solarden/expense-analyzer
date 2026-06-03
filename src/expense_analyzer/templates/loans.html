@@ -3,7 +3,7 @@
   <h2 style="margin-top:0">Loans</h2>
   <div class="panel">
     {% if loans %}
-      <table>
+      <table class="table-cards">
         <thead>
           <tr>
             <th>Account</th>
@@ -19,18 +19,18 @@
         <tbody>
           {% for loan in loans %}
             <tr>
-              <td>
+              <td data-label="Account">
                 <a href="/dashboard/loans/{{ loan.id }}">{{ accounts.get(loan.account_id, "#" ~ loan.account_id) }}</a>
               </td>
-              <td class="muted">{{ loan.rate_type.value }}</td>
-              <td class="muted">{{ loan.installment_type.value }}</td>
-              <td class="num">{{ loan.principal | pln }}</td>
-              <td class="num">
+              <td class="muted" data-label="Type">{{ loan.rate_type.value }}</td>
+              <td class="muted" data-label="Installments">{{ loan.installment_type.value }}</td>
+              <td class="num" data-label="Principal">{{ loan.principal | pln }}</td>
+              <td class="num" data-label="Rate">
                 {{ "%.2f"|format(loan.rate_bp / 100) }}%
                 {% if loan.rate_type.value == "variable" %}<span class="muted">+ {{ loan.base_rate_ref or "base" }}</span>{% endif %}
               </td>
-              <td class="muted">{{ loan.start_date | dpl }}</td>
-              <td class="num">{{ loan.term_months }}</td>
+              <td class="muted" data-label="Start">{{ loan.start_date | dpl }}</td>
+              <td class="num" data-label="Term">{{ loan.term_months }}</td>
               <td>
                 <form class="hstack"
                       method="post"
