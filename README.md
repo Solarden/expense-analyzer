@@ -83,4 +83,14 @@ Models live in `src/expense_analyzer/models.py`; Alembic autogenerate targets
 
 ## License
 
-See [LICENSE](LICENSE).
+Copyright (C) 2026 **Pawel Chraczynski** (GitHub: [@Solarden](https://github.com/Solarden)) —
+sole author and copyright holder.
+
+Expense Analyzer is free software under the **GNU AGPL v3 or later**
+(`AGPL-3.0-or-later`) — see [LICENSE](LICENSE). In short: use, modify and share
+freely (run it at home all you want), but if you distribute it or run a modified
+version as a network service, you must release your source under the same terms.
+
+Need terms the AGPL doesn't allow (e.g. closed-source or commercial use)? A
+separate **commercial license** is available — see [LICENSING.md](LICENSING.md)
+or email **contact@szawel.com**.

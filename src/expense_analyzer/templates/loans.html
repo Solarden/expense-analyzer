@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 style="margin-top:0">Loans</h2>
+
+<div class="panel">
+  {% if loans %}
+  <table>
+    <thead>
+      <tr>
+        <th>Account</th><th>Type</th><th>Installments</th>
+        <th class="num">Principal</th><th class="num">Rate</th>
+        <th>Start</th><th class="num">Term</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for loan in loans %}
+      <tr>
+        <td><a href="/dashboard/loans/{{ loan.id }}">{{ accounts.get(loan.account_id, "#" ~ loan.account_id) }}</a></td>
+        <td class="muted">{{ loan.rate_type.value }}</td>
+        <td class="muted">{{ loan.installment_type.value }}</td>
+        <td class="num">{{ loan.principal | pln }}</td>
+        <td class="num">
+          {{ "%.2f"|format(loan.rate_bp / 100) }}%{% if loan.rate_type.value == "variable" %} <span class="muted">+ {{ loan.base_rate_ref or "base" }}</span>{% endif %}
+        </td>
+        <td class="muted">{{ loan.start_date.isoformat() }}</td>
+        <td class="num">{{ loan.term_months }}</td>
+        <td>
+          <form class="inline" method="post" action="/dashboard/loans/{{ loan.id }}/delete"
+                onsubmit="return confirm('Delete this loan and its schedule? Linked payments are kept but unlinked.');">
+            <button class="ghost" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No loans yet. Define one below.</p>
+  {% endif %}
+</div>
+
+<h2>Define a loan</h2>
+<div class="panel">
+  {% if loan_accounts %}
+  <form method="post" action="/dashboard/loans">
+    <div class="grid">
+      <div style="flex:1; min-width:240px;">
+        <label>Loan account</label>
+        <select name="account_id" required>
+          {% for a in loan_accounts %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+        </select>
+
+        <label>Principal (PLN)</label>
+        <input name="principal" placeholder="300000" required>
+
+        <label>Start date (disbursement)</label>
+        <input type="date" name="start_date" required>
+
+        <label>Term (months)</label>
+        <input type="number" name="term_months" min="1" placeholder="360" required>
+      </div>
+
+      <div style="flex:1; min-width:240px;">
+        <label>Installment type</label>
+        <select name="installment_type">
+          {% for t in installment_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+        </select>
+
+        <label>Rate type</label>
+        <select name="rate_type">
+          {% for t in rate_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+        </select>
+
+        <label>Rate / margin (% per year)</label>
+        <input name="rate_percent" placeholder="7.25" required>
+        <p class="muted" style="font-size:13px; margin:4px 0 0;">
+          For a fixed loan this is the annual rate; for a variable loan it's the margin over the base.
+        </p>
+      </div>
+
+      <div style="flex:1; min-width:240px;">
+        <h2 style="margin-top:0">Variable only</h2>
+        <label>Base rate reference</label>
+        <input name="base_rate_ref" placeholder="WIBOR 3M">
+
+        <label>Initial base rate (% per year)</label>
+        <input name="base_rate_percent" placeholder="5.85">
+        <p class="muted" style="font-size:13px; margin:4px 0 0;">
+          Seeds a rate observation effective on the start date. Required for a variable loan.
+        </p>
+      </div>
+    </div>
+    <p><button type="submit">Create loan</button></p>
+  </form>
+  {% else %}
+  <p class="muted">
+    No loan accounts yet. <a href="/dashboard">Create an account of type "loan"</a> first.
+  </p>
+  {% endif %}
+</div>
+
+{% endblock %}

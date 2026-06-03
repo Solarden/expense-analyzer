@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block content %}
+
+<p style="margin-top:0"><a href="/dashboard/loans">← Loans</a></p>
+
+<h2 style="margin-top:0">{{ account_name or ("Loan #" ~ loan.id) }}</h2>
+
+<div class="cards">
+  <div class="card"><div class="k">Principal</div><div class="v num">{{ loan.principal | pln }}</div></div>
+  <div class="card"><div class="k">Rate</div><div class="v num">{{ "%.2f"|format(loan.rate_bp / 100) }}%{% if loan.rate_type.value == "variable" %} <span class="muted" style="font-size:14px;">+ {{ loan.base_rate_ref or "base" }}</span>{% endif %}</div></div>
+  <div class="card"><div class="k">Installments</div><div class="v">{{ loan.installment_type.value }} · {{ loan.rate_type.value }}</div></div>
+  <div class="card"><div class="k">Term</div><div class="v">{{ loan.term_months }} mo from {{ loan.start_date.isoformat() }}</div></div>
+</div>
+
+{% if loan.rate_type.value == "variable" %}
+<h2>Base rate history</h2>
+<div class="panel">
+  {% if rate_changes %}
+  <table>
+    <thead><tr><th>Effective</th><th class="num">Base rate</th><th class="num">Effective (+ margin)</th></tr></thead>
+    <tbody>
+      {% for c in rate_changes %}
+      <tr>
+        <td class="muted">{{ c.effective_date.isoformat() }}</td>
+        <td class="num">{{ "%.2f"|format(c.base_rate_bp / 100) }}%</td>
+        <td class="num">{{ "%.2f"|format((c.base_rate_bp + loan.rate_bp) / 100) }}%</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No base-rate observations yet.</p>
+  {% endif %}
+  <h2>Add a base-rate change</h2>
+  <form class="inline" method="post" action="/dashboard/loans/{{ loan.id }}/rate-changes">
+    <input type="date" name="effective_date" required>
+    <input name="base_rate_percent" placeholder="5.85" required>
+    <button type="submit">Add</button>
+  </form>
+</div>
+{% endif %}
+
+{% if schedule_error %}
+<div class="flash error">Cannot build the schedule: {{ schedule_error }}</div>
+{% elif reconciliation %}
+
+<h2>Schedule — plan vs reality</h2>
+<div class="panel">
+  <p class="muted" style="margin-top:0">
+    Total to repay: <span class="num">{{ reconciliation.rows | map(attribute="scheduled.payment") | sum | pln }}</span>
+    · interest: <span class="num">{{ (reconciliation.rows | map(attribute="scheduled.interest") | sum) | pln }}</span>.
+    Link a real outflow to an installment to track plan vs reality.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th class="num">#</th><th>Due</th>
+        <th class="num">Payment</th><th class="num">Interest</th><th class="num">Principal</th>
+        <th class="num">Balance after</th>
+        <th>Actual</th><th class="num">Diff</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in reconciliation.rows %}
+      <tr>
+        <td class="num muted">{{ row.scheduled.index }}</td>
+        <td class="muted">{{ row.scheduled.due_date.isoformat() }}</td>
+        <td class="num">{{ row.scheduled.payment | pln }}</td>
+        <td class="num muted">{{ row.scheduled.interest | pln }}</td>
+        <td class="num">{{ row.scheduled.principal_paid | pln }}</td>
+        <td class="num muted">{{ row.scheduled.balance_after | pln }}</td>
+        {% if row.payment %}
+        <td>
+          <span class="muted">{{ row.payment.booked_date.isoformat() }}</span>
+          · {{ row.payment.amount | abs | pln }}
+        </td>
+        <td class="num {{ 'neg' if row.amount_diff and row.amount_diff > 0 else ('pos' if row.amount_diff and row.amount_diff < 0 else 'muted') }}">
+          {{ row.amount_diff | pln }}
+        </td>
+        <td>
+          <form class="inline" method="post"
+                action="/dashboard/loans/{{ loan.id }}/payments/{{ row.payment.id }}/unlink">
+            <button class="ghost" type="submit">Unlink</button>
+          </form>
+        </td>
+        {% else %}
+        <td class="muted">—</td><td class="num muted">—</td><td></td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if reconciliation.unmatched_payments %}
+<h2>Linked but unassigned</h2>
+<div class="panel">
+  <p class="muted" style="margin-top:0">Payments linked to this loan that don't map to a scheduled installment (e.g. an overpayment).</p>
+  <table>
+    <thead><tr><th>Date</th><th>Account</th><th class="num">Amount</th><th></th></tr></thead>
+    <tbody>
+      {% for tx in reconciliation.unmatched_payments %}
+      <tr>
+        <td class="muted">{{ tx.booked_date.isoformat() }}</td>
+        <td class="muted">{{ accounts.get(tx.account_id, "#" ~ tx.account_id) }}</td>
+        <td class="num">{{ tx.amount | abs | pln }}</td>
+        <td>
+          <form class="inline" method="post" action="/dashboard/loans/{{ loan.id }}/payments/{{ tx.id }}/unlink">
+            <button class="ghost" type="submit">Unlink</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<h2>Suggested payments</h2>
+<div class="panel">
+  {% if suggestions %}
+  <p class="muted" style="margin-top:0">Outflows near an unpaid installment's due date and amount. Confirm to link them.</p>
+  <table>
+    <thead>
+      <tr><th class="num">Installment</th><th>Transaction</th><th class="num">Amount</th><th class="num">Diff</th><th class="num">Gap</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for s in suggestions %}
+      <tr>
+        <td class="num">#{{ s.installment_index }}</td>
+        <td>
+          <span class="muted">{{ s.transaction.booked_date.isoformat() }}</span>
+          · {{ accounts.get(s.transaction.account_id, "#" ~ s.transaction.account_id) }}
+          · <span class="muted">{{ s.transaction.merchant_normalized or s.transaction.raw_description }}</span>
+        </td>
+        <td class="num">{{ s.transaction.amount | abs | pln }}</td>
+        <td class="num muted">{{ s.amount_diff | pln }}</td>
+        <td class="num muted">{{ s.date_gap_days }}d</td>
+        <td>
+          <form class="inline" method="post" action="/dashboard/loans/{{ loan.id }}/payments/link">
+            <input type="hidden" name="tx_id" value="{{ s.transaction.id }}">
+            <input type="hidden" name="installment_index" value="{{ s.installment_index }}">
+            <button type="submit">Link</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No matching outflows to suggest.</p>
+  {% endif %}
+</div>
+
+{% endif %}
+
+{% endblock %}

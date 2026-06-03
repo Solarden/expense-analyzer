@@ -10,6 +10,7 @@ Every route requires a logged-in user (``require_user``); the household view is
 shared (no per-user data isolation).
 """
 
+from datetime import date
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
@@ -23,8 +24,18 @@ from expense_analyzer.db import get_session
 from expense_analyzer.importers import ImporterError, run_import
 from expense_analyzer.importers.pipeline import rollback_batch
 from expense_analyzer.importers.registry import available, get_importer
-from expense_analyzer.models import AccountType, CategoryKind, Owner, Scope
+from expense_analyzer.loans import LoanScheduleError
+from expense_analyzer.models import (
+    AccountType,
+    CategoryKind,
+    InstallmentType,
+    Owner,
+    RateType,
+    Scope,
+)
+from expense_analyzer.money import MoneyParseError, parse_pln
 from expense_analyzer.queries import accounts, batches, categories, stats, transactions
+from expense_analyzer.queries import loans as loan_queries
 from expense_analyzer.queries import transfers as transfer_queries
 from expense_analyzer.queries import users as user_queries
 from expense_analyzer.queries.transactions import UNCATEGORIZED, TransactionFilters
@@ -351,6 +362,195 @@ def rollback(
     rollback_batch(session, batch_id)
 
     return RedirectResponse("/dashboard", status_code=303)
+
+
+def _loans_context(session: Session, user: Owner, **extra) -> dict:
+    """Shared context for the loans list page (create form + existing loans)."""
+    return {
+        "user": user,
+        "loans": loan_queries.list_loans(session),
+        "loan_accounts": loan_queries.loan_accounts(session),
+        "accounts": {a.id: a.name for a in accounts.list_accounts(session)},
+        "rate_types": [t.value for t in RateType],
+        "installment_types": [t.value for t in InstallmentType],
+        **extra,
+    }
+
+
+@router.get("/loans", response_class=HTMLResponse)
+def loans_page(
+    request: Request,
+    user: Owner = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> HTMLResponse:
+    return templates.TemplateResponse(request, "loans.html", _loans_context(session, user))
+
+
+@router.post("/loans", response_class=HTMLResponse)
+def create_loan(
+    request: Request,
+    account_id: int = Form(...),
+    principal: str = Form(...),
+    rate_type: RateType = Form(...),
+    rate_percent: str = Form(...),  # fixed: the rate; variable: the margin
+    installment_type: InstallmentType = Form(...),
+    start_date: str = Form(...),
+    term_months: int = Form(...),
+    base_rate_ref: str = Form(""),
+    base_rate_percent: str = Form(""),  # variable only: initial base rate
+    user: Owner = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    account = accounts.get_account(session, account_id)
+    error: str | None = None
+    if account is None or account.type != AccountType.loan:
+        error = "Pick a loan account (create one of type 'loan' first)."
+    elif term_months < 1:
+        error = "Term must be at least one month."
+    else:
+        try:
+            principal_minor = parse_pln(principal)
+            rate_bp = parse_pln(rate_percent)  # "7,25" -> 725 basis points
+            initial_base_rate_bp = (
+                parse_pln(base_rate_percent) if base_rate_percent.strip() else None
+            )
+            start = date.fromisoformat(start_date)
+        except (MoneyParseError, ValueError) as exc:
+            error = f"Could not read the numbers/date: {exc}"
+        else:
+            if principal_minor <= 0:
+                error = "Principal must be a positive amount."
+            elif rate_type is RateType.variable and initial_base_rate_bp is None:
+                error = "A variable-rate loan needs an initial base rate (e.g. current WIBOR)."
+
+    if error is not None:
+        return templates.TemplateResponse(
+            request, "loans.html", _loans_context(session, user, error=error), status_code=400
+        )
+
+    loan = loan_queries.create_loan(
+        session,
+        account_id=account_id,
+        principal=principal_minor,
+        rate_type=rate_type,
+        rate_bp=rate_bp,
+        installment_type=installment_type,
+        start_date=start,
+        term_months=term_months,
+        base_rate_ref=base_rate_ref.strip() or None,
+        initial_base_rate_bp=initial_base_rate_bp,
+    )
+
+    return RedirectResponse(f"/dashboard/loans/{loan.id}", status_code=303)
+
+
+@router.get("/loans/{loan_id}", response_class=HTMLResponse)
+def loan_detail(
+    request: Request,
+    loan_id: int,
+    flash: str | None = None,
+    user: Owner = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> HTMLResponse:
+    loan = loan_queries.get_loan(session, loan_id)
+    if loan is None:
+        raise HTTPException(status_code=404, detail=f"loan {loan_id} not found")
+
+    # A misconfigured variable loan (no base rate by month 1) can't produce a
+    # schedule — show the reason instead of a 500.
+    schedule_error: str | None = None
+    reconciliation = None
+    suggestions: list = []
+    try:
+        # Compute the schedule once and feed both the reconciliation and the
+        # payment suggestions (it's the expensive bit for a long-term loan).
+        schedule = loan_queries.loan_schedule(session, loan_id)
+        reconciliation = loan_queries.loan_reconciliation(session, loan_id, schedule)
+        settings = get_settings()
+        suggestions = loan_queries.suggest_payments(
+            session,
+            loan,
+            schedule,
+            window_days=settings.loan_match_window_days,
+            tolerance_pct=settings.loan_match_amount_tolerance_pct,
+        )
+    except LoanScheduleError as exc:
+        schedule_error = str(exc)
+
+    return templates.TemplateResponse(
+        request,
+        "loan_detail.html",
+        {
+            "user": user,
+            "loan": loan,
+            "account_name": (acc := accounts.get_account(session, loan.account_id)) and acc.name,
+            "reconciliation": reconciliation,
+            "schedule_error": schedule_error,
+            "rate_changes": loan_queries.list_rate_changes(session, loan_id),
+            "suggestions": suggestions,
+            "accounts": {a.id: a.name for a in accounts.list_accounts(session)},
+            "flash": flash,
+        },
+    )
+
+
+@router.post("/loans/{loan_id}/rate-changes")
+def add_rate_change(
+    loan_id: int,
+    effective_date: str = Form(...),
+    base_rate_percent: str = Form(...),
+    session: Session = Depends(get_session),
+) -> RedirectResponse:
+    loan = loan_queries.get_loan(session, loan_id)
+    if loan is None:
+        raise HTTPException(status_code=404, detail=f"loan {loan_id} not found")
+    try:
+        effective = date.fromisoformat(effective_date)
+        base_rate_bp = parse_pln(base_rate_percent)
+    except (MoneyParseError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"invalid rate change: {exc}") from exc
+
+    loan_queries.add_rate_change(
+        session, loan_id=loan_id, effective_date=effective, base_rate_bp=base_rate_bp
+    )
+
+    return RedirectResponse(f"/dashboard/loans/{loan_id}", status_code=303)
+
+
+@router.post("/loans/{loan_id}/payments/link")
+def link_loan_payment(
+    loan_id: int,
+    tx_id: int = Form(...),
+    installment_index: int = Form(...),
+    session: Session = Depends(get_session),
+) -> RedirectResponse:
+    if not loan_queries.link_payment(
+        session, loan_id=loan_id, tx_id=tx_id, installment_index=installment_index
+    ):
+        raise HTTPException(status_code=404, detail="could not link payment")
+
+    return RedirectResponse(f"/dashboard/loans/{loan_id}", status_code=303)
+
+
+@router.post("/loans/{loan_id}/payments/{tx_id}/unlink")
+def unlink_loan_payment(
+    loan_id: int,
+    tx_id: int,
+    session: Session = Depends(get_session),
+) -> RedirectResponse:
+    loan_queries.unlink_payment(session, tx_id)
+
+    return RedirectResponse(f"/dashboard/loans/{loan_id}", status_code=303)
+
+
+@router.post("/loans/{loan_id}/delete")
+def delete_loan(
+    loan_id: int,
+    session: Session = Depends(get_session),
+) -> RedirectResponse:
+    loan_queries.delete_loan(session, loan_id)
+
+    return RedirectResponse("/dashboard/loans", status_code=303)
 
 
 @router.get("/users", response_class=HTMLResponse)
