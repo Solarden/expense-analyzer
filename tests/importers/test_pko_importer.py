@@ -55,14 +55,14 @@ def sample_bytes() -> bytes:
 
 
 def test_parses_only_booked_rows(sample_bytes: bytes):
-    txns = PKOCsvImporter().parse(sample_bytes)
+    txns = PKOCsvImporter().parse(sample_bytes).transactions
     # 5 data rows, but the pending "Blokada" is skipped -> 4.
     assert len(txns) == 4
     assert all(tx.amount != -2999 for tx in txns)  # the -29.99 hold is gone
 
 
 def test_card_payment_fields(sample_bytes: bytes):
-    card = PKOCsvImporter().parse(sample_bytes)[0]
+    card = PKOCsvImporter().parse(sample_bytes).transactions[0]
     assert card.booked_date == date(2026, 5, 31)
     assert card.amount == -4240  # grosze, signed
     assert card.balance_after == 32576
@@ -74,14 +74,14 @@ def test_card_payment_fields(sample_bytes: bytes):
 
 
 def test_signs_and_amounts(sample_bytes: bytes):
-    txns = PKOCsvImporter().parse(sample_bytes)
+    txns = PKOCsvImporter().parse(sample_bytes).transactions
     by_amount = {tx.amount for tx in txns}
     assert 140000 in by_amount  # +1400.00 inflow stays positive
     assert -20000 in by_amount  # -200.00 expense stays negative
 
 
 def test_fx_row_keeps_pln_amount_and_extra_fragments(sample_bytes: bytes):
-    fx = PKOCsvImporter().parse(sample_bytes)[3]
+    fx = PKOCsvImporter().parse(sample_bytes).transactions[3]
     assert fx.amount == -493  # the PLN amount, not the 27.00 original
     assert fx.balance_after == 152083
     assert "Marża za przewalutowanie: 5,02" in fx.raw_description
@@ -89,12 +89,12 @@ def test_fx_row_keeps_pln_amount_and_extra_fragments(sample_bytes: bytes):
 
 
 def test_empty_input_yields_nothing():
-    assert PKOCsvImporter().parse(b"") == []
+    assert PKOCsvImporter().parse(b"").transactions == []
 
 
 def test_utf8_file_decodes_polish_characters():
     # A genuine UTF-8 export must decode via the UTF-8 path, not get mojibaked.
-    txns = PKOCsvImporter().parse(_SAMPLE.encode("utf-8"))
+    txns = PKOCsvImporter().parse(_SAMPLE.encode("utf-8")).transactions
     assert len(txns) == 4
     assert "Łódź" in txns[0].raw_description
 
@@ -112,7 +112,7 @@ def test_malformed_amount_raises_importer_error():
 
 def test_real_format_fixture_regression(fixtures_dir):
     """Regression against an anonymized real-format PKO export (cp1250)."""
-    txns = PKOCsvImporter().parse((fixtures_dir / "pko" / "sample.csv").read_bytes())
+    txns = PKOCsvImporter().parse((fixtures_dir / "pko" / "sample.csv").read_bytes()).transactions
 
     # 5 rows, the pending Blokada is skipped -> 4 booked, in file order.
     assert [(t.booked_date, t.amount, t.balance_after) for t in txns] == [
@@ -135,7 +135,8 @@ def test_real_format_fixture_regression(fixtures_dir):
 def test_edge_cases_fixture(fixtures_dir):
     """Valid-but-tricky rows: zero/large amounts, refund, value-date != op-date,
     messy whitespace, a blank line in the middle."""
-    txns = PKOCsvImporter().parse((fixtures_dir / "pko" / "edge_cases.csv").read_bytes())
+    result = PKOCsvImporter().parse((fixtures_dir / "pko" / "edge_cases.csv").read_bytes())
+    txns = result.transactions
 
     # Blank line skipped -> 5 rows, order preserved.
     assert [t.amount for t in txns] == [0, 2_000_000, 3499, -999, -150]

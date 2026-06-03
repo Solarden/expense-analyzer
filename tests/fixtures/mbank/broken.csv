@@ -1,0 +1,5 @@
+﻿mBank S.A. Bankowość Detaliczna;
+
+#Data operacji;#Opis operacji;#Rachunek;#Kategoria;#Kwota;
+2026-01-01;"OK ROW";"eKonto 0000 ... 0000";"Inne";-10,00 PLN;;
+2026-01-02;"BAD ROW";"eKonto 0000 ... 0000";"Inne";not-a-number PLN;;

@@ -6,6 +6,7 @@ design's "build around the importer" principle (§1) buys us.
 """
 
 from expense_analyzer.importers.base import Importer
+from expense_analyzer.importers.mbank import MBankCsvImporter
 from expense_analyzer.importers.pko import PKOCsvImporter
 
 _REGISTRY: dict[str, Importer] = {}
@@ -29,3 +30,4 @@ def available() -> dict[str, Importer]:
 
 # Bank parsers shipped in the box.
 register("pko", PKOCsvImporter())
+register("mbank", MBankCsvImporter())

@@ -38,16 +38,37 @@ class NormalizedTransaction:
     merchant_normalized: str | None = None  # optional, parser may pre-fill
 
 
+@dataclass(frozen=True, slots=True)
+class ParseResult:
+    """Everything a parser extracted from one export.
+
+    More than a list of transactions: a bank statement also carries
+    statement-level metadata used for reconciliation (design §6). Different
+    banks expose different signals — PKO puts a running balance on every row
+    (``NormalizedTransaction.balance_after``), mBank instead prints declared
+    period totals at the top — so both are optional and the reconciler uses
+    whatever is present.
+    """
+
+    transactions: list[NormalizedTransaction]
+    #: Declared sum of inflows for the period, minor units (positive), if the
+    #: export states it (mBank's ``#Wpływy``). ``None`` when not provided.
+    declared_inflow: int | None = None
+    #: Declared sum of outflows for the period, minor units (negative), if the
+    #: export states it (mBank's ``#Wydatki``). ``None`` when not provided.
+    declared_outflow: int | None = None
+
+
 @runtime_checkable
 class Importer(Protocol):
-    """Parses a bank export into :class:`NormalizedTransaction` records.
+    """Parses a bank export into a :class:`ParseResult`.
 
     Implementations receive raw ``bytes`` (not text) because each bank uses its
-    own encoding — Polish exports are frequently ``windows-1250`` — and decoding
-    is the parser's responsibility.
+    own encoding — Polish exports are frequently ``windows-1250`` or UTF-8 with
+    a BOM — and decoding is the parser's responsibility.
     """
 
     #: Human-readable label stored on the ImportBatch, e.g. ``"PKO csv"``.
     source: str
 
-    def parse(self, data: bytes) -> list[NormalizedTransaction]: ...
+    def parse(self, data: bytes) -> ParseResult: ...

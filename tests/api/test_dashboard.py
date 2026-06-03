@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-from expense_analyzer.importers import NormalizedTransaction
+from expense_analyzer.importers import NormalizedTransaction, ParseResult
 from expense_analyzer.importers import registry as importer_registry
 from expense_analyzer.models import Account, AccountType, Category, CategoryKind, Transaction
 
@@ -20,11 +20,13 @@ from expense_analyzer.models import Account, AccountType, Category, CategoryKind
 class FakeImporter:
     source = "Fake Bank csv"
 
-    def parse(self, data: bytes) -> list[NormalizedTransaction]:
-        return [
-            NormalizedTransaction(date(2026, 5, 1), -12345, "Biedronka"),
-            NormalizedTransaction(date(2026, 5, 2), 1000000, "Wyplata"),
-        ]
+    def parse(self, data: bytes) -> ParseResult:
+        return ParseResult(
+            transactions=[
+                NormalizedTransaction(date(2026, 5, 1), -12345, "Biedronka"),
+                NormalizedTransaction(date(2026, 5, 2), 1000000, "Wyplata"),
+            ]
+        )
 
 
 @pytest.fixture

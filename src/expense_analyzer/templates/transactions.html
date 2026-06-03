@@ -29,7 +29,10 @@
       {% for tx in transactions %}
       <tr>
         <td class="muted">{{ tx.booked_date.isoformat() }}</td>
-        <td>{{ tx.raw_description }}</td>
+        <td>
+          {% if tx.merchant_normalized %}<strong>{{ tx.merchant_normalized }}</strong><br>{% endif %}
+          <span class="muted">{{ tx.raw_description }}</span>
+        </td>
         <td class="num {{ 'neg' if tx.amount < 0 else 'pos' }}">{{ tx.amount | pln }}</td>
         <td colspan="3">
           <form class="inline" method="post" action="/dashboard/transactions/{{ tx.id }}/categorize">
