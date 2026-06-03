@@ -15,6 +15,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel
 
@@ -86,7 +87,7 @@ def auth_client(client: TestClient, db_session: Session) -> TestClient:
         data={"username": "tester", "password": "secret123"},
         follow_redirects=False,
     )
-    assert resp.status_code == 303
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
 
     return client
 

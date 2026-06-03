@@ -8,6 +8,7 @@ uses) so each test controls exactly what the page should show.
 from collections.abc import Callable
 from datetime import date
 
+from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
@@ -16,7 +17,7 @@ from expense_analyzer.models import Account, Category, CategoryKind, Transaction
 
 def test_static_chart_js_served(auth_client: TestClient):
     resp = auth_client.get("/static/chart.min.js")
-    assert resp.status_code == 200
+    assert resp.status_code == status.HTTP_200_OK
     assert "javascript" in resp.headers["content-type"]
 
 
@@ -30,7 +31,7 @@ def test_stats_page_renders_with_charts(
     make_transaction(account_id=account.id, amount=12000, booked_date=date(2026, 5, 1))
 
     resp = auth_client.get("/dashboard/stats?month=2026-05")
-    assert resp.status_code == 200
+    assert resp.status_code == status.HTTP_200_OK
     assert "Overview" in resp.text
     assert 'id="categoryChart"' in resp.text
     assert 'id="trendChart"' in resp.text
@@ -55,14 +56,14 @@ def test_stats_page_excludes_transfers(
     make_transaction(account_id=a.id, amount=-3000, booked_date=date(2026, 5, 6))
 
     resp = auth_client.get("/dashboard/stats?month=2026-05")
-    assert resp.status_code == 200
+    assert resp.status_code == status.HTTP_200_OK
     assert "30,00 zł" in resp.text  # only the real expense
     assert "2000,00 zł" not in resp.text  # the transfer leg is gone
 
 
 def test_stats_page_empty_db(auth_client: TestClient, db_session: Session):
     resp = auth_client.get("/dashboard/stats")
-    assert resp.status_code == 200
+    assert resp.status_code == status.HTTP_200_OK
     assert "No spending recorded" in resp.text
 
 
@@ -141,7 +142,7 @@ def test_categorize_returns_to_filtered_view(
         },
         follow_redirects=False,
     )
-    assert resp.status_code == 303
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
     assert resp.headers["location"] == "/dashboard/transactions?month=2026-05&page=2"
 
 
@@ -158,7 +159,7 @@ def test_categorize_rejects_offsite_return_to(
         data={"category_id": "", "scope": "private", "return_to": "https://evil.example/phish"},
         follow_redirects=False,
     )
-    assert resp.status_code == 303
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
     assert resp.headers["location"] == "/dashboard/transactions"  # open redirect refused
 
 
@@ -180,7 +181,7 @@ def test_categorize_rejects_sibling_path_return_to(
         },
         follow_redirects=False,
     )
-    assert resp.status_code == 303
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
     assert resp.headers["location"] == "/dashboard/transactions"
 
 
@@ -196,5 +197,5 @@ def test_transactions_invalid_month_does_not_500(
 
     resp = auth_client.get("/dashboard/transactions?month=not-a-month")
 
-    assert resp.status_code == 200  # malformed filter ignored, not a crash
+    assert resp.status_code == status.HTTP_200_OK  # malformed filter ignored, not a crash
     assert "A ROW" in resp.text

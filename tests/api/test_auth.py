@@ -1,5 +1,6 @@
 """Auth tests: hashing, login/logout, route protection, user management."""
 
+from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -17,7 +18,7 @@ def test_hash_verify_roundtrip():
 
 def test_dashboard_requires_login(client: TestClient, db_session: Session):
     resp = client.get("/dashboard", follow_redirects=False)
-    assert resp.status_code == 303
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
     assert resp.headers["location"] == "/login"
 
 
@@ -29,10 +30,10 @@ def test_login_success_sets_session(client: TestClient, db_session: Session):
         data={"username": "ada", "password": "lovelace"},
         follow_redirects=False,
     )
-    assert resp.status_code == 303
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
     assert resp.headers["location"] == "/dashboard"
     # Now the protected page is reachable.
-    assert client.get("/dashboard").status_code == 200
+    assert client.get("/dashboard").status_code == status.HTTP_200_OK
 
 
 def test_login_wrong_password_401(client: TestClient, db_session: Session):
@@ -43,10 +44,10 @@ def test_login_wrong_password_401(client: TestClient, db_session: Session):
         data={"username": "ada", "password": "nope"},
         follow_redirects=False,
     )
-    assert resp.status_code == 401
+    assert resp.status_code == status.HTTP_401_UNAUTHORIZED
     assert "Invalid username or password" in resp.text
     # Still locked out.
-    assert client.get("/dashboard", follow_redirects=False).status_code == 303
+    assert client.get("/dashboard", follow_redirects=False).status_code == status.HTTP_303_SEE_OTHER
 
 
 def test_login_unknown_user_401(client: TestClient, db_session: Session):
@@ -55,17 +56,20 @@ def test_login_unknown_user_401(client: TestClient, db_session: Session):
         data={"username": "ghost", "password": "x"},
         follow_redirects=False,
     )
-    assert resp.status_code == 401
+    assert resp.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 def test_logout_clears_session(auth_client: TestClient, db_session: Session):
-    assert auth_client.get("/dashboard").status_code == 200
+    assert auth_client.get("/dashboard").status_code == status.HTTP_200_OK
 
     resp = auth_client.post("/logout", follow_redirects=False)
-    assert resp.status_code == 303
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
     assert resp.headers["location"] == "/login"
     # After logout the dashboard redirects to login again.
-    assert auth_client.get("/dashboard", follow_redirects=False).status_code == 303
+    assert (
+        auth_client.get("/dashboard", follow_redirects=False).status_code
+        == status.HTTP_303_SEE_OTHER
+    )
 
 
 def test_inactive_user_is_logged_out(auth_client: TestClient, db_session: Session):
@@ -75,7 +79,10 @@ def test_inactive_user_is_logged_out(auth_client: TestClient, db_session: Sessio
     db_session.add(tester)
     db_session.commit()
 
-    assert auth_client.get("/dashboard", follow_redirects=False).status_code == 303
+    assert (
+        auth_client.get("/dashboard", follow_redirects=False).status_code
+        == status.HTTP_303_SEE_OTHER
+    )
 
 
 def test_users_page_can_add_user(auth_client: TestClient, db_session: Session):
@@ -84,7 +91,7 @@ def test_users_page_can_add_user(auth_client: TestClient, db_session: Session):
         data={"username": "bob", "name": "Bob", "password": "hunter2"},
         follow_redirects=False,
     )
-    assert resp.status_code == 303
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
 
     bob = users.get_by_username(db_session, "bob")
     assert bob is not None
@@ -99,6 +106,6 @@ def test_users_page_rejects_duplicate_username(auth_client: TestClient, db_sessi
         data={"username": "tester", "name": "Dup", "password": "x"},
         follow_redirects=False,
     )
-    assert resp.status_code == 409
+    assert resp.status_code == status.HTTP_409_CONFLICT
     assert "already taken" in resp.text
     assert len(db_session.exec(select(Owner).where(Owner.username == "tester")).all()) == 1

@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 
+from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -10,7 +11,7 @@ from expense_analyzer.models import Account, AccountType, InvestmentPosition
 
 def test_investments_page_empty_prompts_for_portfolio(auth_client: TestClient) -> None:
     resp = auth_client.get("/dashboard/investments")
-    assert resp.status_code == 200
+    assert resp.status_code == status.HTTP_200_OK
     assert "portfolio" in resp.text.lower()
 
 
@@ -24,7 +25,7 @@ def test_investments_page_lists_holdings(
     make_investment(account_id=acc.id, ticker="SNT.PL", value=900_00)
 
     resp = auth_client.get("/dashboard/investments")
-    assert resp.status_code == 200
+    assert resp.status_code == status.HTTP_200_OK
     assert "IKE XTB" in resp.text
     assert "SNT.PL" in resp.text
 
@@ -38,7 +39,7 @@ def test_fetch_without_config_flashes_error(
 
     resp = auth_client.post("/dashboard/investments/fetch", data={"account_id": acc.id})
     # myFund is not configured in tests -> a clear flash, not a 500.
-    assert resp.status_code == 400
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
     assert "not configured" in resp.text.lower()
 
 
@@ -55,7 +56,7 @@ def test_upload_xtb_imports_positions(
         data={"account_id": acc.id},
         files={"file": ("export.xlsx", xtb_xlsx(), "application/octet-stream")},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == status.HTTP_200_OK
     assert "Imported" in resp.text
     assert "SXR8.DE" in resp.text
 
@@ -78,7 +79,7 @@ def test_upload_to_non_portfolio_account_rejected(
         data={"account_id": acc.id},
         files={"file": ("export.xlsx", xtb_xlsx(), "application/octet-stream")},
     )
-    assert resp.status_code == 400
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
     assert "portfolio" in resp.text.lower()
 
 
@@ -95,6 +96,6 @@ def test_net_worth_page_renders(
     make_investment(account_id=portfolio.id, value=500_00)
 
     resp = auth_client.get("/dashboard/net-worth")
-    assert resp.status_code == 200
+    assert resp.status_code == status.HTTP_200_OK
     assert "Net worth" in resp.text
     assert "PKO" in resp.text and "IKE" in resp.text

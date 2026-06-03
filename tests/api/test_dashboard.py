@@ -8,6 +8,7 @@ the schema on the same (temp) engine the app uses. Model builders and the shared
 
 from collections.abc import Callable
 
+from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -17,7 +18,7 @@ from expense_analyzer.models import Account, Category, CategoryKind, Transaction
 
 def test_index_renders(auth_client: TestClient, db_session: Session):
     resp = auth_client.get("/dashboard")
-    assert resp.status_code == 200
+    assert resp.status_code == status.HTTP_200_OK
     assert "Expense Analyzer" in resp.text
 
 
@@ -27,7 +28,7 @@ def test_create_account_then_listed(auth_client: TestClient, db_session: Session
         data={"name": "PKO checking", "type": "bank"},
         follow_redirects=False,
     )
-    assert resp.status_code == 303
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
     assert auth_client.get("/dashboard").text.count("PKO checking") >= 1
 
 
@@ -49,7 +50,7 @@ def test_upload_imports_transactions(
         data={"account_id": str(account.id), "importer": fake_importer},
         files={"file": ("may.csv", b"ignored-by-fake", "text/csv")},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == status.HTTP_200_OK
     assert "Imported" in resp.text
 
     rows = db_session.exec(select(Transaction)).all()
@@ -78,7 +79,7 @@ def test_categorize_sets_category_and_scope(
         data={"category_id": str(cat.id), "scope": "household", "account_id": str(account.id)},
         follow_redirects=False,
     )
-    assert resp.status_code == 303
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
 
     db_session.refresh(tx)
     assert tx.category_id == cat.id
@@ -104,7 +105,7 @@ def test_rollback_hides_transactions_from_list(
 
     # Soft-deleted rows drop out of the transaction list.
     assert "Biedronka" not in auth_client.get("/dashboard/transactions").text
-    assert up.status_code == 200
+    assert up.status_code == status.HTTP_200_OK
 
 
 def test_upload_unknown_account_shows_error(
@@ -117,7 +118,7 @@ def test_upload_unknown_account_shows_error(
         data={"account_id": "999", "importer": fake_importer},
         files={"file": ("may.csv", b"x", "text/csv")},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == status.HTTP_200_OK
     assert "Unknown account" in resp.text
     assert len(db_session.exec(select(Transaction)).all()) == 0  # nothing imported
 
@@ -130,7 +131,7 @@ def test_upload_unknown_importer_shows_error(
         data={"account_id": str(account.id), "importer": "nope"},
         files={"file": ("may.csv", b"x", "text/csv")},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == status.HTTP_200_OK
     assert "Unknown importer" in resp.text
 
 
@@ -152,7 +153,7 @@ def test_upload_unparseable_file_shows_error(
             data={"account_id": str(account.id), "importer": "boom"},
             files={"file": ("bad.csv", b"x", "text/csv")},
         )
-        assert resp.status_code == 200
+        assert resp.status_code == status.HTTP_200_OK
         assert "Could not parse the file" in resp.text
         assert "line 7: bad amount" in resp.text
         assert len(db_session.exec(select(Transaction)).all()) == 0
@@ -166,7 +167,7 @@ def test_categorize_rejects_non_numeric_category(auth_client: TestClient, db_ses
         data={"category_id": "abc", "scope": "private"},
         follow_redirects=False,
     )
-    assert resp.status_code == 400
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
 
 def test_categorize_rejects_unknown_category(
@@ -186,7 +187,7 @@ def test_categorize_rejects_unknown_category(
         data={"category_id": "9999", "scope": "private"},
         follow_redirects=False,
     )
-    assert resp.status_code == 404
+    assert resp.status_code == status.HTTP_404_NOT_FOUND
 
 
 def test_categorize_unknown_transaction_404(auth_client: TestClient, db_session: Session):
@@ -195,4 +196,4 @@ def test_categorize_unknown_transaction_404(auth_client: TestClient, db_session:
         data={"category_id": "", "scope": "private"},
         follow_redirects=False,
     )
-    assert resp.status_code == 404
+    assert resp.status_code == status.HTTP_404_NOT_FOUND
