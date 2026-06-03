@@ -87,6 +87,29 @@ class Settings(BaseSettings):
         """True once an API key and portfolio name are set — gates all egress."""
         return bool(self.myfund_api_key.get_secret_value() and self.myfund_portfolio)
 
+    # --- Home Assistant via MQTT (Phase 7) -----------------------------------
+    # OPT-IN and OFF by default: with no broker host the app makes *zero* MQTT
+    # connections. Unlike myFund this is **not** internet egress — the broker is
+    # your Home Assistant broker on the LAN (design §9). Setting a host turns on a
+    # one-directional, read-only push of household metrics (net worth, monthly
+    # spend, per-account balances) as auto-discovered HA sensors.
+    mqtt_host: str = ""  # empty -> MQTT disabled (gates everything)
+    mqtt_port: int = Field(default=1883, ge=1, le=65535)
+    mqtt_username: str = ""
+    mqtt_password: SecretStr = SecretStr("")  # masked in logs/repr
+    # Topic prefix for this app's own state/availability/alert topics.
+    mqtt_base_topic: str = "expense_analyzer"
+    # Where HA listens for MQTT discovery configs (HA's default is "homeassistant").
+    mqtt_discovery_prefix: str = "homeassistant"
+    # Worker auto-publish cadence in minutes. None/0 = the background worker never
+    # pushes on its own (the manual "Publish now" button still works).
+    mqtt_publish_interval_minutes: int | None = Field(default=None)
+
+    @property
+    def mqtt_configured(self) -> bool:
+        """True once a broker host is set — gates every MQTT connection."""
+        return bool(self.mqtt_host)
+
     @field_validator("timezone")
     @classmethod
     def _validate_timezone(cls, value: str) -> str:

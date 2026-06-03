@@ -1,0 +1,84 @@
+"""MQTT topic layout and Home Assistant discovery payloads (design §9).
+
+Pure functions — no MQTT, no DB — so the exact wire format is unit-testable on
+its own.
+
+Topic layout (one HA *device* groups every sensor under "Expense Analyzer"):
+
+- discovery:    ``<discovery_prefix>/sensor/<base>/<key>/config``  (retained)
+- state:        ``<base>/state`` — one JSON doc ``{key: value, ...}``  (retained)
+- availability: ``<base>/availability`` — ``"online"``/``"offline"``  (retained, LWT)
+- alert:        ``<base>/alert`` — a JSON event  (NOT retained — events shouldn't replay)
+
+A single shared state topic plus a per-sensor ``value_template`` keeps the wire
+small: one retained JSON publish refreshes every sensor at once, and HA re-reads
+the retained discovery + state after a restart with no push from us.
+"""
+
+import json
+
+from expense_analyzer.ha.metrics import Metric
+
+ONLINE = "online"
+OFFLINE = "offline"
+
+# Stable identifier for the single HA device all sensors hang off of, and the
+# prefix for every sensor's unique_id / object_id (HA entity_id becomes
+# sensor.expense_analyzer_<key>).
+_DEVICE_ID = "expense_analyzer"
+
+
+def state_topic(base: str) -> str:
+    return f"{base}/state"
+
+
+def availability_topic(base: str) -> str:
+    return f"{base}/availability"
+
+
+def alert_topic(base: str) -> str:
+    return f"{base}/alert"
+
+
+def discovery_topic(discovery_prefix: str, base: str, key: str) -> str:
+    return f"{discovery_prefix}/sensor/{base}/{key}/config"
+
+
+def _device() -> dict:
+    return {
+        "identifiers": [_DEVICE_ID],
+        "name": "Expense Analyzer",
+        "manufacturer": "Expense Analyzer",
+        "model": "Household finance",
+    }
+
+
+def discovery_config(metric: Metric, *, base: str) -> dict:
+    """HA MQTT discovery config for one monetary sensor.
+
+    ``device_class=monetary`` + ``state_class=total`` is the HA-correct pairing
+    for an account-balance / net-worth style figure (a level, not a meter that
+    only increases). The unit is the PLN ISO currency code.
+    """
+    return {
+        "name": metric.name,
+        "unique_id": f"{_DEVICE_ID}_{metric.key}",
+        "object_id": f"{_DEVICE_ID}_{metric.key}",
+        "state_topic": state_topic(base),
+        "value_template": f"{{{{ value_json.{metric.key} }}}}",
+        "availability_topic": availability_topic(base),
+        "unit_of_measurement": "PLN",
+        "device_class": "monetary",
+        "state_class": "total",
+        "device": _device(),
+    }
+
+
+def state_payload(metrics: list[Metric]) -> str:
+    """The retained state JSON: every metric keyed by its slug."""
+    return json.dumps({m.key: m.value for m in metrics})
+
+
+def alert_payload(title: str, message: str, *, severity: str) -> str:
+    """A one-off alert event for an HA automation to turn into a notification."""
+    return json.dumps({"title": title, "message": message, "severity": severity})

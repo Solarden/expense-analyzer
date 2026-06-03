@@ -23,7 +23,7 @@
   <div class="card"><div class="k">Net</div><div class="v {{ 'pos' if summary.net >= 0 else 'neg' }}">{{ summary.net | pln }}</div></div>
 </div>
 
-<div class="grid" style="margin-top:16px">
+<div class="cols" style="margin-top:16px">
   <div class="panel">
     <h2 style="margin-top:0">Spending by category — {{ month }}</h2>
     {% if summary.by_category %}

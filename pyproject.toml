@@ -21,6 +21,10 @@ dependencies = [
     # Outbound HTTP client for the opt-in myFund.pl investment pull (Phase 6).
     # Off by default (no API key -> no calls); also what the test client uses.
     "httpx>=0.28",
+    # MQTT client for the opt-in Home Assistant push (Phase 7). Off by default
+    # (no EA_MQTT_HOST -> the worker never connects); the broker lives on the LAN
+    # (your HA broker), so this is not internet egress.
+    "paho-mqtt>=2.1",
 ]
 
 [project.optional-dependencies]

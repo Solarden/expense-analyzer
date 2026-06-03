@@ -227,3 +227,7 @@ data/
 *.db-wal
 *.db-shm
 .env
+
+# Tailwind standalone CLI binary — a dev tool fetched on demand via `make css`.
+# The built CSS (src/expense_analyzer/static/app.css) IS committed and served.
+/tools/
