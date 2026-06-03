@@ -18,6 +18,8 @@ from sqlmodel import Session, col, select
 from expense_analyzer.clock import utc_now
 from expense_analyzer.importers.base import Importer
 from expense_analyzer.importers.fingerprint import compute_fingerprint
+from expense_analyzer.importers.merchant import normalize_merchant
+from expense_analyzer.importers.reconciliation import ReconciliationResult, reconcile
 from expense_analyzer.models import ImportBatch, ImportStatus, Transaction, TxSource
 
 
@@ -26,7 +28,8 @@ class ImportSummary:
     batch_id: int | None  # None when nothing new was imported (no batch created)
     parsed: int  # records the parser produced
     new: int  # inserted this run
-    skipped: int  # duplicates (fingerprint already known)
+    skipped: int  # duplicates (fingerprint already known, or repeated within the file)
+    reconciliation: ReconciliationResult  # non-blocking sanity check on the parsed file
 
 
 def run_import(
@@ -43,19 +46,27 @@ def run_import(
     lazily — only on the first new transaction — so re-importing the same file
     (all duplicates) adds nothing and leaves no empty batch behind.
     """
-    parsed = importer.parse(data)
+    result = importer.parse(data)
 
     batch: ImportBatch | None = None
     new = 0
     skipped = 0
-    for nt in parsed:
+    # Fingerprints inserted in *this* run. Dedup is against both the DB and this
+    # set, so a file that repeats an identical row imports it once (design's
+    # accepted in-file-duplicate behaviour) without tripping the unique index.
+    seen: set[str] = set()
+    for nt in result.transactions:
         fingerprint = compute_fingerprint(account_id, nt.booked_date, nt.amount, nt.raw_description)
+        if fingerprint in seen:
+            skipped += 1
+            continue
         already = session.exec(
             select(Transaction.id).where(Transaction.fingerprint == fingerprint)
         ).first()
         if already is not None:
             skipped += 1
             continue
+        seen.add(fingerprint)
 
         if batch is None:
             batch = ImportBatch(
@@ -67,6 +78,7 @@ def run_import(
             session.add(batch)
             session.flush()  # assign batch.id
 
+        merchant = nt.merchant_normalized or normalize_merchant(nt.raw_description)
         session.add(
             Transaction(
                 account_id=account_id,
@@ -75,7 +87,7 @@ def run_import(
                 balance_after=nt.balance_after,
                 booked_date=nt.booked_date,
                 raw_description=nt.raw_description,
-                merchant_normalized=nt.merchant_normalized,
+                merchant_normalized=merchant,
                 source=TxSource.import_csv,
                 fingerprint=fingerprint,
             )
@@ -90,9 +102,10 @@ def run_import(
 
     return ImportSummary(
         batch_id=batch.id if batch else None,
-        parsed=len(parsed),
+        parsed=len(result.transactions),
         new=new,
         skipped=skipped,
+        reconciliation=reconcile(result),
     )
 
 

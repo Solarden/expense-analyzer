@@ -35,7 +35,16 @@
     <tr><td>Records parsed</td><td class="num">{{ summary.parsed }}</td></tr>
     <tr><td>New (inserted)</td><td class="num pos">{{ summary.new }}</td></tr>
     <tr><td>Skipped (duplicates)</td><td class="num muted">{{ summary.skipped }}</td></tr>
+    <tr>
+      <td>Reconciliation</td>
+      <td class="num {{ 'pos' if summary.reconciliation.ok else 'neg' }}">{{ summary.reconciliation.label }}</td>
+    </tr>
   </table>
+  {% if summary.reconciliation.details %}
+  <ul class="muted" style="margin-top:8px">
+    {% for line in summary.reconciliation.details %}<li>{{ line }}</li>{% endfor %}
+  </ul>
+  {% endif %}
   <p style="margin-top:12px"><a href="/dashboard/transactions?account_id={{ account_id }}">View transactions →</a></p>
 </div>
 {% endif %}

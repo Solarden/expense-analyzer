@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 
 from expense_analyzer.importers import (
     NormalizedTransaction,
+    ParseResult,
     compute_fingerprint,
     rollback_batch,
     run_import,
@@ -30,11 +31,23 @@ class FakeImporter:
 
     source = "fake csv"
 
-    def __init__(self, records: list[NormalizedTransaction]) -> None:
+    def __init__(
+        self,
+        records: list[NormalizedTransaction],
+        *,
+        declared_inflow: int | None = None,
+        declared_outflow: int | None = None,
+    ) -> None:
         self._records = records
+        self._declared_inflow = declared_inflow
+        self._declared_outflow = declared_outflow
 
-    def parse(self, data: bytes) -> list[NormalizedTransaction]:
-        return self._records
+    def parse(self, data: bytes) -> ParseResult:
+        return ParseResult(
+            transactions=self._records,
+            declared_inflow=self._declared_inflow,
+            declared_outflow=self._declared_outflow,
+        )
 
 
 @pytest.fixture
@@ -155,6 +168,67 @@ def test_rollback_soft_deletes_batch(db_session: Session, account: Account):
 
     # Idempotent: a second rollback removes nothing more.
     assert rollback_batch(db_session, summary.batch_id) == 0
+
+
+def test_in_file_duplicate_is_imported_once(db_session: Session, account: Account):
+    # Two genuinely-identical rows in one file collapse to one fingerprint. The
+    # second must be skipped (design's accepted behaviour) without tripping the
+    # unique index — i.e. dedup happens within the run, not only against the DB.
+    dup = NormalizedTransaction(date(2026, 5, 1), -500, "Kawa")
+    summary = run_import(
+        db_session,
+        account_id=account.id,
+        importer=FakeImporter([dup, dup]),
+        filename="dup.csv",
+        data=b"",
+    )
+
+    assert summary.parsed == 2
+    assert summary.new == 1
+    assert summary.skipped == 1
+    assert len(db_session.exec(select(Transaction)).all()) == 1
+
+
+def test_pipeline_fills_merchant_normalized(db_session: Session, account: Account):
+    rec = NormalizedTransaction(
+        date(2026, 5, 1),
+        -4240,
+        "Płatność kartą | Lokalizacja: Adres: Testowy Sklep Miasto: Łódź Kraj: POLSKA",
+    )
+    run_import(
+        db_session, account_id=account.id, importer=FakeImporter([rec]), filename="m.csv", data=b""
+    )
+
+    tx = db_session.exec(select(Transaction)).one()
+    assert tx.merchant_normalized == "TESTOWY SKLEP"
+
+
+def test_summary_carries_reconciliation_from_declared_totals(db_session: Session, account: Account):
+    # _records()[:2] sums to +1_000_000 inflow and -12_345 outflow.
+    importer = FakeImporter(
+        _records()[:2],
+        declared_inflow=1_000_000,
+        declared_outflow=-12345,
+    )
+    summary = run_import(
+        db_session, account_id=account.id, importer=importer, filename="r.csv", data=b""
+    )
+
+    assert summary.reconciliation.ok
+    assert summary.reconciliation.label == "OK"
+
+
+def test_summary_reconciliation_flags_mismatch(db_session: Session, account: Account):
+    importer = FakeImporter(
+        [NormalizedTransaction(date(2026, 5, 1), 5000, "Wpływ")],
+        declared_inflow=9999,  # parser says 5000, bank declared 9999 -> mismatch
+    )
+    summary = run_import(
+        db_session, account_id=account.id, importer=importer, filename="bad.csv", data=b""
+    )
+
+    assert not summary.reconciliation.ok
+    assert summary.reconciliation.label == "Mismatch"
 
 
 def test_compute_fingerprint_is_stable():

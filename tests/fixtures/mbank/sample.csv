@@ -1,0 +1,26 @@
+﻿mBank S.A. Bankowość Detaliczna;
+		Skrytka Pocztowa 2108;
+		90-959 Łódź 2;
+		www.mBank.pl;
+
+
+#Klient;
+JAN KOWALSKI;
+
+Lista operacji;
+
+#Za okres:;
+01.01.2026;31.12.2026;
+
+#zgodnie z wybranymi filtrami wyszukiwania;
+      #dla rachunków:;
+      eKonto - 00000000000000000000000000;
+
+      #Waluta;#Wpływy;#Wydatki;
+PLN;8 505,00;-2 423,45;
+
+#Data operacji;#Opis operacji;#Rachunek;#Kategoria;#Kwota;
+2026-04-13;"BIEDRONKA 4521 ŁÓDŹ PIOTRKOWSKA 100 90-001 ŁÓDŹ, Płatność kartą  PŁATNOŚĆ KARTĄ 400000******0000";"eKonto 0000 ... 0000";"Jedzenie i chemia domowa";-123,45 PLN;;
+2026-03-31;"PRACODAWCA SP. Z O.O. 00-001 WARSZAWA, WYNAGRODZENIE ZA MARZEC  PRZELEW ZEWNĘTRZNY PRZYCHODZĄCY  00000000000000000000000000";"eKonto 0000 ... 0000";"Wpływy - inne";8 500,00 PLN;;
+2026-03-15;"ANNA NOWAK UL. KWIATOWA 5 M.2 00-002 WARSZAWA, CZYNSZ MARZEC  PRZELEW ZEWNĘTRZNY WYCHODZĄCY  00000000000000000000000000";"eKonto 0000 ... 0000";"Mieszkanie";-2 300,00 PLN;;
+2026-03-10;"URZĄD SKARBOWY ŁÓDŹ-ŚRÓDMIEŚCIE 90-019 ŁÓDŹ, Zwrot z podatku PPE za rok 2025  PRZELEW ZEWNĘTRZNY PRZYCHODZĄCY";"eKonto 0000 ... 0000";"Wpływy - inne";5,00 PLN;;

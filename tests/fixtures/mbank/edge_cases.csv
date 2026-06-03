@@ -1,0 +1,16 @@
+﻿mBank S.A. Bankowość Detaliczna;
+
+#Klient;
+JAN KOWALSKI;
+
+Lista operacji;
+
+      #Waluta;#Wpływy;#Wydatki;
+PLN;1 234 667,88;-12,30;
+
+#Data operacji;#Opis operacji;#Rachunek;#Kategoria;#Kwota;
+2026-02-01;"ZERO TEST,  zero amount";"eKonto 0000 ... 0000";"Inne";0,00 PLN;;
+2026-02-02;"DUŻY PRZELEW SP. Z O.O., duża kwota";"eKonto 0000 ... 0000";"Wpływy - inne";1 234 567,89 PLN;;
+
+2026-02-03;"ZWROT ZA ZAKUPY,  refund positive";"eKonto 0000 ... 0000";"Zwroty";99,99 PLN;;
+2026-02-04;"   MESSY   WHITESPACE   SHOP   ,   spaced   title   ";"eKonto 0000 ... 0000";"Inne";-12,30 PLN;;

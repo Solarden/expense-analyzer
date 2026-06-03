@@ -23,7 +23,7 @@ import csv
 import io
 from datetime import date
 
-from expense_analyzer.importers.base import ImporterError, NormalizedTransaction
+from expense_analyzer.importers.base import ImporterError, NormalizedTransaction, ParseResult
 from expense_analyzer.money import MoneyParseError, parse_pln
 
 _HEADER_FIRST_CELL = "Data operacji"
@@ -52,7 +52,7 @@ def _decode(data: bytes) -> str:
 class PKOCsvImporter:
     source = "PKO BP csv"
 
-    def parse(self, data: bytes) -> list[NormalizedTransaction]:
+    def parse(self, data: bytes) -> ParseResult:
         reader = csv.reader(io.StringIO(_decode(data)), delimiter=",", quotechar='"')
 
         out: list[NormalizedTransaction] = []
@@ -92,4 +92,6 @@ class PKOCsvImporter:
                 )
             )
 
-        return out
+        # PKO reconciles via the per-row running balance, not declared totals,
+        # so ParseResult carries no period totals — see reconciliation module.
+        return ParseResult(transactions=out)
