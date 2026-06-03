@@ -6,7 +6,7 @@ auto-linking happens only on import or an explicit rescan.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from expense_analyzer.api.deps import CurrentUser, DbSession
@@ -56,9 +56,11 @@ def confirm_transfer(
     session: DbSession,
 ) -> RedirectResponse:
     if transfer_queries.link_transfer(session, tx_a_id=form.tx_a_id, tx_b_id=form.tx_b_id) is None:
-        raise HTTPException(status_code=404, detail="not a valid transfer pair")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="not a valid transfer pair"
+        )
 
-    return RedirectResponse("/dashboard/transfers", status_code=303)
+    return RedirectResponse("/dashboard/transfers", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/rescan")
@@ -68,7 +70,8 @@ def rescan_transfers(session: DbSession) -> RedirectResponse:
     )
 
     return RedirectResponse(
-        f"/dashboard/transfers?flash=Auto-linked+{linked}+transfer(s).", status_code=303
+        f"/dashboard/transfers?flash=Auto-linked+{linked}+transfer(s).",
+        status_code=status.HTTP_303_SEE_OTHER,
     )
 
 
@@ -76,4 +79,4 @@ def rescan_transfers(session: DbSession) -> RedirectResponse:
 def unlink_transfer(group_id: str, session: DbSession) -> RedirectResponse:
     transfer_queries.unlink_transfer(session, group_id)
 
-    return RedirectResponse("/dashboard/transfers", status_code=303)
+    return RedirectResponse("/dashboard/transfers", status_code=status.HTTP_303_SEE_OTHER)

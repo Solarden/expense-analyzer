@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Form, Request, Response
+from fastapi import APIRouter, Form, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from expense_analyzer.api.deps import DbSession
@@ -32,16 +32,16 @@ def login(
             request,
             "login.html",
             {"error": "Invalid username or password."},
-            status_code=401,
+            status_code=status.HTTP_401_UNAUTHORIZED,
         )
 
     login_session(request, user)
 
-    return RedirectResponse("/dashboard", status_code=303)
+    return RedirectResponse("/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/logout")
 def logout(request: Request) -> RedirectResponse:
     logout_session(request)
 
-    return RedirectResponse("/login", status_code=303)
+    return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)

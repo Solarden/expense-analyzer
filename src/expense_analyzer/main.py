@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
@@ -51,7 +51,7 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(NotAuthenticatedError)
     async def _redirect_to_login(request: Request, exc: NotAuthenticatedError) -> RedirectResponse:
-        return RedirectResponse("/login", status_code=303)
+        return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
 
     return app
 

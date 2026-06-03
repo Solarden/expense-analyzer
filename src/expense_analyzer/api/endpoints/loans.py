@@ -6,10 +6,9 @@ all DB access goes through :mod:`expense_analyzer.queries.loans`. Bad form input
 (wrong numbers/date, missing base rate) becomes a red flash, not a 500.
 """
 
-from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlmodel import Session
 
@@ -65,9 +64,8 @@ def create_loan(
             initial_base_rate_bp = (
                 parse_pln(form.base_rate_percent) if form.base_rate_percent.strip() else None
             )
-            start = date.fromisoformat(form.start_date)
-        except (MoneyParseError, ValueError) as exc:
-            error = f"Could not read the numbers/date: {exc}"
+        except MoneyParseError as exc:
+            error = f"Could not read the amounts/rate: {exc}"
         else:
             if principal_minor <= 0:
                 error = "Principal must be a positive amount."
@@ -76,7 +74,10 @@ def create_loan(
 
     if error is not None:
         return templates.TemplateResponse(
-            request, "loans.html", _loans_context(session, user, error=error), status_code=400
+            request,
+            "loans.html",
+            _loans_context(session, user, error=error),
+            status_code=status.HTTP_400_BAD_REQUEST,
         )
 
     loan = loan_queries.create_loan(
@@ -87,14 +88,14 @@ def create_loan(
             rate_type=form.rate_type,
             rate_bp=rate_bp,
             installment_type=form.installment_type,
-            start_date=start,
+            start_date=form.start_date,
             term_months=form.term_months,
             base_rate_ref=form.base_rate_ref.strip() or None,
             initial_base_rate_bp=initial_base_rate_bp,
         ),
     )
 
-    return RedirectResponse(f"/dashboard/loans/{loan.id}", status_code=303)
+    return RedirectResponse(f"/dashboard/loans/{loan.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/{loan_id}", response_class=HTMLResponse)
@@ -107,7 +108,9 @@ def loan_detail(
 ) -> HTMLResponse:
     loan = loan_queries.get_loan(session, loan_id)
     if loan is None:
-        raise HTTPException(status_code=404, detail=f"loan {loan_id} not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"loan {loan_id} not found"
+        )
 
     # A misconfigured variable loan (no base rate by month 1) can't produce a
     # schedule — show the reason instead of a 500.
@@ -155,18 +158,21 @@ def add_rate_change(
 ) -> RedirectResponse:
     loan = loan_queries.get_loan(session, loan_id)
     if loan is None:
-        raise HTTPException(status_code=404, detail=f"loan {loan_id} not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"loan {loan_id} not found"
+        )
     try:
-        effective = date.fromisoformat(form.effective_date)
         base_rate_bp = parse_pln(form.base_rate_percent)
-    except (MoneyParseError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail=f"invalid rate change: {exc}") from exc
+    except MoneyParseError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"invalid base rate: {exc}"
+        ) from exc
 
     loan_queries.add_rate_change(
-        session, loan_id=loan_id, effective_date=effective, base_rate_bp=base_rate_bp
+        session, loan_id=loan_id, effective_date=form.effective_date, base_rate_bp=base_rate_bp
     )
 
-    return RedirectResponse(f"/dashboard/loans/{loan_id}", status_code=303)
+    return RedirectResponse(f"/dashboard/loans/{loan_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{loan_id}/payments/link")
@@ -178,20 +184,20 @@ def link_loan_payment(
     if not loan_queries.link_payment(
         session, loan_id=loan_id, tx_id=form.tx_id, installment_index=form.installment_index
     ):
-        raise HTTPException(status_code=404, detail="could not link payment")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="could not link payment")
 
-    return RedirectResponse(f"/dashboard/loans/{loan_id}", status_code=303)
+    return RedirectResponse(f"/dashboard/loans/{loan_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{loan_id}/payments/{tx_id}/unlink")
 def unlink_loan_payment(loan_id: int, tx_id: int, session: DbSession) -> RedirectResponse:
     loan_queries.unlink_payment(session, tx_id)
 
-    return RedirectResponse(f"/dashboard/loans/{loan_id}", status_code=303)
+    return RedirectResponse(f"/dashboard/loans/{loan_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{loan_id}/delete")
 def delete_loan(loan_id: int, session: DbSession) -> RedirectResponse:
     loan_queries.delete_loan(session, loan_id)
 
-    return RedirectResponse("/dashboard/loans", status_code=303)
+    return RedirectResponse("/dashboard/loans", status_code=status.HTTP_303_SEE_OTHER)

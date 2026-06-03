@@ -7,7 +7,7 @@ logged-in user; the household view is shared (no per-user data isolation).
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from expense_analyzer.api.deps import CurrentUser, DbSession
@@ -41,18 +41,18 @@ def index(request: Request, user: CurrentUser, session: DbSession) -> HTMLRespon
 def create_account(form: Annotated[AccountForm, Form()], session: DbSession) -> RedirectResponse:
     accounts.create_account(session, name=form.name, type=form.type)
 
-    return RedirectResponse("/dashboard", status_code=303)
+    return RedirectResponse("/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/categories")
 def create_category(form: Annotated[CategoryForm, Form()], session: DbSession) -> RedirectResponse:
     categories.create_category(session, name=form.name, kind=form.kind)
 
-    return RedirectResponse("/dashboard", status_code=303)
+    return RedirectResponse("/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/batches/{batch_id}/rollback")
 def rollback(batch_id: int, session: DbSession) -> RedirectResponse:
     rollback_batch(session, batch_id)
 
-    return RedirectResponse("/dashboard", status_code=303)
+    return RedirectResponse("/dashboard", status_code=status.HTTP_303_SEE_OTHER)

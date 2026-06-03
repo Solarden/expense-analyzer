@@ -10,6 +10,8 @@ One deliberate exception: the CSV upload form stays as inline parameters in its
 route, because it carries an ``UploadFile`` that doesn't belong in a plain model.
 """
 
+from datetime import date
+
 from pydantic import BaseModel
 
 from expense_analyzer.models import AccountType, CategoryKind, InstallmentType, RateType, Scope
@@ -50,8 +52,8 @@ class TransferConfirmForm(BaseModel):
 
 
 class RateChangeForm(BaseModel):
-    effective_date: str  # ISO date (YYYY-MM-DD)
-    base_rate_percent: str  # % per year -> basis points
+    effective_date: date  # ISO date from <input type="date">; Pydantic parses it
+    base_rate_percent: str  # % per year -> basis points (parsed via parse_pln)
 
 
 class PaymentLinkForm(BaseModel):
@@ -69,7 +71,7 @@ class LoanForm(BaseModel):
     rate_type: RateType
     rate_percent: str  # % per year; fixed: the rate, variable: the margin
     installment_type: InstallmentType
-    start_date: str  # ISO date (YYYY-MM-DD)
+    start_date: date  # ISO date from <input type="date">; Pydantic parses it
     term_months: int
     base_rate_ref: str = ""
     base_rate_percent: str = ""  # variable only: initial base rate

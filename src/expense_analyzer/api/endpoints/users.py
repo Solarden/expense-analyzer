@@ -6,7 +6,7 @@ household view; this page just bootstraps additional logins.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, Request, Response
+from fastapi import APIRouter, Depends, Form, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from expense_analyzer.api.deps import CurrentUser, DbSession
@@ -43,11 +43,11 @@ def add_user(
                 "users": user_queries.list_users(session),
                 "error": f"Username {form.username.strip()!r} is already taken.",
             },
-            status_code=409,
+            status_code=status.HTTP_409_CONFLICT,
         )
 
     user_queries.create_user(
         session, username=form.username, name=form.name, password=form.password
     )
 
-    return RedirectResponse("/dashboard/users", status_code=303)
+    return RedirectResponse("/dashboard/users", status_code=status.HTTP_303_SEE_OTHER)
