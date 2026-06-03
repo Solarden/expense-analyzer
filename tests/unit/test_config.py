@@ -1,8 +1,15 @@
 """Config / app-bootstrap guards."""
 
 import pytest
+from pydantic import ValidationError
 
-from expense_analyzer.config import INSECURE_DEFAULT_SECRET, get_settings
+from expense_analyzer.config import INSECURE_DEFAULT_SECRET, Settings, get_settings
+
+
+def test_page_size_must_be_positive():
+    """page_size 0 would mean an empty page and a zero-division in the pager."""
+    with pytest.raises(ValidationError):
+        Settings(page_size=0)
 
 
 def test_create_app_refuses_insecure_default_secret(monkeypatch):

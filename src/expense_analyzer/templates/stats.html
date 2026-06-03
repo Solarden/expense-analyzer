@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 style="margin-top:0">Overview</h2>
+
+<div class="panel">
+  <form class="inline" method="get" action="/dashboard/stats">
+    <label style="margin:0">Month</label>
+    <select name="month" onchange="this.form.submit()">
+      {% for m in months %}
+      <option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ m }}</option>
+      {% endfor %}
+      {% if month not in months %}<option value="{{ month }}" selected>{{ month }}</option>{% endif %}
+    </select>
+    <noscript><button type="submit">Show</button></noscript>
+  </form>
+  <p class="muted" style="margin:8px 0 0">Transfers between your own accounts are excluded from these figures.</p>
+</div>
+
+<div class="cards">
+  <div class="card"><div class="k">Spending</div><div class="v neg">{{ summary.spending | pln }}</div></div>
+  <div class="card"><div class="k">Income</div><div class="v pos">{{ summary.income | pln }}</div></div>
+  <div class="card"><div class="k">Net</div><div class="v {{ 'pos' if summary.net >= 0 else 'neg' }}">{{ summary.net | pln }}</div></div>
+</div>
+
+<div class="grid" style="margin-top:16px">
+  <div class="panel">
+    <h2 style="margin-top:0">Spending by category — {{ month }}</h2>
+    {% if summary.by_category %}
+    <canvas id="categoryChart" height="220"></canvas>
+    <table style="margin-top:12px">
+      <thead><tr><th>Category</th><th class="num">Spent</th></tr></thead>
+      <tbody>
+        {% for c in summary.by_category %}
+        <tr><td>{{ c.name }}</td><td class="num neg">{{ c.total | pln }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No spending recorded this month.</p>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">Trend (last {{ trend | length }} month{{ '' if trend | length == 1 else 's' }})</h2>
+    {% if trend %}
+    <canvas id="trendChart" height="220"></canvas>
+    {% else %}
+    <p class="muted">No data yet. <a href="/dashboard/upload">Import a CSV →</a></p>
+    {% endif %}
+  </div>
+</div>
+
+<script src="/static/chart.min.js"></script>
+<script>
+  const categoryData = {{ category_chart | tojson }};
+  const trendData = {{ trend_chart | tojson }};
+  // Amounts arrive as integer minor units (1/100 PLN). Chart.js gets them raw;
+  // fmt is the single place that divides by 100, for axis ticks and tooltips.
+  const fmt = (minor) => (minor / 100).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' });
+
+  if (categoryData.labels.length) {
+    new Chart(document.getElementById('categoryChart'), {
+      type: 'bar',
+      data: {
+        labels: categoryData.labels,
+        datasets: [{ label: 'Spending', data: categoryData.data, backgroundColor: '#f0686b' }],
+      },
+      options: {
+        indexAxis: 'y',
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => fmt(c.parsed.x) } } },
+        scales: { x: { ticks: { callback: fmt } } },
+      },
+    });
+  }
+
+  if (trendData.labels.length) {
+    new Chart(document.getElementById('trendChart'), {
+      type: 'bar',
+      data: {
+        labels: trendData.labels,
+        datasets: [
+          { label: 'Spending', data: trendData.spending, backgroundColor: '#f0686b' },
+          { label: 'Income', data: trendData.income, backgroundColor: '#3fb950' },
+        ],
+      },
+      options: {
+        plugins: { tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${fmt(c.parsed.y)}` } } },
+        scales: { y: { ticks: { callback: fmt } } },
+      },
+    });
+  }
+</script>
+
+{% endblock %}

@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 # Importing the importers package registers the available bank parsers.
@@ -33,6 +36,14 @@ def create_app() -> FastAPI:
         secret_key=settings.secret_key,
         same_site="lax",
         https_only=settings.secure_cookies,
+    )
+
+    # Vendored static assets (Chart.js for the overview charts) — served locally
+    # so the Pi never reaches out to a CDN (design: stays fully offline).
+    app.mount(
+        "/static",
+        StaticFiles(directory=str(Path(__file__).parent / "static")),
+        name="static",
     )
 
     app.include_router(health.router)

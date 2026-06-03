@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Sentinel default for secret_key. The app refuses to start with this value
@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     # window only yields more *manual* suggestions, never a wrong auto-link. See
     # transfers.py.
     transfer_window_days: int = 5
+
+    # Rows per page on the transaction list. Small by default — the working
+    # surface is browsed, not bulk-scrolled, and a tight page keeps the Pi's
+    # render cheap. Overridable via EA_PAGE_SIZE; must be >= 1 (0 would mean an
+    # empty page and a zero-division in the pager).
+    page_size: int = Field(default=50, ge=1)
 
     @field_validator("timezone")
     @classmethod
