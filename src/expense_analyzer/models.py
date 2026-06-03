@@ -160,19 +160,13 @@ class Transaction(SQLModel, table=True):
     deleted_at: datetime | None = Field(default=None, index=True)  # soft delete
 
 
-class Loan(SQLModel, table=True):
-    """A loan/mortgage with a repayment schedule (design §5, §7.4).
+class LoanBase(SQLModel):
+    """Fields shared by the :class:`Loan` table and the :class:`LoanCreate` input.
 
-    The amortization schedule is **not** stored — it's recomputed on the fly from
-    these fields plus the variable-rate history (see :mod:`expense_analyzer.loans`),
-    because a variable schedule changes retroactively when a base-rate observation
-    is added. Money is integer minor units; the rate is integer **basis points**
+    Money is integer minor units; the rate is integer **basis points**
     (7.25% == ``725``) so nothing is ever a float.
     """
 
-    __tablename__ = "loan"
-
-    id: int | None = Field(default=None, primary_key=True)
     account_id: int = Field(foreign_key="account.id", index=True)  # the loan Account
     principal: int  # minor units, initial amount drawn
     rate_type: RateType
@@ -182,7 +176,33 @@ class Loan(SQLModel, table=True):
     installment_type: InstallmentType
     start_date: date  # disbursement; first installment is one month later
     term_months: int
+
+
+class Loan(LoanBase, table=True):
+    """A loan/mortgage with a repayment schedule (design §5, §7.4).
+
+    The amortization schedule is **not** stored — it's recomputed on the fly from
+    these fields plus the variable-rate history (see :mod:`expense_analyzer.loans`),
+    because a variable schedule changes retroactively when a base-rate observation
+    is added.
+    """
+
+    __tablename__ = "loan"
+
+    id: int | None = Field(default=None, primary_key=True)
     created_at: datetime = Field(default_factory=utc_now)
+
+
+class LoanCreate(LoanBase):
+    """Input for creating a loan (bundles what would otherwise be a long argument
+    list to :func:`expense_analyzer.queries.loans.create_loan`).
+
+    ``initial_base_rate_bp`` is **not** a Loan column: for a variable-rate loan it
+    seeds the first :class:`LoanRateChange` (effective on ``start_date``) so the
+    schedule has a rate from month 1. Ignored for a fixed-rate loan.
+    """
+
+    initial_base_rate_bp: int | None = None
 
 
 class LoanRateChange(SQLModel, table=True):

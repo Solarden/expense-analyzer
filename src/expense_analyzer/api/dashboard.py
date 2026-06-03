@@ -11,12 +11,14 @@ shared (no per-user data isolation).
 """
 
 from datetime import date
+from typing import Annotated
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlmodel import Session
 
+from expense_analyzer.api.forms import LoanForm
 from expense_analyzer.auth import require_user
 from expense_analyzer.clock import local_month, utc_now
 from expense_analyzer.config import get_settings
@@ -29,6 +31,7 @@ from expense_analyzer.models import (
     AccountType,
     CategoryKind,
     InstallmentType,
+    LoanCreate,
     Owner,
     RateType,
     Scope,
@@ -389,38 +392,30 @@ def loans_page(
 @router.post("/loans", response_class=HTMLResponse)
 def create_loan(
     request: Request,
-    account_id: int = Form(...),
-    principal: str = Form(...),
-    rate_type: RateType = Form(...),
-    rate_percent: str = Form(...),  # fixed: the rate; variable: the margin
-    installment_type: InstallmentType = Form(...),
-    start_date: str = Form(...),
-    term_months: int = Form(...),
-    base_rate_ref: str = Form(""),
-    base_rate_percent: str = Form(""),  # variable only: initial base rate
+    form: Annotated[LoanForm, Form()],
     user: Owner = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> Response:
-    account = accounts.get_account(session, account_id)
+    account = accounts.get_account(session, form.account_id)
     error: str | None = None
     if account is None or account.type != AccountType.loan:
         error = "Pick a loan account (create one of type 'loan' first)."
-    elif term_months < 1:
+    elif form.term_months < 1:
         error = "Term must be at least one month."
     else:
         try:
-            principal_minor = parse_pln(principal)
-            rate_bp = parse_pln(rate_percent)  # "7,25" -> 725 basis points
+            principal_minor = parse_pln(form.principal)
+            rate_bp = parse_pln(form.rate_percent)  # "7,25" -> 725 basis points
             initial_base_rate_bp = (
-                parse_pln(base_rate_percent) if base_rate_percent.strip() else None
+                parse_pln(form.base_rate_percent) if form.base_rate_percent.strip() else None
             )
-            start = date.fromisoformat(start_date)
+            start = date.fromisoformat(form.start_date)
         except (MoneyParseError, ValueError) as exc:
             error = f"Could not read the numbers/date: {exc}"
         else:
             if principal_minor <= 0:
                 error = "Principal must be a positive amount."
-            elif rate_type is RateType.variable and initial_base_rate_bp is None:
+            elif form.rate_type is RateType.variable and initial_base_rate_bp is None:
                 error = "A variable-rate loan needs an initial base rate (e.g. current WIBOR)."
 
     if error is not None:
@@ -430,15 +425,17 @@ def create_loan(
 
     loan = loan_queries.create_loan(
         session,
-        account_id=account_id,
-        principal=principal_minor,
-        rate_type=rate_type,
-        rate_bp=rate_bp,
-        installment_type=installment_type,
-        start_date=start,
-        term_months=term_months,
-        base_rate_ref=base_rate_ref.strip() or None,
-        initial_base_rate_bp=initial_base_rate_bp,
+        LoanCreate(
+            account_id=form.account_id,
+            principal=principal_minor,
+            rate_type=form.rate_type,
+            rate_bp=rate_bp,
+            installment_type=form.installment_type,
+            start_date=start,
+            term_months=form.term_months,
+            base_rate_ref=form.base_rate_ref.strip() or None,
+            initial_base_rate_bp=initial_base_rate_bp,
+        ),
     )
 
     return RedirectResponse(f"/dashboard/loans/{loan.id}", status_code=303)
