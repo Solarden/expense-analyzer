@@ -231,6 +231,69 @@ def test_summary_reconciliation_flags_mismatch(db_session: Session, account: Acc
     assert summary.reconciliation.label == "Mismatch"
 
 
+def test_import_auto_links_cross_account_transfer(db_session: Session, account: Account):
+    other = Account(name="mBank", type=AccountType.bank)
+    db_session.add(other)
+    db_session.commit()
+    db_session.refresh(other)
+
+    # Outflow lands on the first account; its equal-and-opposite counterpart
+    # arrives in a later import on the other account.
+    run_import(
+        db_session,
+        account_id=account.id,
+        importer=FakeImporter([NormalizedTransaction(date(2026, 5, 1), -200000, "Transfer out")]),
+        filename="a.csv",
+        data=b"",
+    )
+    summary = run_import(
+        db_session,
+        account_id=other.id,
+        importer=FakeImporter([NormalizedTransaction(date(2026, 5, 2), 200000, "Transfer in")]),
+        filename="b.csv",
+        data=b"",
+    )
+
+    assert summary.transfers_auto_linked == 1
+    groups = {tx.transfer_group_id for tx in db_session.exec(select(Transaction)).all()}
+    assert groups != {None}
+    assert len(groups) == 1  # both legs share one group id
+
+
+def test_reimport_with_nothing_new_skips_transfer_detection(db_session: Session, account: Account):
+    # An importable file with a single outflow; first import has nothing to pair.
+    importer = FakeImporter([NormalizedTransaction(date(2026, 5, 1), -200000, "Transfer out")])
+    run_import(db_session, account_id=account.id, importer=importer, filename="a.csv", data=b"")
+
+    # A pairable counterpart now exists on another account (inserted directly,
+    # left unmatched) — detection *would* link it if it ran.
+    other = Account(name="mBank", type=AccountType.bank)
+    db_session.add(other)
+    db_session.commit()
+    db_session.refresh(other)
+    batch = db_session.exec(select(ImportBatch)).first()
+    counterpart = Transaction(
+        account_id=other.id,
+        import_batch_id=batch.id,
+        amount=200000,
+        booked_date=date(2026, 5, 2),
+        raw_description="Transfer in",
+        fingerprint="fp-counterpart",
+    )
+    db_session.add(counterpart)
+    db_session.commit()
+
+    # Re-importing the same file is all-duplicates (new == 0), so the `if new:`
+    # guard skips detection entirely — the pair is left unlinked.
+    summary = run_import(
+        db_session, account_id=account.id, importer=importer, filename="a.csv", data=b""
+    )
+    assert summary.new == 0
+    assert summary.transfers_auto_linked == 0
+    db_session.refresh(counterpart)
+    assert counterpart.transfer_group_id is None
+
+
 def test_compute_fingerprint_is_stable():
     fp1 = compute_fingerprint(1, date(2026, 5, 1), -12345, "Biedronka")
     fp2 = compute_fingerprint(1, date(2026, 5, 1), -12345, "Biedronka")

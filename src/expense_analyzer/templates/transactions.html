@@ -32,6 +32,7 @@
         <td>
           {% if tx.merchant_normalized %}<strong>{{ tx.merchant_normalized }}</strong><br>{% endif %}
           <span class="muted">{{ tx.raw_description }}</span>
+          {% if tx.transfer_group_id %}<span class="muted" title="Internal transfer">⇄ transfer</span>{% endif %}
         </td>
         <td class="num {{ 'neg' if tx.amount < 0 else 'pos' }}">{{ tx.amount | pln }}</td>
         <td colspan="3">

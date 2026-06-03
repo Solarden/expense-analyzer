@@ -11,16 +11,21 @@ Reconciliation via ``balance_after`` is stored now but only validated from
 Phase 2 (roadmap §11) — the column exists so no migration is needed later.
 """
 
+import logging
 from dataclasses import dataclass
 
 from sqlmodel import Session, col, select
 
 from expense_analyzer.clock import utc_now
+from expense_analyzer.config import get_settings
 from expense_analyzer.importers.base import Importer
 from expense_analyzer.importers.fingerprint import compute_fingerprint
 from expense_analyzer.importers.merchant import normalize_merchant
 from expense_analyzer.importers.reconciliation import ReconciliationResult, reconcile
 from expense_analyzer.models import ImportBatch, ImportStatus, Transaction, TxSource
+from expense_analyzer.queries.transfers import detect_and_autolink
+
+log = logging.getLogger("expense_analyzer.import")
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +35,7 @@ class ImportSummary:
     new: int  # inserted this run
     skipped: int  # duplicates (fingerprint already known, or repeated within the file)
     reconciliation: ReconciliationResult  # non-blocking sanity check on the parsed file
+    transfers_auto_linked: int = 0  # unambiguous internal transfers paired post-import
 
 
 def run_import(
@@ -100,12 +106,32 @@ def run_import(
 
     session.commit()
 
+    # Post-import analysis: a transfer's counterpart may have arrived in an
+    # earlier batch on another account, so scan *all* unmatched candidates, not
+    # just this run. Only unambiguous pairs are auto-linked; the rest wait on the
+    # Transfers page for manual confirmation.
+    #
+    # Kept strictly non-fatal: the import has already committed above, so a
+    # failure here must not turn a successful import into a 500. Auto-linking is a
+    # convenience — on error we log and report 0, and the user can still pair
+    # manually (or hit "Rescan") on the Transfers page.
+    auto_linked = 0
+    if new:
+        try:
+            auto_linked, _ = detect_and_autolink(
+                session, window_days=get_settings().transfer_window_days
+            )
+        except Exception:  # noqa: BLE001 — convenience step, never fail the import
+            log.exception("transfer auto-link failed after import; rows are committed")
+            session.rollback()  # discard the half-done detection unit of work
+
     return ImportSummary(
         batch_id=batch.id if batch else None,
         parsed=len(result.transactions),
         new=new,
         skipped=skipped,
         reconciliation=reconcile(result),
+        transfers_auto_linked=auto_linked,
     )
 
 

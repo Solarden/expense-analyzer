@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     # are grouped into local days/months (e.g. monthly budgets). See clock.py.
     timezone: str = "Europe/Warsaw"
 
+    # Max gap (in days) between the two legs of an internal transfer for them to
+    # be paired. Polish interbank transfers usually book D+1/D+2; widen this only
+    # if real exports show slower settlement. See transfers.py.
+    transfer_window_days: int = 3
+
     @field_validator("timezone")
     @classmethod
     def _validate_timezone(cls, value: str) -> str:
