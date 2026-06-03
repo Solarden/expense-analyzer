@@ -10,7 +10,15 @@ from sqlmodel import Session
 
 from expense_analyzer.clock import local_today
 from expense_analyzer.ha.metrics import collect_metrics
-from expense_analyzer.models import Account, AccountType, Transaction
+from expense_analyzer.models import (
+    Account,
+    AccountType,
+    Budget,
+    Category,
+    CategoryKind,
+    Loan,
+    Transaction,
+)
 
 
 def test_empty_database_still_yields_headline_metrics(db_session: Session) -> None:
@@ -46,6 +54,52 @@ def test_month_figures_exclude_transfers(
     assert metrics[f"account_{account.id}_balance"] == "200.00"
     # One bank account, no loans/portfolio -> net worth equals that balance.
     assert metrics["net_worth"] == "200.00"
+
+
+def test_loan_installment_excluded_from_month_spending(
+    db_session: Session,
+    make_account: Callable[..., Account],
+    make_loan: Callable[..., Loan],
+    make_transaction: Callable[..., Transaction],
+) -> None:
+    account = make_account(name="PKO checking")
+    loan_account = make_account(name="Mortgage", type=AccountType.loan)
+    loan = make_loan(account_id=loan_account.id)
+    today = local_today()
+    make_transaction(account_id=account.id, amount=-100_00, booked_date=today)  # real spending
+    # A loan installment paid from checking: linked to the loan -> not "spending".
+    make_transaction(
+        account_id=account.id,
+        amount=-2000_00,
+        booked_date=today,
+        loan_id=loan.id,
+        loan_installment_index=1,
+    )
+
+    metrics = {m.key: m.value for m in collect_metrics(db_session)}
+
+    assert metrics["month_spending"] == "100.00"  # the 2000 installment is excluded
+    # ...but it still left the account, so the balance reflects it.
+    assert metrics[f"account_{account.id}_balance"] == "-2100.00"
+
+
+def test_budget_remaining_sensor_per_budgeted_category(
+    db_session: Session,
+    make_account: Callable[..., Account],
+    make_category: Callable[..., Category],
+    make_transaction: Callable[..., Transaction],
+    make_budget: Callable[..., Budget],
+) -> None:
+    account = make_account()
+    food = make_category(name="Food", kind=CategoryKind.expense)
+    today = local_today()
+    make_transaction(account_id=account.id, amount=-120_00, booked_date=today, category_id=food.id)
+    make_budget(category_id=food.id, month=today.strftime("%Y-%m"), limit_amount=200_00)
+
+    sensor = next(m for m in collect_metrics(db_session) if m.key == f"budget_{food.id}_remaining")
+
+    assert sensor.name == "Food Budget Remaining"
+    assert sensor.value == "80.00"  # 200 limit - 120 spent
 
 
 def test_per_account_balance_sensor_named_after_account(

@@ -10,7 +10,6 @@ from fastapi.responses import HTMLResponse
 
 from expense_analyzer.api.deps import CurrentUser, DbSession
 from expense_analyzer.auth import require_user
-from expense_analyzer.clock import local_month, utc_now
 from expense_analyzer.queries import categories, stats
 from expense_analyzer.templating import templates
 
@@ -28,9 +27,7 @@ def stats_page(
     month: str | None = None,
 ) -> HTMLResponse:
     months = stats.available_months(session)
-    # Default to the most recent month with data, falling back to the current
-    # local month so an empty DB still renders a sensible (zeroed) summary.
-    selected = month or (months[0] if months else local_month(utc_now()))
+    selected = stats.default_month(months, month)
 
     category_names = {c.id: c.name for c in categories.list_categories(session) if c.id is not None}
     # One transfer-excluded scan feeds both the month summary and the trend.

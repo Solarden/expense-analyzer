@@ -7,6 +7,14 @@ transfer if it carries a ``transfer_group_id`` *or* sits in a ``kind=transfer``
 category — the two signals Phase 3 writes on a confirmed transfer (the second
 also catches a leg a human manually tagged ``Transfer`` without auto-linking).
 
+**Loan installment payments are also excluded** (Phase 8). A real installment is
+an outflow on the checking account linked to a loan (``loan_id`` set, Phase 5);
+it's debt repayment tracked in the loan view, not consumption spending, so
+counting it would inflate the month's spending and any category budget it landed
+in. It still reduces the account balance (that's a separate, correct concern —
+the money did leave the account), only the spending/income/budget figures skip
+it. This was the seam left open through Phases 5–7, closed here.
+
 Money stays integer minor units throughout (never float; design §5). Spending
 and income are reported as positive magnitudes; ``net = income - spending``.
 
@@ -26,6 +34,7 @@ from dataclasses import dataclass
 
 from sqlmodel import Session, col, select
 
+from expense_analyzer.clock import local_month, utc_now
 from expense_analyzer.models import Category, CategoryKind, Transaction
 
 UNCATEGORIZED_LABEL = "Uncategorized"
@@ -62,10 +71,12 @@ class MonthSummary:
 
 
 def spendable_transactions(session: Session) -> list[Transaction]:
-    """Live transactions that count toward spending/income (transfers excluded).
+    """Live transactions that count toward spending/income (transfers and loan
+    installment payments excluded).
 
-    ``transfer_group_id IS NULL`` drops auto/confirmed transfers in SQL; the
-    rare manually-``Transfer``-tagged leg with no group is filtered out in Python
+    ``transfer_group_id IS NULL`` drops auto/confirmed transfers and
+    ``loan_id IS NULL`` drops linked loan installment payments in SQL; the rare
+    manually-``Transfer``-tagged leg with no group is filtered out in Python
     against the transfer category ids. Load once and pass the result to
     :func:`month_summary` / :func:`spending_trend`.
     """
@@ -76,6 +87,7 @@ def spendable_transactions(session: Session) -> list[Transaction]:
         select(Transaction).where(
             col(Transaction.deleted_at).is_(None),
             col(Transaction.transfer_group_id).is_(None),
+            col(Transaction.loan_id).is_(None),
         )
     ).all()
 
@@ -91,6 +103,20 @@ def available_months(session: Session) -> list[str]:
     ).all()
 
     return sorted({d.strftime("%Y-%m") for d in rows}, reverse=True)
+
+
+def default_month(months: list[str], requested: str | None = None) -> str:
+    """Resolve the month a page should show: ``requested`` if given, else the
+    newest month with data (``months[0]``), else the current local month.
+
+    Pure over an already-fetched :func:`available_months` list (the caller needs
+    it for the picker anyway). The shared fallback for month-pickered pages
+    (overview, budgets) so an empty database still renders a sensible (zeroed)
+    view instead of a blank picker."""
+    if requested:
+        return requested
+
+    return months[0] if months else local_month(utc_now())
 
 
 def month_summary(

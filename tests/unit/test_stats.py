@@ -165,3 +165,14 @@ def test_available_months_distinct_desc_includes_transfers(
     )
 
     assert stats.available_months(db_session) == ["2026-05", "2026-03"]
+
+
+def test_default_month_prefers_request_then_newest_then_current():
+    months = ["2026-05", "2026-03"]
+    # An explicit request always wins.
+    assert stats.default_month(months, "2026-01") == "2026-01"
+    # No request -> newest month with data.
+    assert stats.default_month(months, None) == "2026-05"
+    # No request and no data -> a current local YYYY-MM (not a crash / blank).
+    fallback = stats.default_month([], None)
+    assert len(fallback) == 7 and fallback[4] == "-"

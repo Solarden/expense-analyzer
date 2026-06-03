@@ -67,6 +67,16 @@ class PaymentLinkForm(BaseModel):
     installment_index: int
 
 
+class BudgetForm(BaseModel):
+    """Raw budget form fields. ``limit_amount`` arrives as a PLN string the
+    handler parses into minor units; ``month`` is ``""`` for the recurring default
+    or a ``"YYYY-MM"`` override (validated in the handler)."""
+
+    category_id: int
+    month: str = ""  # "" -> recurring default; else "YYYY-MM" override
+    limit_amount: str  # PLN, e.g. "2000"
+
+
 class LoanForm(BaseModel):
     """Raw loan-creation form fields. Amounts/rates arrive as the user typed them
     (PLN / percent strings) and the date as ISO text; the handler parses and

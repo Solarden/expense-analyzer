@@ -219,9 +219,34 @@ def publish_snapshot(
     """Collect the household metrics and push them to HA. Returns the sensor count.
 
     The single entry point shared by the worker (periodic) and the dashboard's
-    "Publish now" button.
+    "Publish now" button. After the metrics, fires one budget-exceeded alert per
+    over-budget category for the current month (Phase 8) — the wiring of the
+    Phase 7 :meth:`MqttPublisher.publish_alert` primitive.
+
+    Alerts are fired statelessly every cycle: per design §9 the app emits the
+    event and an HA automation decides when to actually notify (HA's throttle /
+    "fire once" semantics live there, not here). A household has few categories,
+    so this is a handful of small events at most.
     """
+    from expense_analyzer.clock import local_today
+    from expense_analyzer.money import format_pln
+    from expense_analyzer.queries import budgets as budget_queries
+
     metrics = collect_metrics(session)
-    MqttPublisher.from_settings(settings, client=client).publish_metrics(metrics)
+    publisher = MqttPublisher.from_settings(settings, client=client)
+    publisher.publish_metrics(metrics)
+
+    month = local_today().strftime("%Y-%m")
+    for status in budget_queries.budget_overview(session, month):
+        if status.over:
+            publisher.publish_alert(
+                title=f"Budget exceeded: {status.name}",
+                message=(
+                    f"Spent {format_pln(status.spent)} of "
+                    f"{format_pln(status.limit_amount)} on {status.name} this month "
+                    f"({format_pln(-status.remaining)} over)."
+                ),
+                severity="warning",
+            )
 
     return len(metrics)

@@ -243,6 +243,38 @@ class InvestmentPosition(SQLModel, table=True):
     fetched_at: datetime = Field(default_factory=utc_now)
 
 
+class Budget(SQLModel, table=True):
+    """A per-category monthly spending limit (design §5, §7.6).
+
+    ``month`` resolves the design's "a specific month *or* a recurring monthly
+    limit" with one schema:
+
+    - ``month is None`` — the **recurring** default limit for the category, in
+      force every month unless overridden.
+    - ``month == "YYYY-MM"`` — a one-off **override** for that single month
+      (e.g. a bigger food budget in December), which wins over the recurring
+      default for that month only.
+
+    ``limit_amount`` is integer minor units (positive). Budgets are an analytical
+    overlay on spending — they touch no transaction and need no transfer/loan
+    machinery.
+
+    The ``(category_id, month)`` unique constraint guards against duplicate
+    overrides for the same month. SQLite treats ``NULL`` months as *distinct*, so
+    it does **not** stop a second recurring row on its own — the single-writer
+    query layer enforces "one recurring per category" by upserting (find-or-update
+    by category + month) in :func:`expense_analyzer.queries.budgets.set_budget`.
+    """
+
+    __tablename__ = "budget"
+    __table_args__ = (UniqueConstraint("category_id", "month", name="uq_budget_category_month"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    category_id: int = Field(foreign_key="category.id", index=True)
+    month: str | None = Field(default=None)  # None = recurring default; "YYYY-MM" = override
+    limit_amount: int  # minor units, positive
+
+
 class LoanRateChange(SQLModel, table=True):
     """A base-rate observation for a variable-rate loan (e.g. a WIBOR fix).
 

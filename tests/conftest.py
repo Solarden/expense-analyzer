@@ -26,6 +26,7 @@ from expense_analyzer.importers import registry as importer_registry
 from expense_analyzer.models import (
     Account,
     AccountType,
+    Budget,
     Category,
     CategoryKind,
     ImportBatch,
@@ -225,6 +226,20 @@ def make_transaction(
         db_session.commit()
         db_session.refresh(tx)
         return tx
+
+    return _make
+
+
+@pytest.fixture
+def make_budget(db_session: Session) -> Callable[..., Budget]:
+    def _make(
+        *, category_id: int, month: str | None = None, limit_amount: int = 200_000, **kw
+    ) -> Budget:
+        budget = Budget(category_id=category_id, month=month, limit_amount=limit_amount, **kw)
+        db_session.add(budget)
+        db_session.commit()
+        db_session.refresh(budget)
+        return budget
 
     return _make
 
