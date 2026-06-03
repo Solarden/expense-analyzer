@@ -54,11 +54,22 @@ uv run pre-commit run --all-files   # optional: run against the whole repo
 ## Running with Docker
 
 ```bash
+export EA_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+export CADDY_SITE_ADDRESS=expense.local   # hostname or LAN IP of the Pi
 docker compose up --build
 ```
 
-The app sits behind Caddy (LAN-only) on <http://localhost:8080>. The database
-lives in `./data/expense_analyzer.db`, mounted into the containers.
+The app sits behind Caddy (LAN-only) over **HTTPS** at `https://$CADDY_SITE_ADDRESS`.
+Caddy serves a self-signed cert from its own local CA (no internet contact) —
+install that root CA on your devices to avoid browser warnings (the CA lives in
+the `caddy_data` volume at `/data/caddy/pki/authorities/local/root.crt`). The
+database lives in `./data/expense_analyzer.db`, mounted into the containers.
+
+Create the first login user, then sign in:
+
+```bash
+docker compose run --rm app python -m expense_analyzer.create_user --username you --name "You"
+```
 
 ## Migrations
 

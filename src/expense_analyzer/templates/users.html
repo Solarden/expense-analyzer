@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Users — Expense Analyzer{% endblock %}
+{% block content %}
+
+<h2 style="margin-top:0">Users</h2>
+<div class="panel">
+  <table>
+    <thead><tr><th>Username</th><th>Name</th><th>Active</th></tr></thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>{{ u.username }}{% if u.id == user.id %} <span class="muted">(you)</span>{% endif %}</td>
+        <td>{{ u.name }}</td>
+        <td>{% if u.is_active %}yes{% else %}<span class="muted">no</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h2>Add user</h2>
+<div class="panel">
+  <form method="post" action="/dashboard/users">
+    <label>Username</label>
+    <input name="username" required>
+    <label style="margin-top:12px">Display name</label>
+    <input name="name" required>
+    <label style="margin-top:12px">Password</label>
+    <input name="password" type="password" required>
+    <p style="margin-top:16px"><button type="submit">Add user</button></p>
+  </form>
+  <p class="muted">New users get the same shared household view — no roles, no private data.</p>
+</div>
+
+{% endblock %}

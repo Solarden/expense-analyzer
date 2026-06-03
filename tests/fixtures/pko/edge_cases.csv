@@ -1,0 +1,7 @@
+"Data operacji","Data waluty","Typ transakcji","Kwota","Waluta","Saldo po transakcji","Opis transakcji","","","","","",""
+"2026-04-01","2026-04-01","P³atnoœæ kart¹","0.00","PLN","+100.00","Tytu³:  1 ","Lokalizacja: Adres: Sklep Miasto: Gdañsk Kraj: POLSKA","","","","",""
+"2026-04-02","2026-04-02","Przelew na konto","+20000.00","PLN","+20100.00","Rachunek nadawcy: 00 0000 0000 0000 0000 0000 0000","Nazwa nadawcy: FIRMA TESTOWA","Tytu³: WYPLATA","","",""
+
+"2026-04-03","2026-04-03","Zwrot w terminalu","+34.99","PLN","+20134.99","Tytu³:  2 ","Lokalizacja: Adres: sklep.example Kraj: POLSKA","","","","",""
+"2026-04-04","2026-04-06","P³atnoœæ kart¹","-9.99","PLN","+20125.00","Tytu³:  3 ","","","","","",""
+"2026-04-05","2026-04-05","P³atnoœæ kart¹","-1.50","PLN","+20123.50","Tytu³:    spaced    title   ","Lokalizacja:  Adres:  Cafe   Miasto:  Kraków  Kraj: POLSKA","","","","",""

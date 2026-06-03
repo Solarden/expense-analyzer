@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Expense Analyzer{% endblock %}</title>
+  <style>
+    :root { --bg:#0f1115; --panel:#1a1d24; --line:#2a2f3a; --fg:#e6e9ef; --muted:#9aa3b2;
+            --accent:#4f8cff; --pos:#3fb950; --neg:#f0686b; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:15px/1.5 system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--fg); }
+    header { padding:12px 20px; border-bottom:1px solid var(--line); display:flex; gap:20px; align-items:baseline; }
+    header h1 { font-size:16px; margin:0; }
+    header nav a { color:var(--muted); text-decoration:none; margin-right:14px; }
+    header nav a:hover { color:var(--fg); }
+    main { padding:20px; max-width:1000px; margin:0 auto; }
+    h2 { font-size:15px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin:24px 0 8px; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:16px; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); }
+    th { color:var(--muted); font-weight:600; font-size:13px; }
+    .num { text-align:right; font-variant-numeric:tabular-nums; }
+    .pos { color:var(--pos); } .neg { color:var(--neg); }
+    .muted { color:var(--muted); }
+    input, select, button { font:inherit; padding:6px 8px; background:var(--bg); color:var(--fg);
+            border:1px solid var(--line); border-radius:6px; }
+    button { background:var(--accent); border-color:var(--accent); color:#fff; cursor:pointer; }
+    button.ghost { background:transparent; color:var(--muted); border-color:var(--line); }
+    form.inline { display:inline-flex; gap:6px; align-items:center; margin:0; }
+    .userbox { margin-left:auto; color:var(--muted); font-size:13px; display:flex; gap:10px; align-items:center; }
+    .linkbtn { background:none; border:none; color:var(--accent); cursor:pointer; padding:0; font:inherit; }
+    .linkbtn:hover { text-decoration:underline; }
+    .flash { background:#16321f; border:1px solid var(--pos); color:#b9f6ca; padding:10px 14px; border-radius:6px; margin-bottom:16px; }
+    .flash.error { background:#3a1c1e; border-color:var(--neg); color:#ffd5d6; }
+    .grid { display:flex; gap:16px; flex-wrap:wrap; }
+    .grid > .panel { flex:1; min-width:280px; }
+    label { display:block; font-size:13px; color:var(--muted); margin-bottom:4px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>💸 Expense Analyzer</h1>
+    {% if user %}
+    <nav>
+      <a href="/dashboard">Home</a>
+      <a href="/dashboard/transactions">Transactions</a>
+      <a href="/dashboard/upload">Import CSV</a>
+      <a href="/dashboard/users">Users</a>
+    </nav>
+    <div class="userbox">
+      <span>{{ user.name }}</span>
+      <form class="inline" method="post" action="/logout">
+        <button class="linkbtn" type="submit">Log out</button>
+      </form>
+    </div>
+    {% endif %}
+  </header>
+  <main>
+    {% if flash %}<div class="flash">{{ flash }}</div>{% endif %}
+    {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
