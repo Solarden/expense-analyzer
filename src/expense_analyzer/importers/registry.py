@@ -16,6 +16,15 @@ def register(slug: str, importer: Importer) -> None:
     _REGISTRY[slug] = importer
 
 
+def unregister(slug: str) -> None:
+    """Remove a registered importer if present (no-op otherwise).
+
+    Mainly for tests that register a throwaway parser and want to clean up
+    without reaching into the registry's internals.
+    """
+    _REGISTRY.pop(slug, None)
+
+
 def get_importer(slug: str) -> Importer:
     try:
         return _REGISTRY[slug]

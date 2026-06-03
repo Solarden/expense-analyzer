@@ -2,40 +2,17 @@
 
 Dashboard routes require login, so these use the ``auth_client`` fixture (a
 TestClient already logged in as a freshly-created user). ``db_session`` creates
-the schema on the same (temp) engine the app uses.
+the schema on the same (temp) engine the app uses. Model builders and the shared
+``fake_importer`` registry fixture come from conftest.
 """
 
-from collections.abc import Iterator
-from datetime import date
+from collections.abc import Callable
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-from expense_analyzer.importers import NormalizedTransaction, ParseResult
 from expense_analyzer.importers import registry as importer_registry
-from expense_analyzer.models import Account, AccountType, Category, CategoryKind, Transaction
-
-
-class FakeImporter:
-    source = "Fake Bank csv"
-
-    def parse(self, data: bytes) -> ParseResult:
-        return ParseResult(
-            transactions=[
-                NormalizedTransaction(date(2026, 5, 1), -12345, "Biedronka"),
-                NormalizedTransaction(date(2026, 5, 2), 1000000, "Wyplata"),
-            ]
-        )
-
-
-@pytest.fixture
-def fake_importer() -> Iterator[None]:
-    importer_registry.register("fake", FakeImporter())
-    try:
-        yield
-    finally:
-        importer_registry._REGISTRY.pop("fake", None)
+from expense_analyzer.models import Account, Category, CategoryKind, Transaction
 
 
 def test_index_renders(auth_client: TestClient, db_session: Session):
@@ -61,15 +38,15 @@ def test_create_category(auth_client: TestClient, db_session: Session):
     assert cats[0].kind == CategoryKind.expense
 
 
-def test_upload_imports_transactions(auth_client: TestClient, db_session: Session, fake_importer):
-    acc = Account(name="PKO checking", type=AccountType.bank)
-    db_session.add(acc)
-    db_session.commit()
-    db_session.refresh(acc)
-
+def test_upload_imports_transactions(
+    auth_client: TestClient,
+    db_session: Session,
+    account: Account,
+    fake_importer: str,
+):
     resp = auth_client.post(
         "/dashboard/upload",
-        data={"account_id": str(acc.id), "importer": "fake"},
+        data={"account_id": str(account.id), "importer": fake_importer},
         files={"file": ("may.csv", b"ignored-by-fake", "text/csv")},
     )
     assert resp.status_code == 200
@@ -81,25 +58,24 @@ def test_upload_imports_transactions(auth_client: TestClient, db_session: Sessio
 
 
 def test_categorize_sets_category_and_scope(
-    auth_client: TestClient, db_session: Session, fake_importer
+    auth_client: TestClient,
+    db_session: Session,
+    account: Account,
+    make_category: Callable[..., Category],
+    fake_importer: str,
 ):
-    acc = Account(name="PKO", type=AccountType.bank)
-    cat = Category(name="Food", kind=CategoryKind.expense)
-    db_session.add_all([acc, cat])
-    db_session.commit()
-    db_session.refresh(acc)
-    db_session.refresh(cat)
+    cat = make_category(name="Food", kind=CategoryKind.expense)
 
     auth_client.post(
         "/dashboard/upload",
-        data={"account_id": str(acc.id), "importer": "fake"},
+        data={"account_id": str(account.id), "importer": fake_importer},
         files={"file": ("may.csv", b"x", "text/csv")},
     )
     tx = db_session.exec(select(Transaction)).first()
 
     resp = auth_client.post(
         f"/dashboard/transactions/{tx.id}/categorize",
-        data={"category_id": str(cat.id), "scope": "household", "account_id": str(acc.id)},
+        data={"category_id": str(cat.id), "scope": "household", "account_id": str(account.id)},
         follow_redirects=False,
     )
     assert resp.status_code == 303
@@ -111,16 +87,14 @@ def test_categorize_sets_category_and_scope(
 
 
 def test_rollback_hides_transactions_from_list(
-    auth_client: TestClient, db_session: Session, fake_importer
+    auth_client: TestClient,
+    db_session: Session,
+    account: Account,
+    fake_importer: str,
 ):
-    acc = Account(name="PKO", type=AccountType.bank)
-    db_session.add(acc)
-    db_session.commit()
-    db_session.refresh(acc)
-
     up = auth_client.post(
         "/dashboard/upload",
-        data={"account_id": str(acc.id), "importer": "fake"},
+        data={"account_id": str(account.id), "importer": fake_importer},
         files={"file": ("may.csv", b"x", "text/csv")},
     )
     assert "Biedronka" in auth_client.get("/dashboard/transactions").text
@@ -133,21 +107,14 @@ def test_rollback_hides_transactions_from_list(
     assert up.status_code == 200
 
 
-def _account(db_session: Session) -> Account:
-    acc = Account(name="PKO", type=AccountType.bank)
-    db_session.add(acc)
-    db_session.commit()
-    db_session.refresh(acc)
-
-    return acc
-
-
 def test_upload_unknown_account_shows_error(
-    auth_client: TestClient, db_session: Session, fake_importer
+    auth_client: TestClient,
+    db_session: Session,
+    fake_importer: str,
 ):
     resp = auth_client.post(
         "/dashboard/upload",
-        data={"account_id": "999", "importer": "fake"},
+        data={"account_id": "999", "importer": fake_importer},
         files={"file": ("may.csv", b"x", "text/csv")},
     )
     assert resp.status_code == 200
@@ -155,18 +122,21 @@ def test_upload_unknown_account_shows_error(
     assert len(db_session.exec(select(Transaction)).all()) == 0  # nothing imported
 
 
-def test_upload_unknown_importer_shows_error(auth_client: TestClient, db_session: Session):
-    acc = _account(db_session)
+def test_upload_unknown_importer_shows_error(
+    auth_client: TestClient, db_session: Session, account: Account
+):
     resp = auth_client.post(
         "/dashboard/upload",
-        data={"account_id": str(acc.id), "importer": "nope"},
+        data={"account_id": str(account.id), "importer": "nope"},
         files={"file": ("may.csv", b"x", "text/csv")},
     )
     assert resp.status_code == 200
     assert "Unknown importer" in resp.text
 
 
-def test_upload_unparseable_file_shows_error(auth_client: TestClient, db_session: Session):
+def test_upload_unparseable_file_shows_error(
+    auth_client: TestClient, db_session: Session, account: Account
+):
     from expense_analyzer.importers.base import ImporterError
 
     class BoomImporter:
@@ -177,10 +147,9 @@ def test_upload_unparseable_file_shows_error(auth_client: TestClient, db_session
 
     importer_registry.register("boom", BoomImporter())
     try:
-        acc = _account(db_session)
         resp = auth_client.post(
             "/dashboard/upload",
-            data={"account_id": str(acc.id), "importer": "boom"},
+            data={"account_id": str(account.id), "importer": "boom"},
             files={"file": ("bad.csv", b"x", "text/csv")},
         )
         assert resp.status_code == 200
@@ -201,12 +170,14 @@ def test_categorize_rejects_non_numeric_category(auth_client: TestClient, db_ses
 
 
 def test_categorize_rejects_unknown_category(
-    auth_client: TestClient, db_session: Session, fake_importer
+    auth_client: TestClient,
+    db_session: Session,
+    account: Account,
+    fake_importer: str,
 ):
-    acc = _account(db_session)
     auth_client.post(
         "/dashboard/upload",
-        data={"account_id": str(acc.id), "importer": "fake"},
+        data={"account_id": str(account.id), "importer": fake_importer},
         files={"file": ("may.csv", b"x", "text/csv")},
     )
     tx = db_session.exec(select(Transaction)).first()

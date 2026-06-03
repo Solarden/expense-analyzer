@@ -1,62 +1,22 @@
 """Tests for the bank-agnostic import core: idempotent upsert and rollback.
 
-Uses a fake in-memory importer so these cover the pipeline itself, independent
-of any specific bank's CSV format.
+Uses a fake in-memory importer (``make_importer`` from conftest) so these cover
+the pipeline itself, independent of any specific bank's CSV format.
 """
 
+from collections.abc import Callable
 from datetime import date
 
-import pytest
 from sqlmodel import Session, select
 
 from expense_analyzer.importers import (
+    Importer,
     NormalizedTransaction,
-    ParseResult,
     compute_fingerprint,
     rollback_batch,
     run_import,
 )
-from expense_analyzer.models import (
-    Account,
-    AccountType,
-    ImportBatch,
-    ImportStatus,
-    Transaction,
-    TxSource,
-)
-
-
-class FakeImporter:
-    """An Importer that just returns whatever records it was handed."""
-
-    source = "fake csv"
-
-    def __init__(
-        self,
-        records: list[NormalizedTransaction],
-        *,
-        declared_inflow: int | None = None,
-        declared_outflow: int | None = None,
-    ) -> None:
-        self._records = records
-        self._declared_inflow = declared_inflow
-        self._declared_outflow = declared_outflow
-
-    def parse(self, data: bytes) -> ParseResult:
-        return ParseResult(
-            transactions=self._records,
-            declared_inflow=self._declared_inflow,
-            declared_outflow=self._declared_outflow,
-        )
-
-
-@pytest.fixture
-def account(db_session: Session) -> Account:
-    acc = Account(name="PKO checking", type=AccountType.bank)
-    db_session.add(acc)
-    db_session.commit()
-    db_session.refresh(acc)
-    return acc
+from expense_analyzer.models import Account, ImportBatch, ImportStatus, Transaction, TxSource
 
 
 def _records() -> list[NormalizedTransaction]:
@@ -67,11 +27,13 @@ def _records() -> list[NormalizedTransaction]:
     ]
 
 
-def test_import_inserts_new_transactions(db_session: Session, account: Account):
+def test_import_inserts_new_transactions(
+    db_session: Session, account: Account, make_importer: Callable[..., Importer]
+):
     summary = run_import(
         db_session,
         account_id=account.id,
-        importer=FakeImporter(_records()),
+        importer=make_importer(_records()),
         filename="may.csv",
         data=b"",
     )
@@ -90,8 +52,10 @@ def test_import_inserts_new_transactions(db_session: Session, account: Account):
     assert batch.status == ImportStatus.active
 
 
-def test_reimport_same_file_is_idempotent(db_session: Session, account: Account):
-    importer = FakeImporter(_records())
+def test_reimport_same_file_is_idempotent(
+    db_session: Session, account: Account, make_importer: Callable[..., Importer]
+):
+    importer = make_importer(_records())
     first = run_import(
         db_session, account_id=account.id, importer=importer, filename="may.csv", data=b""
     )
@@ -108,11 +72,13 @@ def test_reimport_same_file_is_idempotent(db_session: Session, account: Account)
     assert len(db_session.exec(select(ImportBatch)).all()) == 1
 
 
-def test_overlapping_import_inserts_only_the_new_rows(db_session: Session, account: Account):
+def test_overlapping_import_inserts_only_the_new_rows(
+    db_session: Session, account: Account, make_importer: Callable[..., Importer]
+):
     run_import(
         db_session,
         account_id=account.id,
-        importer=FakeImporter(_records()[:2]),
+        importer=make_importer(_records()[:2]),
         filename="d1.csv",
         data=b"",
     )
@@ -120,7 +86,7 @@ def test_overlapping_import_inserts_only_the_new_rows(db_session: Session, accou
     summary = run_import(
         db_session,
         account_id=account.id,
-        importer=FakeImporter(_records()),
+        importer=make_importer(_records()),
         filename="d2.csv",
         data=b"",
     )
@@ -129,29 +95,33 @@ def test_overlapping_import_inserts_only_the_new_rows(db_session: Session, accou
     assert len(db_session.exec(select(Transaction)).all()) == 3
 
 
-def test_fingerprint_is_account_scoped(db_session: Session, account: Account):
-    other = Account(name="mBank", type=AccountType.bank)
-    db_session.add(other)
-    db_session.commit()
-    db_session.refresh(other)
+def test_fingerprint_is_account_scoped(
+    db_session: Session,
+    account: Account,
+    make_account: Callable[..., Account],
+    make_importer: Callable[..., Importer],
+):
+    other = make_account(name="mBank")
 
     rec = _records()[:1]
     run_import(
-        db_session, account_id=account.id, importer=FakeImporter(rec), filename="a.csv", data=b""
+        db_session, account_id=account.id, importer=make_importer(rec), filename="a.csv", data=b""
     )
     summary = run_import(
-        db_session, account_id=other.id, importer=FakeImporter(rec), filename="b.csv", data=b""
+        db_session, account_id=other.id, importer=make_importer(rec), filename="b.csv", data=b""
     )
     # Same row, different account -> not a duplicate.
     assert summary.new == 1
     assert len(db_session.exec(select(Transaction)).all()) == 2
 
 
-def test_rollback_soft_deletes_batch(db_session: Session, account: Account):
+def test_rollback_soft_deletes_batch(
+    db_session: Session, account: Account, make_importer: Callable[..., Importer]
+):
     summary = run_import(
         db_session,
         account_id=account.id,
-        importer=FakeImporter(_records()),
+        importer=make_importer(_records()),
         filename="may.csv",
         data=b"",
     )
@@ -170,7 +140,9 @@ def test_rollback_soft_deletes_batch(db_session: Session, account: Account):
     assert rollback_batch(db_session, summary.batch_id) == 0
 
 
-def test_in_file_duplicate_is_imported_once(db_session: Session, account: Account):
+def test_in_file_duplicate_is_imported_once(
+    db_session: Session, account: Account, make_importer: Callable[..., Importer]
+):
     # Two genuinely-identical rows in one file collapse to one fingerprint. The
     # second must be skipped (design's accepted behaviour) without tripping the
     # unique index — i.e. dedup happens within the run, not only against the DB.
@@ -178,7 +150,7 @@ def test_in_file_duplicate_is_imported_once(db_session: Session, account: Accoun
     summary = run_import(
         db_session,
         account_id=account.id,
-        importer=FakeImporter([dup, dup]),
+        importer=make_importer([dup, dup]),
         filename="dup.csv",
         data=b"",
     )
@@ -189,27 +161,27 @@ def test_in_file_duplicate_is_imported_once(db_session: Session, account: Accoun
     assert len(db_session.exec(select(Transaction)).all()) == 1
 
 
-def test_pipeline_fills_merchant_normalized(db_session: Session, account: Account):
+def test_pipeline_fills_merchant_normalized(
+    db_session: Session, account: Account, make_importer: Callable[..., Importer]
+):
     rec = NormalizedTransaction(
         date(2026, 5, 1),
         -4240,
         "Płatność kartą | Lokalizacja: Adres: Testowy Sklep Miasto: Łódź Kraj: POLSKA",
     )
     run_import(
-        db_session, account_id=account.id, importer=FakeImporter([rec]), filename="m.csv", data=b""
+        db_session, account_id=account.id, importer=make_importer([rec]), filename="m.csv", data=b""
     )
 
     tx = db_session.exec(select(Transaction)).one()
     assert tx.merchant_normalized == "TESTOWY SKLEP"
 
 
-def test_summary_carries_reconciliation_from_declared_totals(db_session: Session, account: Account):
+def test_summary_carries_reconciliation_from_declared_totals(
+    db_session: Session, account: Account, make_importer: Callable[..., Importer]
+):
     # _records()[:2] sums to +1_000_000 inflow and -12_345 outflow.
-    importer = FakeImporter(
-        _records()[:2],
-        declared_inflow=1_000_000,
-        declared_outflow=-12345,
-    )
+    importer = make_importer(_records()[:2], declared_inflow=1_000_000, declared_outflow=-12345)
     summary = run_import(
         db_session, account_id=account.id, importer=importer, filename="r.csv", data=b""
     )
@@ -218,8 +190,10 @@ def test_summary_carries_reconciliation_from_declared_totals(db_session: Session
     assert summary.reconciliation.label == "OK"
 
 
-def test_summary_reconciliation_flags_mismatch(db_session: Session, account: Account):
-    importer = FakeImporter(
+def test_summary_reconciliation_flags_mismatch(
+    db_session: Session, account: Account, make_importer: Callable[..., Importer]
+):
+    importer = make_importer(
         [NormalizedTransaction(date(2026, 5, 1), 5000, "Wpływ")],
         declared_inflow=9999,  # parser says 5000, bank declared 9999 -> mismatch
     )
@@ -231,25 +205,27 @@ def test_summary_reconciliation_flags_mismatch(db_session: Session, account: Acc
     assert summary.reconciliation.label == "Mismatch"
 
 
-def test_import_auto_links_cross_account_transfer(db_session: Session, account: Account):
-    other = Account(name="mBank", type=AccountType.bank)
-    db_session.add(other)
-    db_session.commit()
-    db_session.refresh(other)
+def test_import_auto_links_cross_account_transfer(
+    db_session: Session,
+    account: Account,
+    make_account: Callable[..., Account],
+    make_importer: Callable[..., Importer],
+):
+    other = make_account(name="mBank")
 
     # Outflow lands on the first account; its equal-and-opposite counterpart
     # arrives in a later import on the other account.
     run_import(
         db_session,
         account_id=account.id,
-        importer=FakeImporter([NormalizedTransaction(date(2026, 5, 1), -200000, "Transfer out")]),
+        importer=make_importer([NormalizedTransaction(date(2026, 5, 1), -200000, "Transfer out")]),
         filename="a.csv",
         data=b"",
     )
     summary = run_import(
         db_session,
         account_id=other.id,
-        importer=FakeImporter([NormalizedTransaction(date(2026, 5, 2), 200000, "Transfer in")]),
+        importer=make_importer([NormalizedTransaction(date(2026, 5, 2), 200000, "Transfer in")]),
         filename="b.csv",
         data=b"",
     )
@@ -260,28 +236,23 @@ def test_import_auto_links_cross_account_transfer(db_session: Session, account: 
     assert len(groups) == 1  # both legs share one group id
 
 
-def test_reimport_with_nothing_new_skips_transfer_detection(db_session: Session, account: Account):
+def test_reimport_with_nothing_new_skips_transfer_detection(
+    db_session: Session,
+    account: Account,
+    make_account: Callable[..., Account],
+    make_transaction: Callable[..., Transaction],
+    make_importer: Callable[..., Importer],
+):
     # An importable file with a single outflow; first import has nothing to pair.
-    importer = FakeImporter([NormalizedTransaction(date(2026, 5, 1), -200000, "Transfer out")])
+    importer = make_importer([NormalizedTransaction(date(2026, 5, 1), -200000, "Transfer out")])
     run_import(db_session, account_id=account.id, importer=importer, filename="a.csv", data=b"")
 
     # A pairable counterpart now exists on another account (inserted directly,
     # left unmatched) — detection *would* link it if it ran.
-    other = Account(name="mBank", type=AccountType.bank)
-    db_session.add(other)
-    db_session.commit()
-    db_session.refresh(other)
-    batch = db_session.exec(select(ImportBatch)).first()
-    counterpart = Transaction(
-        account_id=other.id,
-        import_batch_id=batch.id,
-        amount=200000,
-        booked_date=date(2026, 5, 2),
-        raw_description="Transfer in",
-        fingerprint="fp-counterpart",
+    other = make_account(name="mBank")
+    counterpart = make_transaction(
+        account_id=other.id, amount=200000, day=2, raw_description="Transfer in"
     )
-    db_session.add(counterpart)
-    db_session.commit()
 
     # Re-importing the same file is all-duplicates (new == 0), so the `if new:`
     # guard skips detection entirely — the pair is left unlinked.

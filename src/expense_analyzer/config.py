@@ -36,9 +36,13 @@ class Settings(BaseSettings):
     timezone: str = "Europe/Warsaw"
 
     # Max gap (in days) between the two legs of an internal transfer for them to
-    # be paired. Polish interbank transfers usually book D+1/D+2; widen this only
-    # if real exports show slower settlement. See transfers.py.
-    transfer_window_days: int = 3
+    # be paired. Polish interbank ELIXIR settles only on business days, so a long
+    # weekend stacked with public holidays (majówka, Christmas/New Year) can push
+    # the receiving leg to ~D+4/D+5. Default 5 covers that worst realistic case.
+    # Widening is cheap: auto-link still requires mutual uniqueness, so a wider
+    # window only yields more *manual* suggestions, never a wrong auto-link. See
+    # transfers.py.
+    transfer_window_days: int = 5
 
     @field_validator("timezone")
     @classmethod
