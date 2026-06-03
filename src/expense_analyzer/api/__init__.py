@@ -1,6 +1,35 @@
-"""HTTP API routers.
+"""HTTP layer.
 
-Each functional area gets its own module with an ``APIRouter`` that is included
-in the app in main.py. Keeps endpoint definitions out of the app factory as the
-surface grows (expenses, transfers, loans, import, budgets, ...).
+Route modules live in :mod:`expense_analyzer.api.endpoints` — one router per
+domain (the dashboard surface, plus auth and health). Shared HTML-form input
+models live in :mod:`expense_analyzer.api.forms`.
+
+``routers`` is the single registration point: ``create_app`` just iterates it, so
+adding a domain is one line here rather than another ``include_router`` in the
+app factory.
 """
+
+from expense_analyzer.api.endpoints import (
+    auth,
+    health,
+    home,
+    loans,
+    overview,
+    transactions,
+    transfers,
+    upload,
+    users,
+)
+
+# Order is cosmetic (paths don't overlap); health/auth first, then dashboard domains.
+routers = (
+    health.router,
+    auth.router,
+    home.router,
+    overview.router,
+    transactions.router,
+    transfers.router,
+    loans.router,
+    upload.router,
+    users.router,
+)

@@ -7,8 +7,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 # Importing the importers package registers the available bank parsers.
 import expense_analyzer.importers.registry  # noqa: F401
-from expense_analyzer import __version__
-from expense_analyzer.api import auth, dashboard, health
+from expense_analyzer import __version__, api
 from expense_analyzer.auth import NotAuthenticatedError
 from expense_analyzer.config import INSECURE_DEFAULT_SECRET, get_settings
 from expense_analyzer.logging_config import configure_logging
@@ -46,9 +45,9 @@ def create_app() -> FastAPI:
         name="static",
     )
 
-    app.include_router(health.router)
-    app.include_router(auth.router)
-    app.include_router(dashboard.router)
+    # One router per domain, registered from a single list (see api/__init__.py).
+    for router in api.routers:
+        app.include_router(router)
 
     @app.exception_handler(NotAuthenticatedError)
     async def _redirect_to_login(request: Request, exc: NotAuthenticatedError) -> RedirectResponse:
