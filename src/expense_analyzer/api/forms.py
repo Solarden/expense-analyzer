@@ -12,14 +12,14 @@ route, because it carries an ``UploadFile`` that doesn't belong in a plain model
 
 from datetime import date
 
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 from expense_analyzer.models import AccountType, CategoryKind, InstallmentType, RateType, Scope
 
 
 class LoginForm(BaseModel):
     username: str
-    password: str
+    password: SecretStr  # masked in repr/logs; read via .get_secret_value()
 
 
 class AccountForm(BaseModel):
@@ -35,7 +35,7 @@ class CategoryForm(BaseModel):
 class UserForm(BaseModel):
     username: str
     name: str
-    password: str
+    password: SecretStr  # masked in repr/logs; read via .get_secret_value()
 
 
 class CategorizeForm(BaseModel):

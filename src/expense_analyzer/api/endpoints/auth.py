@@ -26,7 +26,11 @@ def login(
     session: DbSession,
 ) -> Response:
     user = users.get_by_username(session, form.username.strip())
-    if user is None or not user.is_active or not verify_password(form.password, user.password_hash):
+    if (
+        user is None
+        or not user.is_active
+        or not verify_password(form.password.get_secret_value(), user.password_hash)
+    ):
         # Same message whether the user exists or not — don't leak which.
         return templates.TemplateResponse(
             request,

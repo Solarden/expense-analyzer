@@ -47,7 +47,7 @@ def add_user(
         )
 
     user_queries.create_user(
-        session, username=form.username, name=form.name, password=form.password
+        session, username=form.username, name=form.name, password=form.password.get_secret_value()
     )
 
     return RedirectResponse("/dashboard/users", status_code=status.HTTP_303_SEE_OTHER)
