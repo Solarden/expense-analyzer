@@ -1,31 +1,38 @@
-"""Dashboard — the minimal Phase 1 working surface.
+"""Dashboard — the working surface (design §8).
 
-Plain server-rendered forms (POST -> redirect). HTMX/Chart.js richer
-interactivity is deferred to the full dashboard (roadmap §11, Phase 4); Phase 1
-only needs CSV upload and manual categorization. See design §8.
+Plain server-rendered forms (POST -> redirect); the only client-side richness is
+Chart.js on the overview, served from vendored static assets so the Pi stays
+offline. See roadmap §11 (Phase 4: transaction list with filters + pagination,
+overview charts).
 
 Handlers stay thin: all DB access goes through ``expense_analyzer.queries``.
 Every route requires a logged-in user (``require_user``); the household view is
 shared (no per-user data isolation).
 """
 
+from urllib.parse import urlencode
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlmodel import Session
 
 from expense_analyzer.auth import require_user
+from expense_analyzer.clock import local_month, utc_now
 from expense_analyzer.config import get_settings
 from expense_analyzer.db import get_session
 from expense_analyzer.importers import ImporterError, run_import
 from expense_analyzer.importers.pipeline import rollback_batch
 from expense_analyzer.importers.registry import available, get_importer
 from expense_analyzer.models import AccountType, CategoryKind, Owner, Scope
-from expense_analyzer.queries import accounts, batches, categories, transactions
+from expense_analyzer.queries import accounts, batches, categories, stats, transactions
 from expense_analyzer.queries import transfers as transfer_queries
 from expense_analyzer.queries import users as user_queries
-from expense_analyzer.queries.transactions import DEFAULT_LIMIT
+from expense_analyzer.queries.transactions import UNCATEGORIZED, TransactionFilters
 from expense_analyzer.templating import templates
 from expense_analyzer.transfers import find_transfer_pairs
+
+# Months of history on the overview trend chart.
+TREND_MONTHS = 12
 
 # Every route here requires login; handlers only re-declare `user` when they
 # need the object (FastAPI caches the dependency within a request).
@@ -48,6 +55,48 @@ def index(
             "batches": batches.recent_batches(session),
             "account_types": [t.value for t in AccountType],
             "category_kinds": [k.value for k in CategoryKind],
+        },
+    )
+
+
+@router.get("/stats", response_class=HTMLResponse)
+def stats_page(
+    request: Request,
+    month: str | None = None,
+    user: Owner = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> HTMLResponse:
+    months = stats.available_months(session)
+    # Default to the most recent month with data, falling back to the current
+    # local month so an empty DB still renders a sensible (zeroed) summary.
+    selected = month or (months[0] if months else local_month(utc_now()))
+
+    category_names = {c.id: c.name for c in categories.list_categories(session) if c.id is not None}
+    # One transfer-excluded scan feeds both the month summary and the trend.
+    spendable = stats.spendable_transactions(session)
+    summary = stats.month_summary(spendable, selected, category_names)
+    trend = stats.spending_trend(spendable, months=TREND_MONTHS)
+
+    return templates.TemplateResponse(
+        request,
+        "stats.html",
+        {
+            "user": user,
+            "months": months,
+            "month": selected,
+            "summary": summary,
+            "trend": trend,
+            # Chart.js datasets (amounts are minor units; the template divides by
+            # 100 for display so money never round-trips as a float).
+            "category_chart": {
+                "labels": [c.name for c in summary.by_category],
+                "data": [c.total for c in summary.by_category],
+            },
+            "trend_chart": {
+                "labels": [m.month for m in trend],
+                "spending": [m.spending for m in trend],
+                "income": [m.income for m in trend],
+            },
         },
     )
 
@@ -131,20 +180,70 @@ async def upload(
 def list_transactions(
     request: Request,
     account_id: int | None = None,
+    month: str | None = None,
+    category: str | None = None,  # "none" = uncategorized, a digit = that category
+    scope: Scope | None = None,
+    q: str | None = None,
+    page: int = 1,
     user: Owner = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> HTMLResponse:
+    uncategorized = category == UNCATEGORIZED
+    category_id = int(category) if category and category.isdigit() else None
+
+    filters = TransactionFilters(
+        account_id=account_id,
+        month=month or None,
+        category_id=category_id,
+        uncategorized=uncategorized,
+        scope=scope,
+        search=q or None,
+    )
+    result = transactions.list_transactions(
+        session, filters, page=page, page_size=get_settings().page_size
+    )
+
+    def page_query(target_page: int) -> str:
+        """Querystring for a pager link — keeps the active filters, swaps page."""
+        params: list[tuple[str, str]] = []
+        if account_id is not None:
+            params.append(("account_id", str(account_id)))
+        if month:
+            params.append(("month", month))
+        if category:
+            params.append(("category", category))
+        if scope:
+            params.append(("scope", scope.value))
+        if q:
+            params.append(("q", q))
+        params.append(("page", str(max(1, target_page))))
+
+        return urlencode(params)
+
+    # Where the categorize form returns to — the current filtered/paged view.
+    return_to = "/dashboard/transactions"
+    if request.url.query:
+        return_to += f"?{request.url.query}"
+
     return templates.TemplateResponse(
         request,
         "transactions.html",
         {
             "user": user,
-            "transactions": transactions.list_transactions(session, account_id),
+            "page": result,
             "accounts": accounts.list_accounts(session),
             "categories": categories.list_categories(session),
-            "account_id": account_id,
+            "months": stats.available_months(session),
             "scopes": [s.value for s in Scope],
-            "limit": DEFAULT_LIMIT,
+            "page_query": page_query,
+            "return_to": return_to,
+            # Echo the active filters back so the form stays sticky and the pager
+            # carries them across pages.
+            "f_account_id": account_id,
+            "f_month": month or "",
+            "f_category": category or "",
+            "f_scope": scope.value if scope else "",
+            "f_q": q or "",
         },
     )
 
@@ -154,7 +253,7 @@ def categorize(
     tx_id: int,
     category_id: str = Form(""),
     scope: Scope = Form(...),
-    account_id: str = Form(""),
+    return_to: str = Form(""),
     user: Owner = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> RedirectResponse:
@@ -172,9 +271,12 @@ def categorize(
     ):
         raise HTTPException(status_code=404, detail=f"transaction {tx_id} not found")
 
-    dest = "/dashboard/transactions"
-    if account_id:
-        dest += f"?account_id={account_id}"
+    # Return to the filtered/paged view the user came from. Only accept the list
+    # path itself or the list path with a query string — no open redirect, and no
+    # sibling path like "/dashboard/transactionsX" (defense in depth, per review).
+    list_path = "/dashboard/transactions"
+    allowed = return_to == list_path or return_to.startswith(f"{list_path}?")
+    dest = return_to if allowed else list_path
 
     return RedirectResponse(dest, status_code=303)
 

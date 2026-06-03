@@ -4,20 +4,40 @@
 <h2 style="margin-top:0">Transactions</h2>
 
 <div class="panel">
-  <form class="inline" method="get" action="/dashboard/transactions">
-    <label style="margin:0">Account</label>
+  <form class="inline" method="get" action="/dashboard/transactions" style="flex-wrap:wrap; gap:10px">
     <select name="account_id" onchange="this.form.submit()">
-      <option value="">— all —</option>
+      <option value="">— all accounts —</option>
       {% for a in accounts %}
-      <option value="{{ a.id }}" {% if a.id == account_id %}selected{% endif %}>{{ a.name }}</option>
+      <option value="{{ a.id }}" {% if a.id == f_account_id %}selected{% endif %}>{{ a.name }}</option>
       {% endfor %}
     </select>
-    <noscript><button type="submit">Filter</button></noscript>
+    <select name="month" onchange="this.form.submit()">
+      <option value="">— all months —</option>
+      {% for m in months %}
+      <option value="{{ m }}" {% if m == f_month %}selected{% endif %}>{{ m }}</option>
+      {% endfor %}
+    </select>
+    <select name="category" onchange="this.form.submit()">
+      <option value="">— all categories —</option>
+      <option value="none" {% if f_category == 'none' %}selected{% endif %}>— uncategorized —</option>
+      {% for c in categories %}
+      <option value="{{ c.id }}" {% if f_category == c.id|string %}selected{% endif %}>{{ c.name }}</option>
+      {% endfor %}
+    </select>
+    <select name="scope" onchange="this.form.submit()">
+      <option value="">— any scope —</option>
+      {% for s in scopes %}
+      <option value="{{ s }}" {% if s == f_scope %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+    <input type="search" name="q" value="{{ f_q }}" placeholder="Search description…">
+    <button type="submit">Filter</button>
+    <a class="btn" href="/dashboard/transactions">Reset</a>
   </form>
 </div>
 
 <div class="panel">
-  {% if transactions %}
+  {% if page.rows %}
   <table>
     <thead>
       <tr>
@@ -26,7 +46,7 @@
       </tr>
     </thead>
     <tbody>
-      {% for tx in transactions %}
+      {% for tx in page.rows %}
       <tr>
         <td class="muted">{{ tx.booked_date.isoformat() }}</td>
         <td>
@@ -37,7 +57,7 @@
         <td class="num {{ 'neg' if tx.amount < 0 else 'pos' }}">{{ tx.amount | pln }}</td>
         <td colspan="3">
           <form class="inline" method="post" action="/dashboard/transactions/{{ tx.id }}/categorize">
-            <input type="hidden" name="account_id" value="{{ account_id or '' }}">
+            <input type="hidden" name="return_to" value="{{ return_to }}">
             <select name="category_id">
               <option value="">— none —</option>
               {% for c in categories %}
@@ -56,11 +76,13 @@
       {% endfor %}
     </tbody>
   </table>
-  <p class="muted" style="margin-top:12px">
-    {{ transactions | length }} transactions{% if account_id %} (filter: account #{{ account_id }}){% endif %}{% if transactions | length == limit %} (latest {{ limit }} shown){% endif %}.
-  </p>
+  <div class="pager">
+    <a class="btn" href="?{{ page_query(page.page - 1) }}" {% if not page.has_prev %}aria-disabled="true"{% endif %}>← Prev</a>
+    <span class="muted">Page {{ page.page }} of {{ page.pages }} · {{ page.total }} transactions</span>
+    <a class="btn" href="?{{ page_query(page.page + 1) }}" {% if not page.has_next %}aria-disabled="true"{% endif %}>Next →</a>
+  </div>
   {% else %}
-  <p class="muted">No transactions. <a href="/dashboard/upload">Import a CSV →</a></p>
+  <p class="muted">No transactions match. <a href="/dashboard/transactions">Clear filters</a> or <a href="/dashboard/upload">import a CSV →</a></p>
   {% endif %}
 </div>
 

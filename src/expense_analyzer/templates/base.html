@@ -35,6 +35,16 @@
     .grid { display:flex; gap:16px; flex-wrap:wrap; }
     .grid > .panel { flex:1; min-width:280px; }
     label { display:block; font-size:13px; color:var(--muted); margin-bottom:4px; }
+    .cards { display:flex; gap:16px; flex-wrap:wrap; }
+    .card { flex:1; min-width:160px; background:var(--panel); border:1px solid var(--line);
+            border-radius:8px; padding:14px 16px; }
+    .card .k { font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+    .card .v { font-size:22px; font-variant-numeric:tabular-nums; margin-top:4px; }
+    .pager { display:flex; gap:10px; align-items:center; margin-top:12px; }
+    .pager .muted { margin:0; }
+    a.btn { display:inline-block; text-decoration:none; padding:6px 10px; border:1px solid var(--line);
+            border-radius:6px; color:var(--fg); background:var(--bg); }
+    a.btn[aria-disabled="true"] { color:var(--muted); pointer-events:none; opacity:.5; }
   </style>
 </head>
 <body>
@@ -43,6 +53,7 @@
     {% if user %}
     <nav>
       <a href="/dashboard">Home</a>
+      <a href="/dashboard/stats">Overview</a>
       <a href="/dashboard/transactions">Transactions</a>
       <a href="/dashboard/transfers">Transfers</a>
       <a href="/dashboard/upload">Import CSV</a>
