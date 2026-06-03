@@ -16,10 +16,14 @@ class _Published:
     payload: str
     qos: int
     retain: bool
+    rejected: bool = False
 
     def wait_for_publish(self, timeout: float | None = None) -> None:
         # paho returns an MQTTMessageInfo with this method; mimic it so the
-        # publisher's _wait_for_publish branch is exercised.
+        # publisher's _wait_for_publish branch is exercised. A rejected message
+        # (e.g. bad credentials) makes the real paho method raise RuntimeError.
+        if self.rejected:
+            raise RuntimeError("message publish failed")
         return None
 
 
@@ -28,6 +32,7 @@ class FakeMqttClient:
     """Records what the publisher does instead of talking to a broker."""
 
     connect_error: bool = False
+    publish_rejected: bool = False
     published: list[_Published] = field(default_factory=list)
     will: tuple[str, str, bool] | None = None
     credentials: tuple[str, str | None] | None = None
@@ -51,7 +56,7 @@ class FakeMqttClient:
         self.loop_started = True
 
     def publish(self, topic: str, payload: str, qos: int = 0, retain: bool = False) -> _Published:
-        info = _Published(topic, payload, qos, retain)
+        info = _Published(topic, payload, qos, retain, rejected=self.publish_rejected)
         self.published.append(info)
         return info
 
@@ -132,6 +137,17 @@ def test_connection_failure_becomes_mqtt_error_and_still_tears_down() -> None:
         _publisher(client).publish_metrics([])
 
     # Teardown runs in finally even though connect raised.
+    assert client.disconnected
+
+
+def test_rejected_publish_becomes_mqtt_error_and_still_tears_down() -> None:
+    # paho raises RuntimeError from wait_for_publish on a rejected message (e.g. bad
+    # credentials); the publisher must wrap it as MqttError, not let it 500.
+    client = FakeMqttClient(publish_rejected=True)
+
+    with pytest.raises(MqttError):
+        _publisher(client).publish_metrics([Metric("net_worth", "Net Worth", "1.00")])
+
     assert client.disconnected
 
 

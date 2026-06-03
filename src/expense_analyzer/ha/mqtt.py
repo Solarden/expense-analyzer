@@ -18,6 +18,8 @@ so importing this module costs nothing and an unconfigured app never touches it.
 
 import json
 import logging
+import secrets
+import time
 from collections.abc import Callable
 from typing import Protocol
 
@@ -95,7 +97,12 @@ class MqttPublisher:
     def _build_client(self) -> MqttClient:
         import paho.mqtt.client as mqtt
 
-        return mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="expense-analyzer")
+        # Unique client_id per connection. The web app ("Publish now") and the
+        # worker (periodic) both publish; an MQTT broker disconnects a duplicate
+        # client_id, so a fixed id would make the two flap when they overlap.
+        client_id = f"expense-analyzer-{secrets.token_hex(4)}"
+
+        return mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=client_id)
 
     def publish_metrics(self, metrics: list[Metric]) -> None:
         """Announce availability + discovery configs, then publish the state doc.
@@ -161,24 +168,35 @@ class MqttPublisher:
             client.loop_start()
             infos = body(client)
             _wait_for_publish(infos)
-        except OSError as exc:
-            # paho surfaces connection failures as OSError/socket errors. Don't
-            # leak host/credentials into the message.
+        except (OSError, RuntimeError, ValueError) as exc:
+            # paho surfaces failures as OSError (connect/socket), RuntimeError
+            # (publish/wait_for_publish on a rejected message, e.g. bad creds) or
+            # ValueError (bad args). Wrap them all so the "Publish now" handler
+            # shows a flash instead of a 500. Don't leak host/credentials.
             raise MqttError(f"MQTT publish failed: {type(exc).__name__}") from exc
         finally:
             _teardown(client)
 
 
 def _wait_for_publish(infos: list[object]) -> None:
-    """Block until each QoS-1 publish is acknowledged (best effort).
+    """Block until each QoS-1 publish is acknowledged, under one shared deadline.
 
-    paho returns an ``MQTTMessageInfo`` with ``wait_for_publish``; a fake test
-    client may return anything, so we only wait when the method is present.
+    A single ``_PUBLISH_TIMEOUT_SECONDS`` budget across all messages — not per
+    message — so a stuck broker can't amplify the wait to N×timeout. paho returns
+    an ``MQTTMessageInfo`` with ``wait_for_publish``; a fake test client may return
+    anything, so we only wait when the method is present. A rejected publish makes
+    ``wait_for_publish`` raise ``RuntimeError``, which propagates to
+    :meth:`MqttPublisher._with_connection` and becomes an :class:`MqttError`.
     """
+    deadline = time.monotonic() + _PUBLISH_TIMEOUT_SECONDS
     for info in infos:
         wait = getattr(info, "wait_for_publish", None)
-        if callable(wait):
-            wait(timeout=_PUBLISH_TIMEOUT_SECONDS)
+        if not callable(wait):
+            continue
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        wait(timeout=remaining)
 
 
 def _teardown(client: MqttClient) -> None:
