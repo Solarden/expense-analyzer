@@ -8,7 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# tests/infra/test_migrations.py -> repo root is three levels up.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_migrations_apply_to_fresh_db(tmp_path: Path):

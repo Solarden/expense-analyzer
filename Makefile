@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install dev test lint format check migrate revision up down logs
+.PHONY: help install dev test lint format check migrate revision user up down logs
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -8,8 +8,8 @@ help: ## Show this help
 install: ## Create the venv and install all deps (incl. dev)
 	uv sync --extra dev
 
-dev: ## Run the app locally with autoreload
-	uv run uvicorn expense_analyzer.main:app --reload
+dev: ## Run the app locally with autoreload (debug mode allows the default secret)
+	EA_DEBUG=true uv run uvicorn expense_analyzer.main:app --reload
 
 test: ## Run the test suite
 	uv run pytest
@@ -28,6 +28,9 @@ migrate: ## Apply migrations up to head
 
 revision: ## Autogenerate a migration: make revision m="add transaction"
 	uv run alembic revision --autogenerate -m "$(m)"
+
+user: ## Create a login user: make user u=pawel n="Paweł"
+	uv run python -m expense_analyzer.create_user --username "$(u)" --name "$(n)"
 
 up: ## Build and start the docker stack
 	docker compose up --build

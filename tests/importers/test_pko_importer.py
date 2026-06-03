@@ -1,9 +1,11 @@
 """PKO BP parser tests.
 
-The fixture is **synthetic** (made-up amounts, names and accounts) but mirrors
-the real export's structure exactly: windows-1250 encoding, comma-quoted fields,
-the PKO column layout, a pending "Blokada" row, and a currency-conversion row
-that fills the trailing description columns. No real financial data lives here.
+Two layers, all on anonymized data (no real financials in the repo):
+- inline ``_SAMPLE`` strings for focused edge cases (UTF-8 vs cp1250, malformed
+  rows, empty input);
+- committed cp1250 fixtures in ``tests/fixtures/pko/`` exercised as regressions:
+  ``sample.csv`` (real-format happy path), ``edge_cases.csv`` (valid-but-tricky
+  rows), ``broken.csv`` (a malformed row → ImporterError).
 """
 
 from datetime import date
@@ -12,6 +14,9 @@ import pytest
 
 from expense_analyzer.importers.base import ImporterError
 from expense_analyzer.importers.pko import PKOCsvImporter
+
+# Committed anonymized fixtures live in tests/fixtures/pko/ (cp1250). The
+# `fixtures_dir` fixture (conftest) resolves their location.
 
 # Synthetic PKO export. Encoded to cp1250 in the fixture below so the decoding
 # path (Polish characters: ł, ó, ż, ą) is exercised.
@@ -103,6 +108,51 @@ def test_malformed_amount_raises_importer_error():
     ).encode("cp1250")
     with pytest.raises(ImporterError, match="line 2"):
         PKOCsvImporter().parse(bad)
+
+
+def test_real_format_fixture_regression(fixtures_dir):
+    """Regression against an anonymized real-format PKO export (cp1250)."""
+    txns = PKOCsvImporter().parse((fixtures_dir / "pko" / "sample.csv").read_bytes())
+
+    # 5 rows, the pending Blokada is skipped -> 4 booked, in file order.
+    assert [(t.booked_date, t.amount, t.balance_after) for t in txns] == [
+        (date(2026, 5, 31), -4240, 132576),  # card payment
+        (date(2026, 5, 30), 150000, 136816),  # incoming transfer
+        (date(2026, 5, 29), -20000, -13184),  # outgoing transfer
+        (date(2026, 5, 6), -493, 6816),  # foreign-currency card payment
+    ]
+
+    card = txns[0]
+    assert card.raw_description.startswith("Płatność kartą |")
+    assert "Łódź" in card.raw_description  # cp1250 decoded correctly
+    assert "Numer karty: 400000******0000" in card.raw_description
+
+    fx = txns[3]
+    assert "Marża za przewalutowanie: 5,02" in fx.raw_description
+    assert "CZECHY" in fx.raw_description
+
+
+def test_edge_cases_fixture(fixtures_dir):
+    """Valid-but-tricky rows: zero/large amounts, refund, value-date != op-date,
+    messy whitespace, a blank line in the middle."""
+    txns = PKOCsvImporter().parse((fixtures_dir / "pko" / "edge_cases.csv").read_bytes())
+
+    # Blank line skipped -> 5 rows, order preserved.
+    assert [t.amount for t in txns] == [0, 2_000_000, 3499, -999, -150]
+
+    # booked_date comes from the operation date (col 0), not the value date.
+    assert txns[3].booked_date == date(2026, 4, 4)
+    # Minimal description: just the type + Tytuł.
+    assert txns[3].raw_description == "Płatność kartą | Tytuł: 3"
+    # Whitespace inside fields is collapsed.
+    assert "spaced title" in txns[4].raw_description
+    assert "  " not in txns[4].raw_description
+
+
+def test_broken_fixture_raises_with_line_number(fixtures_dir):
+    """A malformed amount mid-file fails the whole import, citing the CSV line."""
+    with pytest.raises(ImporterError, match="line 3"):
+        PKOCsvImporter().parse((fixtures_dir / "pko" / "broken.csv").read_bytes())
 
 
 def test_malformed_date_raises_importer_error():

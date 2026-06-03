@@ -6,6 +6,11 @@ services:
     restart: unless-stopped
     environment:
       EA_DATABASE_PATH: /data/expense_analyzer.db
+      # Must be set (no silent dev fallback for a finance app). Generate with:
+      #   python -c "import secrets; print(secrets.token_urlsafe(48))"
+      EA_SECRET_KEY: ${EA_SECRET_KEY:?set EA_SECRET_KEY in your environment or .env}
+      # Session cookie is Secure — the browser only sends it over HTTPS (Caddy).
+      EA_SECURE_COOKIES: "true"
     volumes:
       - ./data:/data
     # Run migrations, then start the server. Bind only to localhost; Caddy is
@@ -40,9 +45,14 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    environment:
+      # How you reach the Pi (hostname or LAN IP); Caddy issues a self-signed
+      # cert for this name via `tls internal`. Must resolve on your LAN.
+      CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:-expense.local}
     ports:
-      # LAN only. Bind to the Pi's LAN interface in production if desired.
-      - "8080:80"
+      # HTTPS (LAN only). :80 only issues a 301 redirect to HTTPS — no app data.
+      - "443:443"
+      - "80:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

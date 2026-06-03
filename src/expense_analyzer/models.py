@@ -58,16 +58,21 @@ class TxSource(StrEnum):
 
 
 class Owner(SQLModel, table=True):
-    """Optional, future multi-user. No roles, no permissions (design §5).
+    """A login identity. Originally the multi-user hook for ``owner_id``; now
+    also the authenticatable user (username + password).
 
-    Exists only so ``owner_id`` columns mean something if we ever go
-    multi-user. For now there is one implicit owner.
+    No roles/permissions — every active user has the same shared household view
+    (design's "scope is a tag, not a permission" still holds). ``owner_id`` on
+    accounts/transactions stays an analytical tag (who imported), not a filter.
     """
 
     __tablename__ = "owner"
 
     id: int | None = Field(default=None, primary_key=True)
-    name: str
+    name: str  # display name
+    username: str = Field(unique=True, index=True)  # login handle
+    password_hash: str
+    is_active: bool = Field(default=True)  # deactivate without deleting
     created_at: datetime = Field(default_factory=utc_now)
 
 

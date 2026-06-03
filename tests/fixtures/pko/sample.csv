@@ -1,0 +1,6 @@
+"Data operacji","Data waluty","Typ transakcji","Kwota","Waluta","Saldo po transakcji","Opis transakcji","","","","","",""
+"","","Blokada","-29.99","PLN","W rozliczeniu","Tytu³: P000000000000000000  ","Lokalizacja: Adres: TESTOWY SKLEP Miasto: Warszawa Kraj: POLSKA","","","","",""
+"2026-05-31","2026-05-31","P³atnoœæ kart¹","-42.40","PLN","+1325.76","Tytu³:  00000000000000000000000 ","Lokalizacja: Adres: Testowy Market Miasto: £ódŸ Kraj: POLSKA","Data wykonania operacji: 2026-05-31","Oryginalna kwota operacji: 42.40","Numer karty: 400000******0000","",""
+"2026-05-30","2026-05-30","Przelew na konto","+1500.00","PLN","+1368.16","Rachunek nadawcy: 00 0000 0000 0000 0000 0000 0000","Nazwa nadawcy: JAN KOWALSKI","Adres nadawcy: UL. PRZYK£ADOWA 1 00-001 WARSZAWA","Tytu³: PRZELEW TESTOWY","","",""
+"2026-05-29","2026-05-29","Przelew z rachunku","-200.00","PLN","-131.84","Rachunek odbiorcy: 00 0000 0000 0000 0000 0000 0001","Nazwa odbiorcy: ANNA NOWAK","Tytu³: CZYNSZ","","","",""
+"2026-05-06","2026-05-06","P³atnoœæ kart¹","-4.93","PLN","+68.16","Tytu³:  00000000000000000000001 ","Lokalizacja: Adres: Kawiarnia Testowa Miasto: Praha 3 Kraj: CZECHY","Data wykonania operacji: 2026-05-06","Oryginalna kwota operacji: 27.00","Mar¿a za przewalutowanie: 5,02","Data przetworzenia: 2026-05-07","Numer karty: 400000******0000"
