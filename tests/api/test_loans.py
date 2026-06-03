@@ -8,6 +8,7 @@ share the same temp engine). Model builders (``make_account``, ``make_loan``,
 from collections.abc import Callable
 from datetime import date
 
+from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
@@ -166,7 +167,7 @@ def test_create_fixed_loan_redirects_to_detail(
         },
         follow_redirects=False,
     )
-    assert resp.status_code == 303
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
     assert resp.headers["location"].startswith("/dashboard/loans/")
 
     loan = lq.list_loans(db_session)[0]
@@ -192,7 +193,7 @@ def test_create_variable_loan_requires_initial_base_rate(
             # no base_rate_percent
         },
     )
-    assert resp.status_code == 400
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
     assert "base rate" in resp.text.lower()
 
 
@@ -213,7 +214,7 @@ def test_create_loan_rejects_non_loan_account(
             "term_months": "360",
         },
     )
-    assert resp.status_code == 400
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
     assert "loan account" in resp.text.lower()
 
 
@@ -225,12 +226,12 @@ def test_loan_detail_renders_schedule(
     acc = make_account(name="Mortgage", type=AccountType.loan)
     loan = make_loan(account_id=acc.id, term_months=12)
     resp = auth_client.get(f"/dashboard/loans/{loan.id}")
-    assert resp.status_code == 200
+    assert resp.status_code == status.HTTP_200_OK
     assert "plan vs reality" in resp.text.lower()
 
 
 def test_loan_detail_404_for_missing_loan(auth_client: TestClient):
-    assert auth_client.get("/dashboard/loans/9999").status_code == 404
+    assert auth_client.get("/dashboard/loans/9999").status_code == status.HTTP_404_NOT_FOUND
 
 
 def test_add_rate_change_then_appears_on_detail(
@@ -250,7 +251,7 @@ def test_add_rate_change_then_appears_on_detail(
         data={"effective_date": "2026-07-01", "base_rate_percent": "6.00"},
         follow_redirects=False,
     )
-    assert resp.status_code == 303
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
     assert len(lq.list_rate_changes(db_session, loan.id)) == 2
 
 
@@ -271,14 +272,14 @@ def test_link_payment_over_http_then_unlink(
         data={"tx_id": tx.id, "installment_index": 1},
         follow_redirects=False,
     )
-    assert resp.status_code == 303
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
     db_session.refresh(tx)
     assert tx.loan_id == loan.id
 
     resp = auth_client.post(
         f"/dashboard/loans/{loan.id}/payments/{tx.id}/unlink", follow_redirects=False
     )
-    assert resp.status_code == 303
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
     db_session.refresh(tx)
     assert tx.loan_id is None
 
@@ -293,6 +294,6 @@ def test_delete_loan_over_http(
     loan = make_loan(account_id=acc.id)
     loan_id = loan.id
     resp = auth_client.post(f"/dashboard/loans/{loan_id}/delete", follow_redirects=False)
-    assert resp.status_code == 303
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
     db_session.expire_all()  # drop the cached instance so get reloads from the DB
     assert lq.get_loan(db_session, loan_id) is None

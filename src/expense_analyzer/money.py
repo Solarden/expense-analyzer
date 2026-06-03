@@ -54,6 +54,93 @@ def parse_pln(text: str) -> int:
         raise MoneyParseError(f"cannot parse money value: {text!r}") from exc
 
 
+def _clean_numeric(text: str) -> str | None:
+    """Normalize an external numeric string to a bare ``Decimal``-parseable form.
+
+    Strips the quirks investment sources throw at us (myFund returns numbers as
+    strings, sometimes with a leading ``+``; XTB .xlsx stores them with a ``.``
+    decimal): thousands spaces / non-breaking spaces, ``zł``/``PLN`` suffixes, a
+    leading ``+``, and ``,`` used as a decimal separator. Returns ``None`` for
+    missing/blank markers (``""``, ``&nbsp;``, ``---``, a lone sign/dash).
+    """
+    cleaned = (
+        text.replace("&nbsp;", " ")
+        .replace("\xa0", " ")
+        .replace(" ", "")  # narrow no-break space
+        .strip()
+        .replace(" ", "")  # thousands separators
+        .replace("zł", "")
+        .replace("PLN", "")
+        .lstrip("+")
+    )
+    if cleaned in ("", "-", "--", "---", "—"):
+        return None
+
+    # Resolve the decimal separator. When BOTH ``.`` and ``,`` appear (e.g.
+    # ``"1,234.56"`` or ``"1.234,56"``), the **rightmost** one is the decimal
+    # point and the other groups thousands — strip the thousands char. When only
+    # one appears, treat ``,`` as the decimal separator (Polish convention).
+    if "," in cleaned and "." in cleaned:
+        if cleaned.rfind(",") > cleaned.rfind("."):
+            cleaned = cleaned.replace(".", "").replace(",", ".")
+        else:
+            cleaned = cleaned.replace(",", "")
+    else:
+        cleaned = cleaned.replace(",", ".")
+
+    return cleaned
+
+
+def parse_loose_amount(value: str | int | float | None) -> int | None:
+    """Best-effort parse of an external numeric value into signed minor units.
+
+    For investment sources (myFund API, XTB export) whose numbers arrive as
+    strings. Returns ``None`` for missing/blank values. Never routes through a
+    binary ``float``: a ``float`` input is stringified before going to
+    :class:`~decimal.Decimal`, so JSON's ``632.56`` stays exact. Raises
+    :class:`MoneyParseError` on genuinely unparseable text.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):  # bool is an int subclass — reject it explicitly
+        raise MoneyParseError(f"not a numeric amount: {value!r}")
+    if isinstance(value, int):
+        return to_minor_units(value)
+    if isinstance(value, float):
+        return to_minor_units(Decimal(str(value)))
+
+    cleaned = _clean_numeric(value)
+    if cleaned is None:
+        return None
+    try:
+        return to_minor_units(Decimal(cleaned))
+    except (InvalidOperation, ArithmeticError) as exc:
+        raise MoneyParseError(f"cannot parse amount: {value!r}") from exc
+
+
+def parse_loose_decimal(value: str | int | float | None) -> Decimal | None:
+    """Like :func:`parse_loose_amount` but for **counts**, not money.
+
+    Share/unit quantities are genuinely fractional and are *not* minor units, so
+    they stay a :class:`~decimal.Decimal` (e.g. ``"0.1980"`` -> ``Decimal('0.1980')``).
+    Returns ``None`` for missing/blank values.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise MoneyParseError(f"not a numeric quantity: {value!r}")
+    if isinstance(value, int | float):
+        return Decimal(str(value))
+
+    cleaned = _clean_numeric(value)
+    if cleaned is None:
+        return None
+    try:
+        return Decimal(cleaned)
+    except (InvalidOperation, ArithmeticError) as exc:
+        raise MoneyParseError(f"cannot parse quantity: {value!r}") from exc
+
+
 def from_minor_units(minor: int) -> Decimal:
     """Convert integer minor units back to a major-unit (PLN) :class:`~decimal.Decimal`."""
     return (Decimal(minor) / _MINOR_UNITS_PER_PLN).quantize(Decimal("0.01"))
@@ -62,3 +149,9 @@ def from_minor_units(minor: int) -> Decimal:
 def format_pln(minor: int) -> str:
     """Format integer minor units for display, e.g. ``-123456`` -> ``"-1234,56 zł"``."""
     return f"{from_minor_units(minor)} zł".replace(".", ",")
+
+
+def format_quantity(quantity: Decimal) -> str:
+    """Display a unit count without trailing zeros (``2.0000`` -> ``"2"``,
+    ``0.1980`` -> ``"0.198"``). ``:f`` avoids ``normalize()``'s exponent form."""
+    return f"{quantity.normalize():f}"

@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Sentinel default for secret_key. The app refuses to start with this value
@@ -66,6 +66,26 @@ class Settings(BaseSettings):
     # render cheap. Overridable via EA_PAGE_SIZE; must be >= 1 (0 would mean an
     # empty page and a zero-division in the pager).
     page_size: int = Field(default=50, ge=1)
+
+    # --- myFund.pl investment import (Phase 6) -------------------------------
+    # OPT-IN and OFF by default: with no API key the app makes *zero* outbound
+    # calls and stays fully offline (design's core principle). Setting a key +
+    # portfolio name turns on the only network egress in the app — a read-only
+    # pull of your own portfolio. See internal_docs/PROGRESS.md (Phase 6).
+    myfund_api_base_url: str = "https://myfund.pl/API/v1"
+    myfund_api_key: SecretStr = SecretStr("")  # masked in logs/repr
+    myfund_portfolio: str = ""  # portfolio name as shown in the myFund account
+    # Worker poll interval in hours. None/0 = the background worker never fetches
+    # (the manual "Fetch now" button on the Investments page still works).
+    myfund_fetch_interval_hours: int | None = Field(default=None)
+    # Portfolio Account the worker imports myFund positions into. Required for the
+    # *worker* path only (the UI picks the account per request). None = worker idle.
+    myfund_account_id: int | None = Field(default=None)
+
+    @property
+    def myfund_configured(self) -> bool:
+        """True once an API key and portfolio name are set — gates all egress."""
+        return bool(self.myfund_api_key.get_secret_value() and self.myfund_portfolio)
 
     @field_validator("timezone")
     @classmethod

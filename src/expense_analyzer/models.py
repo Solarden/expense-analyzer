@@ -16,8 +16,10 @@ what Alembic autogenerate targets.
 """
 
 from datetime import date, datetime
+from decimal import Decimal
 from enum import StrEnum
 
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from expense_analyzer.clock import utc_now
@@ -203,6 +205,42 @@ class LoanCreate(LoanBase):
     """
 
     initial_base_rate_bp: int | None = None
+
+
+class InvestmentPosition(SQLModel, table=True):
+    """One holding in a portfolio account, as of a snapshot (design §5, §7.3).
+
+    Informational: positions are imported once a month (XTB .xlsx) or pulled from
+    the myFund.pl API — not a live feed. A snapshot is *latest-wins per date*: the
+    natural key ``(account_id, ticker, snapshot_date)`` is unique, so re-importing
+    the same day's export updates the row instead of duplicating it (no fingerprint
+    / batch machinery — this is a state snapshot, not a stream of operations).
+
+    Money stays integer minor units. ``quantity`` is the one deliberate
+    :class:`~decimal.Decimal` in persistence — it's a fractional unit count, not
+    money (a single ETF share can be 0.1980).
+    """
+
+    __tablename__ = "investment_position"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id", "ticker", "snapshot_date", name="uq_investment_position_snapshot"
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    account_id: int = Field(foreign_key="account.id", index=True)
+    ticker: str  # e.g. "SXR8.DE", "SNT.PL"
+    quantity: Decimal  # fractional unit count (NOT money) — see class docstring
+
+    value: int  # minor units: current market value of the holding (source-authoritative)
+    avg_price: int | None = Field(default=None)  # minor units, average purchase price per unit
+    current_price: int | None = Field(default=None)  # minor units, last price per unit
+    currency: str = Field(default="PLN")
+
+    snapshot_date: date = Field(index=True)
+    source: str  # "xtb" | "myfund_api" | "manual"
+    fetched_at: datetime = Field(default_factory=utc_now)
 
 
 class LoanRateChange(SQLModel, table=True):

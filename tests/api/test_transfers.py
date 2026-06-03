@@ -7,6 +7,7 @@ share the same temp engine, so writes are visible across them). Model builders
 
 from collections.abc import Callable
 
+from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -120,7 +121,7 @@ def test_unlink_keeps_a_manually_recategorized_leg(
 
 def test_transfers_page_renders(auth_client: TestClient, db_session: Session):
     resp = auth_client.get("/dashboard/transfers")
-    assert resp.status_code == 200
+    assert resp.status_code == status.HTTP_200_OK
     assert "Transfers" in resp.text
 
 
@@ -140,7 +141,7 @@ def test_confirm_route_links_pair(
         data={"tx_a_id": out.id, "tx_b_id": inn.id},
         follow_redirects=False,
     )
-    assert resp.status_code == 303
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
 
     db_session.refresh(out)
     db_session.refresh(inn)
@@ -163,7 +164,7 @@ def test_confirm_route_404_on_invalid_pair(
         data={"tx_a_id": out.id, "tx_b_id": same_acct.id},
         follow_redirects=False,
     )
-    assert resp.status_code == 404
+    assert resp.status_code == status.HTTP_404_NOT_FOUND
 
 
 def test_rescan_route_autolinks(
@@ -178,7 +179,7 @@ def test_rescan_route_autolinks(
     inn = make_transaction(account_id=b.id, amount=200000, day=2)
 
     resp = auth_client.post("/dashboard/transfers/rescan", follow_redirects=False)
-    assert resp.status_code == 303
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
 
     db_session.refresh(out)
     db_session.refresh(inn)

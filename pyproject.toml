@@ -18,12 +18,14 @@ dependencies = [
     "python-multipart>=0.0.18",
     "bcrypt>=4.2",
     "itsdangerous>=2.2",
+    # Outbound HTTP client for the opt-in myFund.pl investment pull (Phase 6).
+    # Off by default (no API key -> no calls); also what the test client uses.
+    "httpx>=0.28",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3",
-    "httpx>=0.28",
     "ruff>=0.8",
     "pre-commit>=4.0",
 ]
