@@ -27,8 +27,8 @@ from expense_analyzer.loans import (
 from expense_analyzer.models import (
     Account,
     AccountType,
-    InstallmentType,
     Loan,
+    LoanCreate,
     LoanRateChange,
     RateType,
     Transaction,
@@ -43,41 +43,22 @@ def get_loan(session: Session, loan_id: int) -> Loan | None:
     return session.get(Loan, loan_id)
 
 
-def create_loan(
-    session: Session,
-    *,
-    account_id: int,
-    principal: int,
-    rate_type: RateType,
-    rate_bp: int,
-    installment_type: InstallmentType,
-    start_date: date,
-    term_months: int,
-    base_rate_ref: str | None = None,
-    initial_base_rate_bp: int | None = None,
-) -> Loan:
-    """Create a loan. For a variable rate, ``initial_base_rate_bp`` seeds a rate
-    change effective on ``start_date`` so the schedule has a rate from month 1."""
-    loan = Loan(
-        account_id=account_id,
-        principal=principal,
-        rate_type=rate_type,
-        rate_bp=rate_bp,
-        base_rate_ref=base_rate_ref,
-        installment_type=installment_type,
-        start_date=start_date,
-        term_months=term_months,
-    )
+def create_loan(session: Session, data: LoanCreate) -> Loan:
+    """Create a loan from a :class:`LoanCreate` input. For a variable rate,
+    ``data.initial_base_rate_bp`` seeds a rate change effective on the start date
+    so the schedule has a rate from month 1."""
+    # initial_base_rate_bp is not a Loan column — it seeds a rate change below.
+    loan = Loan(**data.model_dump(exclude={"initial_base_rate_bp"}))
     session.add(loan)
     session.commit()
     session.refresh(loan)
 
-    if rate_type is RateType.variable and initial_base_rate_bp is not None:
+    if data.rate_type is RateType.variable and data.initial_base_rate_bp is not None:
         add_rate_change(
             session,
             loan_id=loan.id,
-            effective_date=start_date,
-            base_rate_bp=initial_base_rate_bp,
+            effective_date=data.start_date,
+            base_rate_bp=data.initial_base_rate_bp,
         )
 
     return loan
