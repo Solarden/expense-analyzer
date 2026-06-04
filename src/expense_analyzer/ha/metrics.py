@@ -15,6 +15,7 @@ from sqlmodel import Session
 
 from expense_analyzer.clock import local_today
 from expense_analyzer.money import from_minor_units
+from expense_analyzer.queries import budgets as budget_queries
 from expense_analyzer.queries import net_worth as net_worth_queries
 from expense_analyzer.queries import stats as stats_queries
 
@@ -45,9 +46,12 @@ def _pln(minor: int) -> str:
 def collect_metrics(session: Session) -> list[Metric]:
     """The current household snapshot as a flat list of HA sensor metrics.
 
-    Headline figures (net worth, this-month spending/income/net — transfers
-    excluded, as everywhere in :mod:`~expense_analyzer.queries.stats`) plus one
-    balance metric per account.
+    Headline figures (net worth, this-month spending/income/net — transfers and
+    loan installments excluded, as everywhere in
+    :mod:`~expense_analyzer.queries.stats`), one balance metric per account, and a
+    "budget remaining" metric per budgeted category for the current month (Phase
+    8). HA turns the remaining sensors into glanceable "left in food budget" cards
+    and can drive its own threshold automations off them (design §9).
     """
     metrics = [
         Metric("net_worth", "Net Worth", _pln(net_worth_queries.current_net_worth(session))),
@@ -69,6 +73,16 @@ def collect_metrics(session: Session) -> list[Metric]:
             value=_pln(balance.balance),
         )
         for balance in net_worth_queries.account_balances(session)
+    ]
+
+    # Reuse the spendable scan already loaded above instead of re-querying.
+    metrics += [
+        Metric(
+            key=f"budget_{status.category_id}_remaining",
+            name=f"{status.name} Budget Remaining",
+            value=_pln(status.remaining),
+        )
+        for status in budget_queries.budget_overview(session, month, spendable=spendable)
     ]
 
     return metrics

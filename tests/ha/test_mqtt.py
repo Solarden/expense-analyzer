@@ -156,3 +156,48 @@ def test_from_settings_refuses_when_not_configured() -> None:
 
     with pytest.raises(MqttError, match="not configured"):
         MqttPublisher.from_settings(settings)
+
+
+def test_publish_snapshot_fires_budget_exceeded_alert(
+    db_session, make_account, make_category, make_transaction, make_budget
+) -> None:
+    """An over-budget category turns into a (non-retained) alert event alongside
+    the normal metrics push — the Phase 7 publish_alert primitive wired up."""
+    from expense_analyzer.clock import local_today
+    from expense_analyzer.ha.mqtt import publish_snapshot
+    from expense_analyzer.models import CategoryKind
+
+    account = make_account()
+    food = make_category(name="Food", kind=CategoryKind.expense)
+    today = local_today()
+    make_transaction(account_id=account.id, amount=-300_00, booked_date=today, category_id=food.id)
+    make_budget(category_id=food.id, month=today.strftime("%Y-%m"), limit_amount=200_00)
+
+    client = FakeMqttClient()
+    count = publish_snapshot(db_session, Settings(mqtt_host="broker.local"), client=client)
+
+    assert count >= 4  # at least the headline sensors were published
+    alerts = [p for p in client.published if p.topic == "expense_analyzer/alert"]
+    assert len(alerts) == 1
+    payload = json.loads(alerts[0].payload)
+    assert "Food" in payload["title"]
+    assert alerts[0].retain is False  # events must not replay
+
+
+def test_publish_snapshot_no_alert_when_within_budget(
+    db_session, make_account, make_category, make_transaction, make_budget
+) -> None:
+    from expense_analyzer.clock import local_today
+    from expense_analyzer.ha.mqtt import publish_snapshot
+    from expense_analyzer.models import CategoryKind
+
+    account = make_account()
+    food = make_category(name="Food", kind=CategoryKind.expense)
+    today = local_today()
+    make_transaction(account_id=account.id, amount=-120_00, booked_date=today, category_id=food.id)
+    make_budget(category_id=food.id, month=today.strftime("%Y-%m"), limit_amount=200_00)
+
+    client = FakeMqttClient()
+    publish_snapshot(db_session, Settings(mqtt_host="broker.local"), client=client)
+
+    assert [p for p in client.published if p.topic == "expense_analyzer/alert"] == []
