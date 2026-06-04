@@ -19,45 +19,54 @@ router = APIRouter(
     prefix="/dashboard/transactions", tags=["transactions"], dependencies=[Depends(require_user)]
 )
 
+_SCOPE_VALUES = {s.value for s in Scope}
+
 
 @router.get("", response_class=HTMLResponse)
 def list_transactions(
     request: Request,
     user: CurrentUser,
     session: DbSession,
-    account_id: int | None = None,
+    account_id: str | None = None,  # "" (all accounts) or a digit
     month: str | None = None,
     category: str | None = None,  # "none" = uncategorized, a digit = that category
-    scope: Scope | None = None,
+    scope: str | None = None,  # "" (any scope) or a Scope value
     q: str | None = None,
-    page: int = 1,
+    page: str | None = None,
 ) -> HTMLResponse:
+    # The filter bar auto-submits every control on change, so the "— all … —"
+    # options arrive as empty strings (and a hand-edited URL may carry garbage).
+    # Parse each leniently into None rather than declaring typed params that 422
+    # on an empty/invalid value (consistent with the malformed-month fix, Phase 4).
     uncategorized = category == UNCATEGORIZED
     category_id = int(category) if category and category.isdigit() else None
+    parsed_account_id = int(account_id) if account_id and account_id.isdigit() else None
+    parsed_scope = Scope(scope) if scope in _SCOPE_VALUES else None
+    page_num = max(1, int(page)) if page and page.isdigit() else 1
 
     filters = TransactionFilters(
-        account_id=account_id,
+        account_id=parsed_account_id,
         month=month or None,
         category_id=category_id,
         uncategorized=uncategorized,
-        scope=scope,
+        scope=parsed_scope,
         search=q or None,
     )
     result = transactions.list_transactions(
-        session, filters, page=page, page_size=get_settings().page_size
+        session, filters, page=page_num, page_size=get_settings().page_size
     )
 
     def page_query(target_page: int) -> str:
         """Querystring for a pager link — keeps the active filters, swaps page."""
         params: list[tuple[str, str]] = []
-        if account_id is not None:
-            params.append(("account_id", str(account_id)))
+        if parsed_account_id is not None:
+            params.append(("account_id", str(parsed_account_id)))
         if month:
             params.append(("month", month))
         if category:
             params.append(("category", category))
-        if scope:
-            params.append(("scope", scope.value))
+        if parsed_scope:
+            params.append(("scope", parsed_scope.value))
         if q:
             params.append(("q", q))
         params.append(("page", str(max(1, target_page))))
@@ -83,10 +92,10 @@ def list_transactions(
             "return_to": return_to,
             # Echo the active filters back so the form stays sticky and the pager
             # carries them across pages.
-            "f_account_id": account_id,
+            "f_account_id": parsed_account_id,
             "f_month": month or "",
             "f_category": category or "",
-            "f_scope": scope.value if scope else "",
+            "f_scope": parsed_scope.value if parsed_scope else "",
             "f_q": q or "",
         },
     )

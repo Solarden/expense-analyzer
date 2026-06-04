@@ -108,6 +108,29 @@ def test_rollback_hides_transactions_from_list(
     assert up.status_code == status.HTTP_200_OK
 
 
+def test_filter_params_tolerate_empty_and_garbage(auth_client: TestClient) -> None:
+    """The filter bar auto-submits every '— all … —' option as an empty string, so
+    empty/invalid query params must be ignored, never 422.
+
+    Regression: changing the scope filter sent ``account_id=`` (the "all accounts"
+    option) and FastAPI 422'd trying to parse "" as int. Empty + garbage values for
+    every typed filter now resolve to "no filter".
+    """
+    # The exact reported case: scope picked, account left on "all accounts".
+    reported = auth_client.get(
+        "/dashboard/transactions",
+        params={"account_id": "", "scope": "private", "month": "", "category": ""},
+    )
+    assert reported.status_code == status.HTTP_200_OK
+
+    # Siblings: empty scope ("any"), empty page, and hand-edited garbage are ignored.
+    garbage = auth_client.get(
+        "/dashboard/transactions",
+        params={"account_id": "abc", "scope": "nonsense", "page": ""},
+    )
+    assert garbage.status_code == status.HTTP_200_OK
+
+
 def test_upload_unknown_account_shows_error(
     auth_client: TestClient,
     db_session: Session,
