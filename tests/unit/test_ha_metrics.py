@@ -24,11 +24,33 @@ from expense_analyzer.models import (
 def test_empty_database_still_yields_headline_metrics(db_session: Session) -> None:
     metrics = {m.key: m for m in collect_metrics(db_session)}
 
-    # The four headline sensors exist even with no data, all reading zero.
+    # The headline sensors exist even with no data, all reading zero.
     assert metrics["net_worth"].value == "0.00"
     assert metrics["month_spending"].value == "0.00"
     assert metrics["month_income"].value == "0.00"
     assert metrics["month_net"].value == "0.00"
+    assert metrics["fixed_monthly_costs"].value == "0.00"
+
+
+def test_fixed_monthly_costs_sensor(
+    db_session: Session,
+    make_account: Callable[..., Account],
+    make_transaction: Callable[..., Transaction],
+) -> None:
+    from datetime import date
+
+    account = make_account(name="PKO checking")
+    for month in (3, 4, 5):
+        make_transaction(
+            account_id=account.id,
+            amount=-29_99,
+            booked_date=date(2026, month, 15),
+            merchant_normalized="NETFLIX",
+        )
+
+    metrics = {m.key: m.value for m in collect_metrics(db_session)}
+
+    assert metrics["fixed_monthly_costs"] == "29.99"
 
 
 def test_month_figures_exclude_transfers(

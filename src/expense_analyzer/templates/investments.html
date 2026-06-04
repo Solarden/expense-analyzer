@@ -56,7 +56,11 @@
       </h2>
       <div class="panel">
         {% if h.positions %}
-          {% if loop.first and allocation_chart.labels %}<canvas id="allocationChart" height="220"></canvas>{% endif %}
+          {% if loop.first and allocation_chart.labels %}
+            <div style="max-width:460px; height:440px; margin:0 auto">
+              <canvas id="allocationChart"></canvas>
+            </div>
+          {% endif %}
           <table class="table-cards" style="margin-top:12px">
             <thead>
               <tr>
@@ -103,7 +107,14 @@
       datasets: [{ data: allocation.data }],
     },
     options: {
-      plugins: { tooltip: { callbacks: { label: (c) => `${c.label}: ${fmt(c.parsed)}` } } },
+      // Fill the bounded wrapper instead of expanding to the full panel width
+      // (a doughnut keeps a 1:1 ratio, so an unbounded container makes it huge).
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: { callbacks: { label: (c) => `${c.label}: ${fmt(c.parsed)}` } },
+      },
     },
   });
       </script>

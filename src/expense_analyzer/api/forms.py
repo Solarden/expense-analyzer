@@ -77,6 +77,13 @@ class BudgetForm(BaseModel):
     limit_amount: str  # PLN, e.g. "2000"
 
 
+class SubscriptionVerdictForm(BaseModel):
+    """The merchant whose detected subscription a confirm/dismiss/restore acts on
+    (the grouping key — see :class:`~expense_analyzer.models.Subscription`)."""
+
+    merchant: str
+
+
 class LoanForm(BaseModel):
     """Raw loan-creation form fields. Amounts/rates arrive as the user typed them
     (PLN / percent strings) and the date as ISO text; the handler parses and

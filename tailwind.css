@@ -35,6 +35,11 @@
   body {
     @apply m-0 bg-bg text-fg font-sans leading-normal;
     font-size: 15px;
+    /* Theme native controls (date picker icon + popup, scrollbars, spinners) for
+     * dark mode. Without this the <input type="date"> calendar indicator renders
+     * as a dark glyph on our dark field — effectively invisible, so the picker
+     * looks missing. Inherited by the inputs. */
+    color-scheme: dark;
   }
 
   /* Header wraps on narrow screens so the nav links never overflow. */
