@@ -219,24 +219,28 @@ def publish_snapshot(
     """Collect the household metrics and push them to HA. Returns the sensor count.
 
     The single entry point shared by the worker (periodic) and the dashboard's
-    "Publish now" button. After the metrics, fires one budget-exceeded alert per
-    over-budget category for the current month (Phase 8) — the wiring of the
-    Phase 7 :meth:`MqttPublisher.publish_alert` primitive.
+    "Publish now" button. After the metrics, fires one alert per over-budget
+    category (Phase 8), per newly-detected subscription, and per subscription
+    whose price went up (Phase 9) — the wiring of the Phase 7
+    :meth:`MqttPublisher.publish_alert` primitive.
 
     Alerts are fired statelessly every cycle: per design §9 the app emits the
     event and an HA automation decides when to actually notify (HA's throttle /
-    "fire once" semantics live there, not here). A household has few categories,
-    so this is a handful of small events at most.
+    "fire once" semantics live there, not here). A household has few categories
+    and subscriptions, so this is a handful of small events at most.
     """
     from expense_analyzer.clock import local_today
+    from expense_analyzer.config import get_settings
     from expense_analyzer.money import format_pln
     from expense_analyzer.queries import budgets as budget_queries
+    from expense_analyzer.queries import subscriptions as subscription_queries
 
     metrics = collect_metrics(session)
     publisher = MqttPublisher.from_settings(settings, client=client)
     publisher.publish_metrics(metrics)
 
-    month = local_today().strftime("%Y-%m")
+    today = local_today()
+    month = today.strftime("%Y-%m")
     for status in budget_queries.budget_overview(session, month):
         if status.over:
             publisher.publish_alert(
@@ -247,6 +251,32 @@ def publish_snapshot(
                     f"({format_pln(-status.remaining)} over)."
                 ),
                 severity="warning",
+            )
+
+    # Subscription alerts (Phase 9). Dismissed false positives never alert; a
+    # "new" alert stops once the user confirms the subscription (acknowledged).
+    for view in subscription_queries.subscription_overview(session, get_settings(), today=today):
+        if view.is_dismissed:
+            continue
+        sub = view.detected
+        if sub.price_rise is not None:
+            publisher.publish_alert(
+                title=f"Subscription price went up: {sub.merchant}",
+                message=(
+                    f"{sub.merchant} now charges {format_pln(sub.price_rise.new_amount)} "
+                    f"(was {format_pln(sub.price_rise.old_amount)}, "
+                    f"+{sub.price_rise.increase_pct}%)."
+                ),
+                severity="warning",
+            )
+        if sub.is_new and not view.is_confirmed:
+            publisher.publish_alert(
+                title=f"New subscription detected: {sub.merchant}",
+                message=(
+                    f"{sub.merchant} looks like a {sub.cadence} subscription of "
+                    f"{format_pln(sub.current_amount)}."
+                ),
+                severity="info",
             )
 
     return len(metrics)

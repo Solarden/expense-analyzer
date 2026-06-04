@@ -14,10 +14,12 @@ from dataclasses import dataclass
 from sqlmodel import Session
 
 from expense_analyzer.clock import local_today
+from expense_analyzer.config import get_settings
 from expense_analyzer.money import from_minor_units
 from expense_analyzer.queries import budgets as budget_queries
 from expense_analyzer.queries import net_worth as net_worth_queries
 from expense_analyzer.queries import stats as stats_queries
+from expense_analyzer.queries import subscriptions as subscription_queries
 
 
 @dataclass(frozen=True)
@@ -48,16 +50,18 @@ def collect_metrics(session: Session) -> list[Metric]:
 
     Headline figures (net worth, this-month spending/income/net — transfers and
     loan installments excluded, as everywhere in
-    :mod:`~expense_analyzer.queries.stats`), one balance metric per account, and a
+    :mod:`~expense_analyzer.queries.stats`), the total fixed monthly cost of
+    detected subscriptions (Phase 9), one balance metric per account, and a
     "budget remaining" metric per budgeted category for the current month (Phase
     8). HA turns the remaining sensors into glanceable "left in food budget" cards
     and can drive its own threshold automations off them (design §9).
     """
+    today = local_today()
     metrics = [
         Metric("net_worth", "Net Worth", _pln(net_worth_queries.current_net_worth(session))),
     ]
 
-    month = local_today().strftime("%Y-%m")
+    month = today.strftime("%Y-%m")
     spendable = stats_queries.spendable_transactions(session)
     summary = stats_queries.month_summary(spendable, month, {})
     metrics += [
@@ -65,6 +69,20 @@ def collect_metrics(session: Session) -> list[Metric]:
         Metric("month_income", "Income This Month", _pln(summary.income)),
         Metric("month_net", "Net This Month", _pln(summary.net)),
     ]
+
+    # Fixed monthly cost of detected subscriptions (dismissed false positives
+    # excluded). Derived live from history — reuse the spendable scan above
+    # instead of re-querying (see queries/subscriptions).
+    views = subscription_queries.subscription_overview(
+        session, get_settings(), today=today, spendable=spendable
+    )
+    metrics.append(
+        Metric(
+            "fixed_monthly_costs",
+            "Fixed Monthly Costs",
+            _pln(subscription_queries.active_monthly_cost(views)),
+        )
+    )
 
     metrics += [
         Metric(

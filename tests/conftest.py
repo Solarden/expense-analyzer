@@ -34,6 +34,8 @@ from expense_analyzer.models import (
     InvestmentPosition,
     Loan,
     RateType,
+    Subscription,
+    SubscriptionStatus,
     Transaction,
 )
 
@@ -240,6 +242,20 @@ def make_budget(db_session: Session) -> Callable[..., Budget]:
         db_session.commit()
         db_session.refresh(budget)
         return budget
+
+    return _make
+
+
+@pytest.fixture
+def make_subscription(db_session: Session) -> Callable[..., Subscription]:
+    def _make(
+        *, merchant: str, status: SubscriptionStatus = SubscriptionStatus.confirmed, **kw
+    ) -> Subscription:
+        subscription = Subscription(merchant=merchant, status=status, **kw)
+        db_session.add(subscription)
+        db_session.commit()
+        db_session.refresh(subscription)
+        return subscription
 
     return _make
 

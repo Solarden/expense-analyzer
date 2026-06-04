@@ -201,3 +201,53 @@ def test_publish_snapshot_no_alert_when_within_budget(
     publish_snapshot(db_session, Settings(mqtt_host="broker.local"), client=client)
 
     assert [p for p in client.published if p.topic == "expense_analyzer/alert"] == []
+
+
+def _seed_subscription(make_transaction, account_id, *, merchant, amounts) -> None:
+    """Three monthly charges (active as of 2026-06-04), amounts oldest-first."""
+    from datetime import date
+
+    for month, amount in zip((3, 4, 5), amounts, strict=True):
+        make_transaction(
+            account_id=account_id,
+            amount=amount,
+            booked_date=date(2026, month, 15),
+            merchant_normalized=merchant,
+        )
+
+
+def test_publish_snapshot_fires_subscription_price_rise_alert(
+    db_session, make_account, make_transaction
+) -> None:
+    from expense_analyzer.ha.mqtt import publish_snapshot
+
+    account = make_account()
+    _seed_subscription(
+        make_transaction, account.id, merchant="NETFLIX", amounts=[-10_00, -10_00, -13_00]
+    )
+
+    client = FakeMqttClient()
+    publish_snapshot(db_session, Settings(mqtt_host="broker.local"), client=client)
+
+    alerts = [
+        json.loads(p.payload) for p in client.published if p.topic == "expense_analyzer/alert"
+    ]
+    assert any("price went up" in a["title"].lower() and "NETFLIX" in a["title"] for a in alerts)
+
+
+def test_publish_snapshot_skips_alerts_for_dismissed_subscription(
+    db_session, make_account, make_transaction, make_subscription
+) -> None:
+    from expense_analyzer.ha.mqtt import publish_snapshot
+    from expense_analyzer.models import SubscriptionStatus
+
+    account = make_account()
+    _seed_subscription(
+        make_transaction, account.id, merchant="NETFLIX", amounts=[-10_00, -10_00, -13_00]
+    )
+    make_subscription(merchant="NETFLIX", status=SubscriptionStatus.dismissed)
+
+    client = FakeMqttClient()
+    publish_snapshot(db_session, Settings(mqtt_host="broker.local"), client=client)
+
+    assert [p for p in client.published if p.topic == "expense_analyzer/alert"] == []

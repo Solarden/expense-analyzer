@@ -110,6 +110,26 @@ class Settings(BaseSettings):
         """True once a broker host is set — gates every MQTT connection."""
         return bool(self.mqtt_host)
 
+    # --- Subscription / recurring cost detection (Phase 9) -------------------
+    # All derived from existing transactions — no egress, no opt-in. These tune
+    # how forgiving the detector is; sensible defaults for a household, override
+    # only if real data shows it's too eager or too shy. See subscriptions.py.
+    #
+    # Minimum charges from one merchant before it can be called recurring.
+    subscription_min_occurrences: int = Field(default=3, ge=2)
+    # How much a charge may differ from the merchant's typical amount (percent)
+    # and still count as the "same" subscription — absorbs normal drift (FX, a
+    # small plan tweak) without admitting variable spending at the same shop.
+    subscription_amount_tolerance_pct: int = Field(default=15, ge=0)
+    # How big a jump in the latest charge over the established price counts as
+    # "it went up" before HA is pinged (design §13 open decision — tune with real
+    # data). Independent of the tolerance above: that absorbs drift, this flags a
+    # deliberate step.
+    subscription_price_rise_pct: int = Field(default=10, ge=0)
+    # A subscription whose first charge lands within this many days is "new" —
+    # flagged in the UI and alerted to HA once (until you confirm it).
+    subscription_new_window_days: int = Field(default=35, ge=1)
+
     @field_validator("timezone")
     @classmethod
     def _validate_timezone(cls, value: str) -> str:

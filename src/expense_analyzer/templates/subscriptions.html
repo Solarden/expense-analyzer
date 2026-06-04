@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block content %}
+  {% macro status_badge(s) %}
+    {% if s == "active" %}
+      <span class="pos text-[12px]">active</span>
+    {% elif s == "overdue" %}
+      <span class="text-[12px]" style="color:#d0a000">overdue</span>
+    {% else %}
+      <span class="muted text-[12px]">ended</span>
+    {% endif %}
+  {% endmacro %}
+  {% macro row(v, actions) %}
+    {% set d = v.detected %}
+    <tr>
+      <td data-label="Merchant">
+        {{ d.merchant }}
+        {% if d.is_new %}<span class="pos text-[12px]">· new</span>{% endif %}
+        {% if d.category_id %}
+          <br>
+          <span class="muted text-[12px]">{{ category_names.get(d.category_id, "#" ~ d.category_id) }}</span>
+        {% endif %}
+      </td>
+      <td data-label="Cadence">
+        {{ d.cadence }}
+        · {{ status_badge(d.status) }}
+      </td>
+      <td class="num" data-label="Amount">
+        {{ d.current_amount | pln }}
+        {% if d.price_rise %}
+          <br>
+          <span class="neg text-[12px]">↑ {{ d.price_rise.increase_pct }}% (was {{ d.price_rise.old_amount | pln }})</span>
+        {% endif %}
+      </td>
+      <td class="num" data-label="Per month">{{ d.monthly_equivalent | pln }}</td>
+      <td class="num muted" data-label="Charges">{{ d.occurrences }}</td>
+      <td class="num muted" data-label="Next">{{ d.next_expected | dpl }}</td>
+      <td>{{ actions(d.merchant) }}</td>
+    </tr>
+  {% endmacro %}
+  {% macro verdict_form(merchant, action, label, cls="") %}
+    <form class="hstack"
+          method="post"
+          action="/dashboard/subscriptions/{{ action }}">
+      <input type="hidden" name="merchant" value="{{ merchant }}">
+      <button {% if cls %}class="{{ cls }}"{% endif %} type="submit">{{ label }}</button>
+    </form>
+  {% endmacro %}
+  {% macro head() %}
+    <thead>
+      <tr>
+        <th>Merchant</th>
+        <th>Cadence</th>
+        <th class="num">Amount</th>
+        <th class="num">Per month</th>
+        <th class="num">Charges</th>
+        <th class="num">Next</th>
+        <th></th>
+      </tr>
+    </thead>
+  {% endmacro %}
+  <h2 style="margin-top:0">Subscriptions</h2>
+  <div class="panel">
+    <p class="muted" style="margin-top:0">
+      Recurring payments detected from your transaction history — a similar amount
+      on a regular cadence. Transfers and loan installments are excluded.
+    </p>
+    <p class="num" style="margin:8px 0 0; font-size:20px">
+      {{ monthly_total | pln }} <span class="muted" style="font-size:13px">fixed monthly costs</span>
+    </p>
+  </div>
+  <h2>Suggested</h2>
+  <div class="panel">
+    {% if suggestions %}
+      {% macro suggest_actions(merchant) %}
+        <div class="hstack md:flex-nowrap">
+          {{ verdict_form(merchant, "confirm", "Confirm") }}
+          {{ verdict_form(merchant, "dismiss", "Dismiss", "ghost") }}
+        </div>
+      {% endmacro %}
+      <table class="table-cards">
+        {{ head() }}
+        <tbody>
+          {% for v in suggestions %}{{ row(v, suggest_actions) }}{% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">No new recurring payments to review.</p>
+    {% endif %}
+  </div>
+  {% if confirmed %}
+    <h2>Confirmed</h2>
+    <div class="panel">
+      {% macro restore_action(merchant) %}
+        {{ verdict_form(merchant, "restore", "Remove", "ghost") }}
+      {% endmacro %}
+      <table class="table-cards">
+        {{ head() }}
+        <tbody>
+          {% for v in confirmed %}{{ row(v, restore_action) }}{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+  {% if dismissed %}
+    <h2>Dismissed</h2>
+    <div class="panel">
+      <p class="muted" style="margin-top:0">Not counted as subscriptions. Restore one to bring it back as a suggestion.</p>
+      {% macro restore_action(merchant) %}
+        {{ verdict_form(merchant, "restore", "Restore", "ghost") }}
+      {% endmacro %}
+      <table class="table-cards">
+        {{ head() }}
+        <tbody>
+          {% for v in dismissed %}{{ row(v, restore_action) }}{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+{% endblock %}

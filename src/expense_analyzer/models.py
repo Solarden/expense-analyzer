@@ -64,6 +64,13 @@ class Scope(StrEnum):
     household = "household"
 
 
+class SubscriptionStatus(StrEnum):
+    """A user's verdict on a detected recurring-payment group (Phase 9)."""
+
+    confirmed = "confirmed"  # yes, a real subscription
+    dismissed = "dismissed"  # a false positive — hide it and stop alerting
+
+
 class TxSource(StrEnum):
     """Where a transaction's data (and its categorization) came from."""
 
@@ -273,6 +280,37 @@ class Budget(SQLModel, table=True):
     category_id: int = Field(foreign_key="category.id", index=True)
     month: str | None = Field(default=None)  # None = recurring default; "YYYY-MM" = override
     limit_amount: int  # minor units, positive
+
+
+class Subscription(SQLModel, table=True):
+    """A user's verdict on a detected recurring-payment group (design §7.5, §11).
+
+    Subscriptions themselves are **derived**, not stored: the recurring-cost view
+    is recomputed live from transaction history (a merchant grouping plus
+    regularity of date and amount — see :mod:`expense_analyzer.subscriptions`).
+    This table persists only the *human verdict* over a detected group, keyed by
+    its grouping key ``merchant`` (the transaction's ``merchant_normalized``):
+
+    - ``confirmed`` — acknowledged as a real subscription. Stops the "new
+      subscription detected" alert (you already know about it).
+    - ``dismissed`` — a false positive. Hidden from the suggestions list, excluded
+      from the "fixed monthly costs" total, and never alerts. Sticky: it stays
+      dismissed even if the merchant recurs later.
+
+    A detected group with no row here is simply a live *suggestion*. Storing the
+    verdict (rather than nothing) is the one deliberate step beyond "purely
+    derived" — it lets the user prune false positives and silence known
+    subscriptions without that state evaporating on the next page load.
+    """
+
+    __tablename__ = "subscription"
+
+    id: int | None = Field(default=None, primary_key=True)
+    # The grouping key: a transaction's normalized merchant. Unique — one verdict
+    # per merchant (the single-writer query layer upserts on it).
+    merchant: str = Field(unique=True, index=True)
+    status: SubscriptionStatus
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 class LoanRateChange(SQLModel, table=True):
