@@ -3,9 +3,10 @@
 from typing import Annotated
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from expense_analyzer.api.categorize import apply_categorization
 from expense_analyzer.api.deps import CurrentUser, DbSession
 from expense_analyzer.api.forms import CategorizeForm
 from expense_analyzer.auth import require_user
@@ -107,29 +108,7 @@ def categorize(
     form: Annotated[CategorizeForm, Form()],
     session: DbSession,
 ) -> RedirectResponse:
-    parsed_category_id: int | None = None
-    if form.category_id:
-        if not form.category_id.isdigit():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"invalid category id: {form.category_id!r}",
-            )
-        parsed_category_id = int(form.category_id)
-        if categories.get_category(session, parsed_category_id) is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"category {parsed_category_id} not found",
-            )
-
-    if (
-        transactions.set_category(
-            session, tx_id=tx_id, category_id=parsed_category_id, scope=form.scope
-        )
-        is None
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=f"transaction {tx_id} not found"
-        )
+    apply_categorization(session, tx_id=tx_id, raw_category_id=form.category_id, scope=form.scope)
 
     # Return to the filtered/paged view the user came from. Only accept the list
     # path itself or the list path with a query string — no open redirect, and no

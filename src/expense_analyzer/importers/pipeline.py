@@ -23,6 +23,7 @@ from expense_analyzer.importers.fingerprint import compute_fingerprint
 from expense_analyzer.importers.merchant import normalize_merchant
 from expense_analyzer.importers.reconciliation import ReconciliationResult, reconcile
 from expense_analyzer.models import ImportBatch, ImportStatus, Transaction, TxSource
+from expense_analyzer.queries.classifier import classify
 from expense_analyzer.queries.rules import apply_rules
 from expense_analyzer.queries.transfers import detect_and_autolink
 
@@ -38,6 +39,7 @@ class ImportSummary:
     reconciliation: ReconciliationResult  # non-blocking sanity check on the parsed file
     transfers_auto_linked: int = 0  # unambiguous internal transfers paired post-import
     auto_categorized: int = 0  # new rows categorized by a rule post-import (Phase 10)
+    auto_classified: int = 0  # rows the classifier confidently categorized post-import (Phase 11)
 
 
 def run_import(
@@ -140,6 +142,20 @@ def run_import(
             log.exception("rule auto-categorization failed after import; rows are committed")
             session.rollback()
 
+    # Post-import analysis: probabilistic categorization (layer 2, Phase 11). Runs
+    # *after* the deterministic rules, so it only sees rows no rule covered (rules
+    # set source=rule, which the classifier's candidate filter excludes). Same
+    # non-fatal contract: the import is already committed, so a failure here (or a
+    # cold-start no-op) logs and reports 0 rather than 500-ing — the rows just wait
+    # in the review queue.
+    auto_classified = 0
+    if new:
+        try:
+            auto_classified = classify(session).categorized
+        except Exception:  # noqa: BLE001 — convenience step, never fail the import
+            log.exception("classifier auto-categorization failed after import; rows are committed")
+            session.rollback()
+
     return ImportSummary(
         batch_id=batch.id if batch else None,
         parsed=len(result.transactions),
@@ -148,6 +164,7 @@ def run_import(
         reconciliation=reconcile(result),
         transfers_auto_linked=auto_linked,
         auto_categorized=auto_categorized,
+        auto_classified=auto_classified,
     )
 
 

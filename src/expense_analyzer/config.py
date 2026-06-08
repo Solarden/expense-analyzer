@@ -130,6 +130,23 @@ class Settings(BaseSettings):
     # flagged in the UI and alerted to HA once (until you confirm it).
     subscription_new_window_days: int = Field(default=35, ge=1)
 
+    # --- Categorization classifier (layer 2, Phase 11) -----------------------
+    # Derived from existing labels — no egress, always on (like rules, unlike
+    # myFund/MQTT). A TF-IDF + logistic-regression text classifier, trained fresh
+    # on each run from human/rule-confirmed categorizations (no stored model). See
+    # classifier.py / queries/classifier.py.
+    #
+    # A prediction at or above this confidence auto-applies the category
+    # (source=classifier); below it the transaction stays uncategorized and shows
+    # up in the review queue for a human to tag. Conservative by default — this is
+    # a probabilistic guess landing on financial data, so it errs toward the queue.
+    classifier_confidence_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
+    # Don't train (or classify) until at least this many confirmed labels exist —
+    # below that the model is noise. Training also needs >= 2 distinct categories
+    # (a logistic regression needs two classes). Until then it's a no-op and rows
+    # simply wait in the queue.
+    classifier_min_training_samples: int = Field(default=25, ge=2)
+
     @field_validator("timezone")
     @classmethod
     def _validate_timezone(cls, value: str) -> str:
