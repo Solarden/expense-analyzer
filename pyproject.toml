@@ -29,6 +29,12 @@ dependencies = [
     # regression (design §7.7). A local library, not a service — no egress, nothing
     # leaves the Pi. Pulls numpy/scipy; the owner OK'd the footprint (external SSD).
     "scikit-learn>=1.5",
+    # Embeddings for categorization layer 3 (Phase 12): sentence-transformers powers
+    # the "similar past transaction" hint in the review queue (design §7.7 point 3).
+    # Pulls torch — heavy, but a *local* library, not a service. The model weights
+    # are baked into the Docker image at build time and read offline at runtime
+    # (HF_HUB_OFFLINE=1), so nothing leaves the Pi. Footprint OK'd (external SSD).
+    "sentence-transformers>=3.0",
 ]
 
 [project.optional-dependencies]

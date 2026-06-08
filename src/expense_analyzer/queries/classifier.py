@@ -93,10 +93,15 @@ def _learnable_category_ids(session: Session) -> set[int]:
     return {c.id for c in rows if c.id is not None}
 
 
-def _training_samples(session: Session) -> list[TrainingSample]:
-    """Confirmed labels to learn from: non-deleted rows with an expense/income
-    category set by a human or a rule (``source in {manual, rule}``). The
-    classifier's own guesses are excluded so it never trains on its own output."""
+def confirmed_label_texts(session: Session) -> list[tuple[str, int]]:
+    """``(feature text, category id)`` for every confirmed label — the shared training
+    set for the classifier (layer 2) and the embeddings neighbours (layer 3, see
+    :mod:`expense_analyzer.queries.embeddings`).
+
+    Confirmed = non-deleted rows with an expense/income category set by a human or a
+    rule (``source in {manual, rule}``). The classifier's own guesses
+    (``source = classifier``) are excluded so neither layer learns from machine
+    output — a human or a rule has to vouch for a label first."""
     learnable = _learnable_category_ids(session)
     if not learnable:
         return []
@@ -110,12 +115,17 @@ def _training_samples(session: Session) -> list[TrainingSample]:
     ).all()
 
     return [
-        TrainingSample(
-            text=build_text(r.merchant_normalized, r.raw_description),
-            category_id=r.category_id,
-        )
+        (build_text(r.merchant_normalized, r.raw_description), r.category_id)
         for r in rows
         if r.category_id is not None
+    ]
+
+
+def _training_samples(session: Session) -> list[TrainingSample]:
+    """Confirmed labels as the classifier's :class:`TrainingSample` type
+    (see :func:`confirmed_label_texts` for what "confirmed" means)."""
+    return [
+        TrainingSample(text=text, category_id=cid) for text, cid in confirmed_label_texts(session)
     ]
 
 

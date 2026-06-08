@@ -42,6 +42,11 @@ from expense_analyzer.models import (
 
 os.environ["EA_DATABASE_PATH"] = str(Path(tempfile.mkdtemp(prefix="ea-test-")) / "test.db")
 os.environ.setdefault("EA_SECRET_KEY", "test-secret-not-for-production")  # app refuses default
+# Layer 3 (Phase 12) off by default in the suite: its logic is tested directly with
+# an injected fake embedder, so the real path must never load the heavy
+# sentence-transformers model (slow, and would reach the network for the weights).
+# Endpoint tests then exercise the fail-safe render (no suggestions, page still OK).
+os.environ.setdefault("EA_EMBEDDINGS_ENABLED", "false")
 get_settings.cache_clear()  # drop any settings cached before the override
 
 

@@ -4,9 +4,10 @@
   <div class="panel">
     <p class="muted" style="margin:0 0 8px">
       Transactions still without a category. The classifier (trained on your
-      confirmed categorizations) suggests one for each — accept it or pick another.
-      Train &amp; classify auto-applies the confident predictions and leaves the rest
-      here. Tagging a row teaches the next run.
+      confirmed categorizations) suggests one for each, and <em>Similar to</em> shows
+      the closest past transaction you've already tagged — accept either or pick
+      another. Train &amp; classify auto-applies the confident predictions and leaves
+      the rest here. Tagging a row teaches the next run.
     </p>
     <form method="post" action="/dashboard/queue/classify">
       <button type="submit">Train &amp; classify now</button>
@@ -27,12 +28,15 @@
             <th class="w-full">Description</th>
             <th class="num">Amount</th>
             <th>Suggestion</th>
+            <th>Similar to</th>
             <th>Categorize</th>
           </tr>
         </thead>
         <tbody>
           {% for row in page.rows %}
             {% set tx = row.transaction %}
+            {% set neighbor = neighbors.get(tx.id) %}
+            {% set prefill_id = row.suggestion.category_id if row.suggestion else (neighbor.category_id if neighbor else none) %}
             <tr>
               <td class="muted whitespace-nowrap" data-label="Date">{{ tx.booked_date | dpl }}</td>
               <td>
@@ -52,6 +56,16 @@
                   <span class="muted">—</span>
                 {% endif %}
               </td>
+              <td data-label="Similar to">
+                {% if neighbor %}
+                  <span>{{ category_names.get(neighbor.category_id, "#" ~ neighbor.category_id) }}</span>
+                  <span class="muted text-[12px]">{{ (neighbor.similarity * 100) | round | int }}%</span>
+                  <br>
+                  <span class="muted text-[12px]">≈ {{ neighbor.example_text }}</span>
+                {% else %}
+                  <span class="muted">—</span>
+                {% endif %}
+              </td>
               <td>
                 <form class="hstack md:flex-nowrap"
                       method="post"
@@ -60,7 +74,7 @@
                     <option value="">— none —</option>
                     {% for c in categories %}
                       <option value="{{ c.id }}"
-                              {% if row.suggestion and c.id == row.suggestion.category_id %}selected{% endif %}>
+                              {% if prefill_id is not none and c.id == prefill_id %}selected{% endif %}>
                         {{ c.name }}
                       </option>
                     {% endfor %}
