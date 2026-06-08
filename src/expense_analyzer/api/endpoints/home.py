@@ -7,15 +7,16 @@ logged-in user; the household view is shared (no per-user data isolation).
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, Request, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from expense_analyzer.api.deps import CurrentUser, DbSession
 from expense_analyzer.api.forms import AccountForm, CategoryForm
 from expense_analyzer.auth import require_user
 from expense_analyzer.importers.pipeline import rollback_batch
-from expense_analyzer.models import AccountType, CategoryKind
+from expense_analyzer.models import AccountType, CategoryKind, ImportBatch
 from expense_analyzer.queries import accounts, batches, categories
+from expense_analyzer.queries.transactions import MANUAL_BATCH_SOURCE
 from expense_analyzer.templating import templates
 
 router = APIRouter(prefix="/dashboard", tags=["home"], dependencies=[Depends(require_user)])
@@ -53,6 +54,16 @@ def create_category(form: Annotated[CategoryForm, Form()], session: DbSession) -
 
 @router.post("/batches/{batch_id}/rollback")
 def rollback(batch_id: int, session: DbSession) -> RedirectResponse:
+    # The Manual batch is a container for hand-entered rows, not a real import —
+    # rolling it back would wipe every cash entry at once. Those are deleted one at
+    # a time from the transactions list instead. Refuse it (defence in depth; the UI
+    # also hides the button for this batch).
+    batch = session.get(ImportBatch, batch_id)
+    if batch is not None and batch.source == MANUAL_BATCH_SOURCE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="manual entries are deleted individually, not rolled back as a batch",
+        )
     rollback_batch(session, batch_id)
 
     return RedirectResponse("/dashboard", status_code=status.HTTP_303_SEE_OTHER)

@@ -9,24 +9,109 @@
     <link rel="stylesheet" href="/static/app.css">
   </head>
   <body>
+    {# Icon sprite: stroke-only paths (no fill/stroke attrs) so they inherit
+       currentColor from each link via CSS. Referenced with <use href="#i-…">. #}
+    <svg width="0" height="0" aria-hidden="true" style="position:absolute">
+      <symbol id="i-home" viewBox="0 0 24 24">
+      <path d="M3 11l9-8 9 8" />
+      <path d="M5 10v10h14V10" />
+      </symbol>
+      <symbol id="i-overview" viewBox="0 0 24 24">
+      <path d="M3 21h18" />
+      <path d="M3 17l5-5 4 4 7-8" />
+      </symbol>
+      <symbol id="i-transactions" viewBox="0 0 24 24">
+      <path d="M8 6h13M8 12h13M8 18h13" />
+      <path d="M3 6h.01M3 12h.01M3 18h.01" />
+      </symbol>
+      <symbol id="i-transfers" viewBox="0 0 24 24">
+      <path d="M7 4L3 8l4 4" />
+      <path d="M3 8h13" />
+      <path d="M17 20l4-4-4-4" />
+      <path d="M21 16H8" />
+      </symbol>
+      <symbol id="i-loans" viewBox="0 0 24 24">
+      <path d="M3 21h18" />
+      <path d="M5 21V10M9 21V10M15 21V10M19 21V10" />
+      <path d="M12 3L3 8h18z" />
+      </symbol>
+      <symbol id="i-budgets" viewBox="0 0 24 24">
+      <path d="M3 8a2 2 0 012-2h13a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+      <path d="M16 12h.01" />
+      </symbol>
+      <symbol id="i-subscriptions" viewBox="0 0 24 24">
+      <path d="M17 2l4 4-4 4" />
+      <path d="M3 11V9a4 4 0 014-4h14" />
+      <path d="M7 22l-4-4 4-4" />
+      <path d="M21 13v2a4 4 0 01-4 4H3" />
+      </symbol>
+      <symbol id="i-rules" viewBox="0 0 24 24">
+      <path d="M3 4h18l-7 8v6l-4 2v-8z" />
+      </symbol>
+      <symbol id="i-queue" viewBox="0 0 24 24">
+      <path d="M5 5h14l3 7v6a2 2 0 01-2 2H4a2 2 0 01-2-2v-6z" />
+      <path d="M2 12h6l2 3h4l2-3h6" />
+      </symbol>
+      <symbol id="i-investments" viewBox="0 0 24 24">
+      <path d="M3 17l6-6 4 4 8-8" />
+      <path d="M17 7h4v4" />
+      </symbol>
+      <symbol id="i-networth" viewBox="0 0 24 24">
+      <path d="M12 3v18" />
+      <path d="M5 7h14" />
+      <path d="M5 7l-3 6a3 3 0 006 0z" />
+      <path d="M19 7l-3 6a3 3 0 006 0z" />
+      </symbol>
+      <symbol id="i-ha" viewBox="0 0 24 24"><circle cx="12" cy="13" r="2" />
+      <path d="M16.2 9.3a6 6 0 010 8.4M7.8 17.7a6 6 0 010-8.4M19 6.5a10 10 0 010 14M5 20.5a10 10 0 010-14" />
+      </symbol>
+      <symbol id="i-import" viewBox="0 0 24 24">
+      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+      <path d="M7 9l5-5 5 5" />
+      <path d="M12 4v12" />
+      </symbol>
+      <symbol id="i-users" viewBox="0 0 24 24">
+      <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 00-3-3.87" />
+      <path d="M16 3.1a4 4 0 010 7.8" />
+      </symbol>
+      <symbol id="i-check" viewBox="0 0 24 24">
+      <path d="M20 6L9 17l-5-5" />
+      </symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z" />
+      </symbol>
+      <symbol id="i-note" viewBox="0 0 24 24">
+      <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+      </symbol>
+    </svg>
     <header>
       <h1>💸 Expense Analyzer</h1>
       {% if user %}
+        {# Home stays a standalone link; the rest collapse into labelled dropdowns. #}
+        {% set nav_groups = [('Money', [('/dashboard/stats', 'Overview', 'i-overview'), ('/dashboard/transactions', 'Transactions', 'i-transactions'), ('/dashboard/transfers', 'Transfers', 'i-transfers')]), ('Planning', [('/dashboard/budgets', 'Budgets', 'i-budgets'), ('/dashboard/subscriptions', 'Subscriptions', 'i-subscriptions'), ('/dashboard/loans', 'Loans', 'i-loans')]), ('Categorize', [('/dashboard/rules', 'Rules', 'i-rules'), ('/dashboard/queue', 'Review queue', 'i-queue')]), ('Wealth', [('/dashboard/investments', 'Investments', 'i-investments'), ('/dashboard/net-worth', 'Net worth', 'i-networth')]), ('System', [('/dashboard/upload', 'Import CSV', 'i-import'), ('/dashboard/home-assistant', 'Home Assistant', 'i-ha'), ('/dashboard/users', 'Users', 'i-users')])] %}
         <nav>
-          <a href="/dashboard">Home</a>
-          <a href="/dashboard/stats">Overview</a>
-          <a href="/dashboard/transactions">Transactions</a>
-          <a href="/dashboard/transfers">Transfers</a>
-          <a href="/dashboard/loans">Loans</a>
-          <a href="/dashboard/budgets">Budgets</a>
-          <a href="/dashboard/subscriptions">Subscriptions</a>
-          <a href="/dashboard/rules">Rules</a>
-          <a href="/dashboard/queue">Review queue</a>
-          <a href="/dashboard/investments">Investments</a>
-          <a href="/dashboard/net-worth">Net worth</a>
-          <a href="/dashboard/home-assistant">Home Assistant</a>
-          <a href="/dashboard/upload">Import CSV</a>
-          <a href="/dashboard/users">Users</a>
+          <a href="/dashboard">
+            <svg class="nav-ico" aria-hidden="true">
+              <use href="#i-home"></use>
+            </svg>
+          Home</a>
+          {% for label, items in nav_groups %}
+            <div class="nav-group">
+              <span class="nav-trigger" tabindex="0" role="button" aria-haspopup="true">{{ label }}</span>
+              <div class="menu">
+                {% for href, item_label, icon in items %}
+                  <a href="{{ href }}">
+                    <svg class="nav-ico" aria-hidden="true">
+                      <use href="#{{ icon }}"></use>
+                    </svg>
+                  {{ item_label }}</a>
+                {% endfor %}
+              </div>
+            </div>
+          {% endfor %}
         </nav>
         <div class="userbox">
           <span>{{ user.name }}</span>

@@ -11,10 +11,20 @@ route, because it carries an ``UploadFile`` that doesn't belong in a plain model
 """
 
 from datetime import date
+from enum import StrEnum
 
 from pydantic import BaseModel, SecretStr
 
 from expense_analyzer.models import AccountType, CategoryKind, InstallmentType, RateType, Scope
+
+
+class TxDirection(StrEnum):
+    """How a manually-entered amount maps to a signed amount. The user types a
+    positive magnitude and picks a direction — clearer than a hand-typed minus,
+    where a forgotten sign would record a cash expense as income."""
+
+    expense = "expense"  # -> negative amount
+    income = "income"  # -> positive amount
 
 
 class LoginForm(BaseModel):
@@ -44,6 +54,45 @@ class CategorizeForm(BaseModel):
     category_id: str = ""
     scope: Scope
     return_to: str = ""
+
+
+class ManualTransactionForm(BaseModel):
+    """Hand-entered transaction (mainly cash). ``amount`` is a positive PLN string;
+    ``direction`` gives it a sign. ``category_id`` is a digit string or "" (none)."""
+
+    account_id: int
+    booked_date: date  # ISO date from <input type="date">; Pydantic parses it
+    amount: str  # positive PLN, e.g. "19,99"
+    direction: TxDirection = TxDirection.expense
+    description: str
+    category_id: str = ""
+    scope: Scope = Scope.private
+    note: str = ""
+    return_to: str = ""
+
+
+class NoteForm(BaseModel):
+    """The note-modal form: just the free-text note plus where to return."""
+
+    note: str = ""
+    return_to: str = ""
+
+
+class EditTransactionForm(BaseModel):
+    """Edit form. Category/scope/note apply to every row; the money fields are only
+    read for manual entries (an imported row's amount/date/description are the
+    bank's source of truth — the handler ignores them there)."""
+
+    category_id: str = ""
+    scope: Scope
+    note: str = ""
+    return_to: str = ""
+    # manual-only (ignored for imported rows)
+    account_id: int | None = None
+    booked_date: date | None = None
+    amount: str = ""
+    direction: TxDirection = TxDirection.expense
+    description: str = ""
 
 
 class TransferConfirmForm(BaseModel):
