@@ -34,6 +34,7 @@ from expense_analyzer.models import (
     InvestmentPosition,
     Loan,
     RateType,
+    Rule,
     Subscription,
     SubscriptionStatus,
     Transaction,
@@ -256,6 +257,18 @@ def make_subscription(db_session: Session) -> Callable[..., Subscription]:
         db_session.commit()
         db_session.refresh(subscription)
         return subscription
+
+    return _make
+
+
+@pytest.fixture
+def make_rule(db_session: Session) -> Callable[..., Rule]:
+    def _make(*, pattern: str, category_id: int, priority: int = 0, **kw) -> Rule:
+        rule = Rule(pattern=pattern, category_id=category_id, priority=priority, **kw)
+        db_session.add(rule)
+        db_session.commit()
+        db_session.refresh(rule)
+        return rule
 
     return _make
 

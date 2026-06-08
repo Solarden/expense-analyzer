@@ -80,6 +80,9 @@
               <td>
                 {% if tx.merchant_normalized %}
                   <strong>{{ tx.merchant_normalized }}</strong>
+                  <a class="muted text-[12px]"
+                     href="/dashboard/rules?pattern={{ tx.merchant_normalized | urlencode }}"
+                     title="Create a categorization rule for this merchant">→ rule</a>
                   <br>
                 {% endif %}
                 <span class="muted">{{ tx.raw_description }}</span>

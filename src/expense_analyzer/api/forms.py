@@ -84,6 +84,15 @@ class SubscriptionVerdictForm(BaseModel):
     merchant: str
 
 
+class RuleForm(BaseModel):
+    """Raw categorization-rule form fields. ``pattern`` is matched case-insensitively
+    as a substring; ``priority`` orders the rules (higher wins)."""
+
+    pattern: str
+    category_id: int
+    priority: int = 0
+
+
 class LoanForm(BaseModel):
     """Raw loan-creation form fields. Amounts/rates arrive as the user typed them
     (PLN / percent strings) and the date as ISO text; the handler parses and
