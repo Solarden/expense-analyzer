@@ -23,6 +23,7 @@ from expense_analyzer.importers.fingerprint import compute_fingerprint
 from expense_analyzer.importers.merchant import normalize_merchant
 from expense_analyzer.importers.reconciliation import ReconciliationResult, reconcile
 from expense_analyzer.models import ImportBatch, ImportStatus, Transaction, TxSource
+from expense_analyzer.queries.rules import apply_rules
 from expense_analyzer.queries.transfers import detect_and_autolink
 
 log = logging.getLogger("expense_analyzer.import")
@@ -36,6 +37,7 @@ class ImportSummary:
     skipped: int  # duplicates (fingerprint already known, or repeated within the file)
     reconciliation: ReconciliationResult  # non-blocking sanity check on the parsed file
     transfers_auto_linked: int = 0  # unambiguous internal transfers paired post-import
+    auto_categorized: int = 0  # new rows categorized by a rule post-import (Phase 10)
 
 
 def run_import(
@@ -125,6 +127,19 @@ def run_import(
             log.exception("transfer auto-link failed after import; rows are committed")
             session.rollback()  # discard the half-done detection unit of work
 
+    # Post-import analysis: deterministic categorization (layer 1, Phase 10). New
+    # rows are uncategorized, so the rule matcher fills the ones a rule covers.
+    # Same non-fatal contract as transfer auto-linking above: the import is already
+    # committed, so a failure here logs and reports 0 rather than 500-ing — the user
+    # can still hit "Apply rules now" or categorize by hand.
+    auto_categorized = 0
+    if new:
+        try:
+            auto_categorized = apply_rules(session)
+        except Exception:  # noqa: BLE001 — convenience step, never fail the import
+            log.exception("rule auto-categorization failed after import; rows are committed")
+            session.rollback()
+
     return ImportSummary(
         batch_id=batch.id if batch else None,
         parsed=len(result.transactions),
@@ -132,6 +147,7 @@ def run_import(
         skipped=skipped,
         reconciliation=reconcile(result),
         transfers_auto_linked=auto_linked,
+        auto_categorized=auto_categorized,
     )
 
 

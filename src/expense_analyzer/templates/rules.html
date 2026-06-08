@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2 style="margin-top:0">Categorization rules</h2>
+  <div class="panel">
+    <p class="muted" style="margin:0 0 8px">
+      A rule assigns a category when its text appears (case-insensitive) in a
+      transaction's merchant — or its raw description when no merchant was extracted.
+      Rules run automatically on import; use Apply now to (re)categorize existing
+      transactions. A manual categorization is never overwritten.
+    </p>
+    <form method="post" action="/dashboard/rules/apply">
+      <button type="submit">Apply rules now</button>
+    </form>
+  </div>
+  <h2>Add a rule</h2>
+  <div class="panel">
+    {% if categories %}
+      <form method="post" action="/dashboard/rules">
+        <div class="cols">
+          <div style="flex:2; min-width:200px;">
+            <label for="pattern">Pattern (substring)</label>
+            <input id="pattern"
+                   name="pattern"
+                   value="{{ prefill_pattern }}"
+                   placeholder="BIEDRONKA"
+                   required>
+          </div>
+          <div style="flex:1; min-width:200px;">
+            <label for="category_id">Category</label>
+            <select id="category_id" name="category_id" required>
+              {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div style="flex:1; min-width:120px;">
+            <label for="priority">Priority</label>
+            <input id="priority" name="priority" type="number" value="0" step="1">
+          </div>
+        </div>
+        <p class="muted" style="font-size:13px; margin:8px 0 0;">
+          The highest-priority matching rule wins (ties: the older rule first).
+        </p>
+        <p>
+          <button type="submit">Add rule</button>
+        </p>
+      </form>
+    {% else %}
+      <p class="muted">
+        No expense or income categories yet. <a href="/dashboard">Create a category</a> first.
+      </p>
+    {% endif %}
+  </div>
+  {% if rules %}
+    <h2>Rules</h2>
+    <div class="panel">
+      <table class="table-cards">
+        <thead>
+          <tr>
+            <th>Priority</th>
+            <th>Pattern</th>
+            <th>Category</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rules %}
+            <tr>
+              <td data-label="Priority">{{ r.priority }}</td>
+              <td data-label="Pattern">{{ r.pattern }}</td>
+              <td data-label="Category">{{ category_names.get(r.category_id, "#" ~ r.category_id) }}</td>
+              <td>
+                <form class="hstack"
+                      method="post"
+                      action="/dashboard/rules/{{ r.id }}/delete"
+                      onsubmit="return confirm('Delete this rule?');">
+                  <button class="ghost" type="submit">Delete</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+{% endblock %}

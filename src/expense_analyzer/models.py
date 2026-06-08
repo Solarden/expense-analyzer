@@ -313,6 +313,32 @@ class Subscription(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utc_now)
 
 
+class Rule(SQLModel, table=True):
+    """A categorization rule — layer 1 of categorization (design §5, §7.7).
+
+    The first, deterministic categorization layer: a case-insensitive substring
+    ``pattern`` matched against a transaction's ``merchant_normalized`` (falling
+    back to ``raw_description`` when no merchant was extracted) assigns
+    ``category_id``. Spending is repetitive, so a handful of substring rules covers
+    most of it without any ML. ``priority`` orders the rules — the highest-priority
+    matching rule wins, ties broken by ``id`` (the older rule first).
+
+    Rules run automatically on import and on demand ("Apply rules now"). The pure
+    matcher lives in :mod:`expense_analyzer.rules`; the DB side (CRUD + apply) in
+    :mod:`expense_analyzer.queries.rules`. A rule only ever (re)categorizes a row
+    that is uncategorized or was itself set by a rule (``source = rule``) — a
+    human's manual categorization is never overwritten.
+    """
+
+    __tablename__ = "rule"
+
+    id: int | None = Field(default=None, primary_key=True)
+    pattern: str  # case-insensitive substring matched against merchant / description
+    category_id: int = Field(foreign_key="category.id", index=True)
+    priority: int = Field(default=0)  # higher wins; ties broken by id (older first)
+    created_at: datetime = Field(default_factory=utc_now)
+
+
 class LoanRateChange(SQLModel, table=True):
     """A base-rate observation for a variable-rate loan (e.g. a WIBOR fix).
 
