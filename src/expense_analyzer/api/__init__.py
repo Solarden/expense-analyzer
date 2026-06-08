@@ -12,6 +12,7 @@ app factory.
 from expense_analyzer.api.endpoints import (
     auth,
     budgets,
+    categorization,
     health,
     home,
     home_assistant,
@@ -39,6 +40,7 @@ routers = (
     budgets.router,
     subscriptions.router,
     rules.router,
+    categorization.router,
     investments.router,
     net_worth.router,
     home_assistant.router,

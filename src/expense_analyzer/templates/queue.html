@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2 style="margin-top:0">Review queue</h2>
+  <div class="panel">
+    <p class="muted" style="margin:0 0 8px">
+      Transactions still without a category. The classifier (trained on your
+      confirmed categorizations) suggests one for each — accept it or pick another.
+      Train &amp; classify auto-applies the confident predictions and leaves the rest
+      here. Tagging a row teaches the next run.
+    </p>
+    <form method="post" action="/dashboard/queue/classify">
+      <button type="submit">Train &amp; classify now</button>
+    </form>
+  </div>
+  <div class="panel">
+    {% if page.rows %}
+      {% if not page.trained %}
+        <p class="muted" style="margin:0 0 10px">
+          Not enough categorized transactions to train the classifier yet — no
+          suggestions until a few more are tagged.
+        </p>
+      {% endif %}
+      <table class="table-cards">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th class="w-full">Description</th>
+            <th class="num">Amount</th>
+            <th>Suggestion</th>
+            <th>Categorize</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in page.rows %}
+            {% set tx = row.transaction %}
+            <tr>
+              <td class="muted whitespace-nowrap" data-label="Date">{{ tx.booked_date | dpl }}</td>
+              <td>
+                {% if tx.merchant_normalized %}
+                  <strong>{{ tx.merchant_normalized }}</strong>
+                  <br>
+                {% endif %}
+                <span class="muted">{{ tx.raw_description }}</span>
+              </td>
+              <td class="num {{ 'neg' if tx.amount < 0 else 'pos' }}"
+                  data-label="Amount">{{ tx.amount | pln }}</td>
+              <td data-label="Suggestion">
+                {% if row.suggestion %}
+                  <span>{{ category_names.get(row.suggestion.category_id, "#" ~ row.suggestion.category_id) }}</span>
+                  <span class="muted text-[12px]">{{ (row.suggestion.confidence * 100) | round | int }}%</span>
+                {% else %}
+                  <span class="muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <form class="hstack md:flex-nowrap"
+                      method="post"
+                      action="/dashboard/queue/{{ tx.id }}/categorize?page={{ page.page }}">
+                  <select name="category_id" aria-label="Category">
+                    <option value="">— none —</option>
+                    {% for c in categories %}
+                      <option value="{{ c.id }}"
+                              {% if row.suggestion and c.id == row.suggestion.category_id %}selected{% endif %}>
+                        {{ c.name }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                  <select name="scope" aria-label="Scope">
+                    {% for s in scopes %}
+                      <option value="{{ s }}" {% if s == tx.scope.value %}selected{% endif %}>{{ s }}</option>
+                    {% endfor %}
+                  </select>
+                  <button type="submit">Save</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div class="pager">
+        <a class="btn"
+           href="?page={{ page.page - 1 }}"
+           {% if not page.has_prev %}aria-disabled="true"{% endif %}>← Prev</a>
+        <span class="muted text-center max-md:order-first max-md:basis-full">Page {{ page.page }} of {{ page.pages }} · {{ page.total }} to review</span>
+        <a class="btn"
+           href="?page={{ page.page + 1 }}"
+           {% if not page.has_next %}aria-disabled="true"{% endif %}>Next →</a>
+      </div>
+    {% else %}
+      <p class="muted">
+        Nothing to review — every transaction has a category.
+        <a href="/dashboard/transactions">View transactions →</a>
+      </p>
+    {% endif %}
+  </div>
+{% endblock %}
