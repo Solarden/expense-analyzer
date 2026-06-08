@@ -147,6 +147,38 @@ class Settings(BaseSettings):
     # simply wait in the queue.
     classifier_min_training_samples: int = Field(default=25, ge=2)
 
+    # --- Categorization embeddings (layer 3, Phase 12) -----------------------
+    # The "weird cases" fallback (design §7.7 point 3): embed each transaction and
+    # find the most similar already-categorized one (kNN). Decorates the review
+    # queue with that nearest example — a suggestion only, never auto-applied, so a
+    # human still confirms the tag. No egress: the sentence-transformers model is
+    # baked into the Docker image at build time and read offline at runtime (see the
+    # Dockerfile). See embeddings.py / queries/embeddings.py.
+    #
+    # On by default, but fail-safe: if the model can't be loaded (e.g. a dev box
+    # without the weights, or any offline process with nothing cached) the queue
+    # simply shows no layer-3 hints. Set this False to skip the heavy path entirely.
+    embeddings_enabled: bool = True
+    # The sentence-transformers model. Multilingual (Polish bank descriptions) and
+    # small enough for CPU inference on a Pi. Must be bundled in the image; changing
+    # it means re-bundling. Overridable via EA_EMBEDDINGS_MODEL.
+    embeddings_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    # Pin the model to an exact commit so the build is reproducible and the bundled
+    # weights can't change under us. The runtime loader passes this revision too:
+    # with HF_HUB_OFFLINE a commit-hash download has no "main" ref, so the offline
+    # load must ask for the same revision it was bundled with. Change this in lockstep
+    # with embeddings_model (a revision belongs to one repo).
+    embeddings_model_revision: str = "e8f8c211226b894fcb81acc59f3b34ba3efd5f42"
+    # How many nearest labelled neighbours vote on the category for a queued row.
+    embeddings_neighbors: int = Field(default=5, ge=1)
+    # A neighbour below this cosine similarity (0..1) is too far to be a useful hint,
+    # so no suggestion is shown — keeps the queue from guessing on novel merchants
+    # that resemble nothing you've tagged.
+    embeddings_min_similarity: float = Field(default=0.45, ge=0.0, le=1.0)
+    # Don't build the index until at least this many confirmed labels exist (same
+    # cold-start rationale as the classifier); also needs >= 2 distinct categories.
+    embeddings_min_training_samples: int = Field(default=25, ge=2)
+
     @field_validator("timezone")
     @classmethod
     def _validate_timezone(cls, value: str) -> str:

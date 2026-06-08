@@ -24,6 +24,7 @@ from expense_analyzer.config import get_settings
 from expense_analyzer.models import Scope
 from expense_analyzer.queries import categories as category_queries
 from expense_analyzer.queries import classifier as classifier_queries
+from expense_analyzer.queries import embeddings as embeddings_queries
 from expense_analyzer.templating import templates
 
 router = APIRouter(
@@ -64,6 +65,13 @@ def queue_page(
         session, page=page_num, page_size=get_settings().page_size
     )
 
+    # Layer 3 (Phase 12): the nearest already-categorized transaction for each
+    # queued row, keyed by tx id. A suggestion only — fail-safe to {} (cold start,
+    # disabled, or model unavailable), so the queue renders either way.
+    neighbors = embeddings_queries.neighbor_suggestions(
+        session, [r.transaction for r in result.rows]
+    )
+
     categories = category_queries.list_categories(session)
     return templates.TemplateResponse(
         request,
@@ -71,6 +79,7 @@ def queue_page(
         {
             "user": user,
             "page": result,
+            "neighbors": neighbors,
             "categories": categories,
             "category_names": {c.id: c.name for c in categories if c.id is not None},
             "scopes": [s.value for s in Scope],
