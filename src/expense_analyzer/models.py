@@ -147,6 +147,9 @@ class Transaction(SQLModel, table=True):
 
     raw_description: str
     merchant_normalized: str | None = Field(default=None)  # cleaned up, used by rules later
+    note: str | None = Field(
+        default=None
+    )  # free-text human annotation (Phase 13); not categorization
 
     category_id: int | None = Field(default=None, foreign_key="category.id", index=True)
     scope: Scope = Field(default=Scope.private)

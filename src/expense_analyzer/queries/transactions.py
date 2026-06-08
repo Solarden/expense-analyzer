@@ -9,15 +9,26 @@ the page query and its ``COUNT`` can never drift apart.
 import re
 from dataclasses import dataclass
 from datetime import date
+from uuid import uuid4
 
 from sqlalchemy import func
 from sqlmodel import Session, col, select
 from sqlmodel.sql.expression import SelectOfScalar
 
-from expense_analyzer.models import Scope, Transaction, TxSource
+from expense_analyzer.clock import utc_now
+from expense_analyzer.importers.merchant import normalize_merchant
+from expense_analyzer.models import ImportBatch, ImportStatus, Scope, Transaction, TxSource
 
 # Sentinel for the category filter: match rows with no category at all.
 UNCATEGORIZED = "none"
+
+# Manual (hand-entered) transactions all live in one reuse-or-create batch — the
+# batch is just the NOT-NULL container ``import_batch_id`` requires, never a unit
+# you'd bulk-roll-back. A row's membership in this batch (not its ``source``, which
+# becomes ``manual`` the moment anyone categorizes an *imported* row) is what marks
+# it as a hand-entered, fully-editable, individually-deletable transaction.
+MANUAL_BATCH_SOURCE = "Manual"
+MANUAL_BATCH_FILENAME = "(manual entries)"
 
 _MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
 
@@ -149,6 +160,162 @@ def set_category(
     tx.category_id = category_id
     tx.scope = scope
     tx.source = TxSource.manual
+    session.add(tx)
+    session.commit()
+
+    return tx
+
+
+def get_transaction(session: Session, tx_id: int) -> Transaction | None:
+    """Load a single non-deleted transaction (the edit form's subject)."""
+    tx = session.get(Transaction, tx_id)
+    if tx is None or tx.deleted_at is not None:
+        return None
+
+    return tx
+
+
+def ensure_manual_batch(session: Session) -> ImportBatch:
+    """Find (or lazily create) the single active batch that owns manual entries."""
+    batch = session.exec(
+        select(ImportBatch).where(
+            ImportBatch.source == MANUAL_BATCH_SOURCE,
+            ImportBatch.status == ImportStatus.active,
+        )
+    ).first()
+    if batch is None:
+        batch = ImportBatch(
+            source=MANUAL_BATCH_SOURCE,
+            filename=MANUAL_BATCH_FILENAME,
+            record_count=0,
+            status=ImportStatus.active,
+        )
+        session.add(batch)
+        session.flush()  # assign batch.id
+
+    return batch
+
+
+def is_manual_entry(session: Session, tx: Transaction) -> bool:
+    """True if ``tx`` was hand-entered (lives in the Manual batch) — and so may be
+    fully edited and individually deleted, unlike a bank-imported row."""
+    batch = session.get(ImportBatch, tx.import_batch_id)
+
+    return batch is not None and batch.source == MANUAL_BATCH_SOURCE
+
+
+def create_manual_transaction(
+    session: Session,
+    *,
+    account_id: int,
+    booked_date: date,
+    amount: int,
+    description: str,
+    category_id: int | None,
+    scope: Scope,
+    note: str | None,
+    owner_id: int | None,
+) -> Transaction:
+    """Hand-enter a transaction (mainly cash — no CSV path otherwise).
+
+    ``fingerprint`` is a fresh uuid, **not** a content hash: two identical cash
+    operations (e.g. two 20 zł coffees on the same day) are genuinely distinct, so
+    content-based dedup would be wrong here. ``source = manual``.
+    """
+    batch = ensure_manual_batch(session)
+    tx = Transaction(
+        account_id=account_id,
+        import_batch_id=batch.id,
+        amount=amount,
+        booked_date=booked_date,
+        raw_description=description,
+        merchant_normalized=normalize_merchant(description),
+        note=note,
+        category_id=category_id,
+        scope=scope,
+        owner_id=owner_id,
+        source=TxSource.manual,
+        fingerprint=uuid4().hex,
+    )
+    session.add(tx)
+    batch.record_count += 1
+    session.add(batch)
+    session.commit()
+    session.refresh(tx)
+
+    return tx
+
+
+def update_transaction(
+    session: Session,
+    *,
+    tx_id: int,
+    category_id: int | None,
+    scope: Scope,
+    note: str | None,
+    account_id: int | None = None,
+    booked_date: date | None = None,
+    amount: int | None = None,
+    description: str | None = None,
+) -> Transaction | None:
+    """Edit a transaction from the edit form. Returns the row, or None if absent.
+
+    Category, scope and note are editable on every row. The bank-sourced fields
+    (account/date/amount/description) are only rewritten when the caller passes
+    them — the endpoint does so **only for manual entries**, since an imported
+    row's amount/date/description are the bank's source of truth and feed its
+    import fingerprint. A human touched it, so ``source = manual``.
+    """
+    tx = session.get(Transaction, tx_id)
+    if tx is None or tx.deleted_at is not None:
+        return None
+    tx.category_id = category_id
+    tx.scope = scope
+    tx.note = note
+    tx.source = TxSource.manual
+    if account_id is not None:
+        tx.account_id = account_id
+    if booked_date is not None:
+        tx.booked_date = booked_date
+    if amount is not None:
+        tx.amount = amount
+    if description is not None:
+        tx.raw_description = description
+        tx.merchant_normalized = normalize_merchant(description)
+    session.add(tx)
+    session.commit()
+    session.refresh(tx)
+
+    return tx
+
+
+def set_note(session: Session, *, tx_id: int, note: str | None) -> Transaction | None:
+    """Set (or clear) a transaction's free-text note. Returns the row, or None if
+    absent / deleted.
+
+    A note is an annotation, not categorization — so this deliberately does **not**
+    touch ``source`` (unlike :func:`set_category` / :func:`update_transaction`). It
+    works on any row, imported or manual.
+    """
+    tx = session.get(Transaction, tx_id)
+    if tx is None or tx.deleted_at is not None:
+        return None
+    tx.note = note
+    session.add(tx)
+    session.commit()
+    session.refresh(tx)
+
+    return tx
+
+
+def soft_delete_transaction(session: Session, *, tx_id: int) -> Transaction | None:
+    """Soft-delete a transaction (set ``deleted_at``). Returns the row, or None if
+    absent / already deleted. Caller gates this to manual entries — imported rows
+    are removed by rolling back their import batch, not one at a time."""
+    tx = session.get(Transaction, tx_id)
+    if tx is None or tx.deleted_at is not None:
+        return None
+    tx.deleted_at = utc_now()
     session.add(tx)
     session.commit()
 

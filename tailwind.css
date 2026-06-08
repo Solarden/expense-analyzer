@@ -49,8 +49,42 @@
   header h1 {
     @apply m-0 text-base;
   }
+  header nav {
+    @apply flex flex-wrap items-center gap-x-4 gap-y-2;
+  }
+  /* Icon + small label: compact and less shouty than the old big text links,
+   * while every item stays readable (icon-only is too cryptic for 14 entries). */
   header nav a {
-    @apply mr-3.5 text-muted no-underline hover:text-fg;
+    @apply inline-flex items-center gap-1.5 text-[12px] leading-none text-muted no-underline hover:text-fg;
+  }
+  /* Grouped nav: 14 links collapse into a few labelled dropdowns (Money, Planning,
+   * …). Pure-CSS hover menu — no JS. Opens on :hover (mouse) and :focus-within
+   * (keyboard tab / touch tap on the focusable trigger). The menu overlays
+   * (absolute) so it never shifts the page, and sits flush under the trigger
+   * (top-full, no gap) so the mouse can cross into it without the hover dropping. */
+  header nav .nav-group {
+    @apply relative;
+  }
+  header nav .nav-trigger {
+    @apply inline-flex cursor-pointer select-none items-center gap-1 text-[12px] leading-none text-muted;
+  }
+  header nav .nav-trigger::after {
+    content: "▾";
+    @apply text-[10px] opacity-70;
+  }
+  header nav .nav-group:hover .nav-trigger,
+  header nav .nav-group:focus-within .nav-trigger {
+    @apply text-fg;
+  }
+  header nav .menu {
+    @apply absolute left-0 top-full z-40 hidden min-w-[180px] flex-col gap-1 rounded-md border border-line bg-panel p-2 pt-3 shadow-lg;
+  }
+  header nav .nav-group:hover .menu,
+  header nav .nav-group:focus-within .menu {
+    @apply flex;
+  }
+  header nav .menu a {
+    @apply gap-2 text-[13px];
   }
 
   main {
@@ -127,6 +161,12 @@
   }
   button.ghost {
     @apply border-line bg-transparent text-muted;
+  }
+  /* Multi-line text input (transaction note). Mirrors the input look but no fixed
+   * h-9. Width comes from the form:not(.hstack) rule above. */
+  textarea {
+    @apply max-w-full rounded-md border border-line bg-bg px-2 py-1.5 text-fg;
+    font: inherit;
   }
 
   code {
@@ -222,6 +262,57 @@
   a.btn[aria-disabled="true"] {
     @apply pointer-events-none text-muted opacity-50;
   }
+
+  /* Small, unobtrusive square icon action (row Save/Edit/Note). h-9 to line up
+   * with the selects in the same row; borderless + muted so it doesn't shout.
+   * Works for both <button> (overrides the accent base button) and <a>. */
+  .icon-btn {
+    @apply inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted no-underline hover:bg-line hover:text-fg;
+  }
+  /* The commit action (Save category) reads as the primary one. */
+  .icon-btn.primary {
+    @apply text-accent hover:text-fg;
+  }
+  /* A row that already has a note: its note icon glows so it's spottable at a
+   * glance (the title attribute carries the note text for a hover peek). */
+  .icon-btn.has-note {
+    @apply text-accent;
+  }
+
+  /* Pure-CSS modal via :target — no JS, so it works offline and degrades to a
+   * normal anchor jump. The note button is a link to #note-<id>; the matching
+   * .modal becomes a centred overlay. A backdrop link (and Close) point at a
+   * non-existent #close- target, which clears :target and hides it again. */
+  .modal {
+    @apply hidden;
+  }
+  .modal:target {
+    @apply fixed inset-0 z-50 flex items-center justify-center p-4;
+  }
+  .modal-backdrop {
+    @apply absolute inset-0 bg-black/60;
+  }
+  .modal-card {
+    @apply relative z-10 w-full max-w-[460px] rounded-lg border border-line bg-panel p-4;
+  }
+  .modal-card h3 {
+    @apply m-0 mb-2 text-[15px] uppercase tracking-wider text-muted;
+  }
+}
+
+/* Inline SVG icons (nav + row actions) drawn from the sprite in base.html. stroke
+ * is an inherited property, so the symbol paths pick up currentColor from the link
+ * — no per-icon styling needed. Plain CSS (stroke isn't a Tailwind utility). */
+.nav-ico,
+.act-ico {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* Responsive data tables: below the md breakpoint a wide table is unreadable and
