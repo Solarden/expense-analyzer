@@ -100,7 +100,7 @@
           Home</a>
           {% for label, items in nav_groups %}
             <div class="nav-group">
-              <span class="nav-trigger" tabindex="0">{{ label }}</span>
+              <span class="nav-trigger" tabindex="0" role="button" aria-haspopup="true">{{ label }}</span>
               <div class="menu">
                 {% for href, item_label, icon in items %}
                   <a href="{{ href }}">

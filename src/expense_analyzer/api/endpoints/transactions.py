@@ -226,7 +226,7 @@ def add_transaction(
         owner_id=user.id,
     )
 
-    return RedirectResponse(_LIST_PATH, status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(_safe_return_to(form.return_to), status_code=status.HTTP_303_SEE_OTHER)
 
 
 def _edit_context(

@@ -103,13 +103,17 @@
                 {% endif %}
               </td>
               <td>
-                {% if b.status.value == "active" %}
+                {# The Manual batch holds hand-entered rows (deleted one at a time
+                   from the transactions list), so it offers no bulk rollback. #}
+                {% if b.status.value == "active" and b.source != "Manual" %}
                   <form class="hstack"
                         method="post"
                         action="/dashboard/batches/{{ b.id }}/rollback"
                         onsubmit="return confirm('Roll back this import? Its transactions will be marked deleted.');">
                     <button class="ghost" type="submit">Roll back</button>
                   </form>
+                {% elif b.source == "Manual" %}
+                  <span class="muted text-[12px]">edit on Transactions</span>
                 {% endif %}
               </td>
             </tr>

@@ -177,3 +177,40 @@ def test_set_note_sets_clears_and_leaves_source_untouched(
 
 def test_set_note_missing_returns_none(db_session: Session):
     assert transactions.set_note(db_session, tx_id=9999, note="x") is None
+
+
+def test_update_note_only_does_not_flip_source(
+    db_session: Session,
+    account: Account,
+    make_category: Callable[..., Category],
+    make_transaction: Callable[..., Transaction],
+):
+    """Editing an imported row's note (category/scope unchanged) must NOT flip
+    source to manual — that would wrongly shield it from rule re-categorization."""
+    food = make_category(name="Food", kind=CategoryKind.expense)
+    tx = make_transaction(account_id=account.id, amount=-500, category_id=food.id)
+    assert tx.source is TxSource.import_csv
+
+    # Same category and scope, only a new note.
+    updated = transactions.update_transaction(
+        db_session, tx_id=tx.id, category_id=food.id, scope=tx.scope, note="just a note"
+    )
+    assert updated.note == "just a note"
+    assert updated.source is TxSource.import_csv  # untouched
+
+    # Now actually change the category → it counts as a human categorization.
+    changed = transactions.update_transaction(
+        db_session, tx_id=tx.id, category_id=None, scope=tx.scope, note="just a note"
+    )
+    assert changed.source is TxSource.manual
+
+
+def test_soft_delete_decrements_batch_record_count(db_session: Session, account: Account):
+    a = _make_manual(db_session, account)
+    _make_manual(db_session, account)
+    batch = transactions.ensure_manual_batch(db_session)
+    assert batch.record_count == 2
+
+    transactions.soft_delete_transaction(db_session, tx_id=a.id)
+    db_session.refresh(batch)
+    assert batch.record_count == 1  # kept in step with the delete

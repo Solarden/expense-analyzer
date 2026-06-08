@@ -310,6 +310,68 @@ def test_note_endpoint_missing_404(auth_client: TestClient):
     )
 
 
+def test_manual_batch_rollback_is_rejected(
+    auth_client: TestClient, db_session: Session, account: Account
+):
+    """Rolling back the Manual batch would wipe every cash entry at once — refuse it
+    (manual rows are deleted one at a time)."""
+    tx = transactions.create_manual_transaction(
+        db_session,
+        account_id=account.id,
+        booked_date=date(2026, 5, 10),
+        amount=-2000,
+        description="Coffee",
+        category_id=None,
+        scope=Scope.private,
+        note=None,
+        owner_id=None,
+    )
+    batch = transactions.ensure_manual_batch(db_session)
+    resp = auth_client.post(f"/dashboard/batches/{batch.id}/rollback")
+
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    db_session.expire_all()
+    assert transactions.get_transaction(db_session, tx.id) is not None  # survived
+
+
+def test_manual_batch_offers_no_rollback_button(
+    auth_client: TestClient, db_session: Session, account: Account
+):
+    transactions.create_manual_transaction(
+        db_session,
+        account_id=account.id,
+        booked_date=date(2026, 5, 10),
+        amount=-2000,
+        description="Coffee",
+        category_id=None,
+        scope=Scope.private,
+        note=None,
+        owner_id=None,
+    )
+    batch = transactions.ensure_manual_batch(db_session)
+    resp = auth_client.get("/dashboard")
+    assert f"/dashboard/batches/{batch.id}/rollback" not in resp.text
+
+
+def test_add_redirects_to_return_to_preserving_filters(auth_client: TestClient, account: Account):
+    return_to = "/dashboard/transactions?account_id=1&month=2026-05"
+    resp = auth_client.post(
+        "/dashboard/transactions/add",
+        data={
+            "account_id": account.id,
+            "booked_date": "2026-05-10",
+            "amount": "12",
+            "direction": "expense",
+            "description": "Snack",
+            "scope": "private",
+            "return_to": return_to,
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
+    assert resp.headers["location"] == return_to
+
+
 def test_nav_uses_icon_sprite_and_groups(auth_client: TestClient):
     """The redesigned nav renders icon + label from the inline sprite, collapsed
     into labelled dropdown groups."""
@@ -317,6 +379,7 @@ def test_nav_uses_icon_sprite_and_groups(auth_client: TestClient):
     assert 'id="i-transactions"' in resp.text  # sprite present
     assert 'class="nav-ico"' in resp.text  # icon links rendered
     # Grouped into hover dropdowns (Money / Planning / …) instead of 14 flat links.
+    assert 'class="nav-trigger"' in resp.text
     for group in ("Money", "Planning", "Categorize", "Wealth", "System"):
-        assert f'class="nav-trigger" tabindex="0">{group}</span>' in resp.text
+        assert f">{group}</span>" in resp.text
     assert "Transactions" in resp.text  # the items still live inside the menus

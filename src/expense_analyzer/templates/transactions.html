@@ -69,6 +69,7 @@
           action="/dashboard/transactions/add"
           style="flex-wrap:wrap;
                  gap:10px">
+      <input type="hidden" name="return_to" value="{{ return_to }}">
       <select name="account_id"
               aria-label="Account"
               required
@@ -202,7 +203,10 @@
                 </div>
                 <div id="note-{{ tx.id }}" class="modal">
                   <a href="#close-note" class="modal-backdrop" aria-label="Close"></a>
-                  <div class="modal-card">
+                  <div class="modal-card"
+                       role="dialog"
+                       aria-modal="true"
+                       aria-label="Edit note">
                     <h3>Note</h3>
                     <p class="muted">{{ tx.merchant_normalized or tx.raw_description }} · {{ tx.booked_date | dpl }}</p>
                     <form method="post" action="/dashboard/transactions/{{ tx.id }}/note">

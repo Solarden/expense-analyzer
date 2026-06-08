@@ -269,10 +269,14 @@ def update_transaction(
     tx = session.get(Transaction, tx_id)
     if tx is None or tx.deleted_at is not None:
         return None
+    # Flag a human (re)categorization only when the category or scope actually
+    # changed — editing just the note must not flip ``source`` to manual, which
+    # would wrongly shield the row from future rule re-categorization.
+    if tx.category_id != category_id or tx.scope != scope:
+        tx.source = TxSource.manual
     tx.category_id = category_id
     tx.scope = scope
     tx.note = note
-    tx.source = TxSource.manual
     if account_id is not None:
         tx.account_id = account_id
     if booked_date is not None:
@@ -317,6 +321,12 @@ def soft_delete_transaction(session: Session, *, tx_id: int) -> Transaction | No
         return None
     tx.deleted_at = utc_now()
     session.add(tx)
+    # Keep the owning batch's record_count (the home page's "Records" column, and
+    # what a rollback would remove) in step with the soft delete.
+    batch = session.get(ImportBatch, tx.import_batch_id)
+    if batch is not None and batch.record_count > 0:
+        batch.record_count -= 1
+        session.add(batch)
     session.commit()
 
     return tx

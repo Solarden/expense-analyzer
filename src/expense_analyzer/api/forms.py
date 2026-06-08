@@ -68,6 +68,7 @@ class ManualTransactionForm(BaseModel):
     category_id: str = ""
     scope: Scope = Scope.private
     note: str = ""
+    return_to: str = ""
 
 
 class NoteForm(BaseModel):
