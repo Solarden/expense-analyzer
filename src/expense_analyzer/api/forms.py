@@ -40,6 +40,15 @@ class AccountForm(BaseModel):
 class CategoryForm(BaseModel):
     name: str
     kind: CategoryKind
+    color: str = ""  # "#rrggbb" from <input type="color">, or "" for no colour
+
+
+class CategoryColorForm(BaseModel):
+    """Set one category's colour from the inline picker. ``color`` is a "#rrggbb"
+    string; ``clear`` (a present submit button) wins and resets it to none."""
+
+    color: str = ""
+    clear: str = ""
 
 
 class UserForm(BaseModel):

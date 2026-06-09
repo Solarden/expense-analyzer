@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block content %}
   <div class="cols">
     <div class="panel">
@@ -46,13 +47,29 @@
             <tr>
               <th>Name</th>
               <th>Kind</th>
+              <th>Colour</th>
             </tr>
           </thead>
           <tbody>
             {% for c in categories %}
               <tr>
-                <td>{{ c.name }}</td>
+                <td>{{ ui.swatch(c.color) }}{{ c.name }}</td>
                 <td class="muted">{{ c.kind.value }}</td>
+                <td>
+                  {# Inline colour picker per category — there's no full category
+                     edit, so this is how existing categories get a colour. Set
+                     upserts the colour; Clear (only when set) resets to none. #}
+                  <form class="hstack"
+                        method="post"
+                        action="/dashboard/categories/{{ c.id }}/color">
+                    <input type="color"
+                           name="color"
+                           value="{{ c.color or '#4f8cff' }}"
+                           aria-label="Colour for {{ c.name }}">
+                    <button class="ghost" type="submit">Set</button>
+                    {% if c.color %}<button class="ghost" type="submit" name="clear" value="1">Clear</button>{% endif %}
+                  </form>
+                </td>
               </tr>
             {% endfor %}
           </tbody>
@@ -68,6 +85,8 @@
         <select id="cat_kind" name="kind">
           {% for k in category_kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}
         </select>
+        <label for="cat_color">Colour</label>
+        <input id="cat_color" name="color" type="color" value="#4f8cff">
         <p>
           <button type="submit">Add category</button>
         </p>

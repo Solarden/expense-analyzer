@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block content %}
   <h2 style="margin-top:0">Budgets</h2>
   <div class="panel">
@@ -152,7 +153,9 @@
         <tbody>
           {% for b in budgets %}
             <tr>
-              <td data-label="Category">{{ category_names.get(b.category_id, "#" ~ b.category_id) }}</td>
+              <td data-label="Category">
+                {{ ui.swatch(category_colors.get(b.category_id) ) }}{{ category_names.get(b.category_id, "#" ~ b.category_id) }}
+              </td>
               <td data-label="Applies to">
                 {% if b.month %}
                   {{ b.month }} <span class="muted">override</span>

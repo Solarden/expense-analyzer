@@ -40,6 +40,7 @@ def _context(
     """Shared context: the month's budget overview, the set form, and the defined
     budgets list (recurring defaults + overrides). ``months`` is fetched once by
     the handler and threaded in (it also resolves ``selected_month``)."""
+    all_categories = category_queries.list_categories(session)
     return {
         "user": user,
         "months": months,
@@ -47,9 +48,8 @@ def _context(
         "statuses": budget_queries.budget_overview(session, selected_month),
         "budgets": budget_queries.list_budgets(session),
         "categories": budget_queries.budgetable_categories(session),
-        "category_names": {
-            c.id: c.name for c in category_queries.list_categories(session) if c.id is not None
-        },
+        "category_names": {c.id: c.name for c in all_categories if c.id is not None},
+        "category_colors": {c.id: c.color for c in all_categories if c.id is not None},
         **extra,
     }
 

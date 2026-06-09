@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block content %}
   <h2 style="margin-top:0">Transactions</h2>
   <div class="panel">
@@ -148,6 +149,7 @@
                  in the actions cell via the HTML5 form= attribute, so one Save still
                  submits both. #}
               <td data-label="Category">
+                {{ ui.swatch(category_colors.get(tx.category_id) ) }}
                 <select name="category_id"
                         form="cat-{{ tx.id }}"
                         aria-label="Category"

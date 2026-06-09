@@ -16,6 +16,10 @@ from expense_analyzer.templating import templates
 # Months of history on the overview trend chart.
 TREND_MONTHS = 12
 
+# Bar colour for a category with no colour set (and the uncategorized bucket), so
+# the chart degrades to a single neutral hue rather than the old all-red series.
+DEFAULT_CATEGORY_COLOR = "#4f8cff"
+
 router = APIRouter(prefix="/dashboard", tags=["overview"], dependencies=[Depends(require_user)])
 
 
@@ -29,7 +33,9 @@ def stats_page(
     months = stats.available_months(session)
     selected = stats.default_month(months, month)
 
-    category_names = {c.id: c.name for c in categories.list_categories(session) if c.id is not None}
+    category_list = categories.list_categories(session)
+    category_names = {c.id: c.name for c in category_list if c.id is not None}
+    category_colors = {c.id: c.color for c in category_list if c.id is not None}
     # One transfer-excluded scan feeds both the month summary and the trend.
     spendable = stats.spendable_transactions(session)
     summary = stats.month_summary(spendable, selected, category_names)
@@ -49,6 +55,12 @@ def stats_page(
             "category_chart": {
                 "labels": [c.name for c in summary.by_category],
                 "data": [c.total for c in summary.by_category],
+                # Per-bar colours from each category (uncategorized / colourless
+                # fall back to the neutral default) — breaks the all-red series.
+                "colors": [
+                    category_colors.get(c.category_id) or DEFAULT_CATEGORY_COLOR
+                    for c in summary.by_category
+                ],
             },
             "trend_chart": {
                 "labels": [m.month for m in trend],

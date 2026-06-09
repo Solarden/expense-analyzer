@@ -34,6 +34,7 @@ router = APIRouter(
 @router.get("", response_class=HTMLResponse)
 def subscriptions_page(request: Request, user: CurrentUser, session: DbSession) -> HTMLResponse:
     views = subscription_queries.subscription_overview(session, get_settings(), today=local_today())
+    all_categories = category_queries.list_categories(session)
 
     return templates.TemplateResponse(
         request,
@@ -44,9 +45,8 @@ def subscriptions_page(request: Request, user: CurrentUser, session: DbSession) 
             "confirmed": [v for v in views if v.is_confirmed],
             "dismissed": [v for v in views if v.is_dismissed],
             "monthly_total": subscription_queries.active_monthly_cost(views),
-            "category_names": {
-                c.id: c.name for c in category_queries.list_categories(session) if c.id is not None
-            },
+            "category_names": {c.id: c.name for c in all_categories if c.id is not None},
+            "category_colors": {c.id: c.color for c in all_categories if c.id is not None},
         },
     )
 
