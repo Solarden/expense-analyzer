@@ -166,6 +166,11 @@
   form:not(.hstack) :is(input, select, textarea) {
     @apply w-full;
   }
+  /* File input: its native "Choose file" button + filename text sit top-aligned in
+   * our fixed-height field. inline-flex + items-center vertically centres them. */
+  input[type="file"] {
+    @apply inline-flex items-center;
+  }
   button {
     @apply cursor-pointer border-accent-strong bg-accent-strong text-white transition-colors hover:border-accent hover:bg-accent;
   }

@@ -15,6 +15,7 @@ from expense_analyzer.api.endpoints.core import (
     health,
     home_assistant,
     settings,
+    updates,
     upload,
     users,
 )
@@ -41,4 +42,5 @@ routers = (
     home_assistant.router,
     upload.router,
     users.router,
+    updates.router,
 )

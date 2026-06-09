@@ -7,11 +7,11 @@
   <div class="cards">
     <div class="card">
       <div class="k">Principal</div>
-      <div class="v num">{{ loan.principal | pln }}</div>
+      <div class="v">{{ loan.principal | pln }}</div>
     </div>
     <div class="card">
       <div class="k">Rate</div>
-      <div class="v num">
+      <div class="v">
         {{ "%.2f"|format(loan.rate_bp / 100) }}%
         {% if loan.rate_type.value == "variable" %}
           <span class="muted" style="font-size:14px;">+ {{ loan.base_rate_ref or "base" }}</span>

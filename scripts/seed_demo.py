@@ -18,7 +18,10 @@ from decimal import Decimal
 from sqlalchemy import delete
 from sqlmodel import Session, select
 
+from expense_analyzer.clock import utc_now
+from expense_analyzer.config import get_settings
 from expense_analyzer.db import get_engine
+from expense_analyzer.ha.update_notify import UpdateStatus, save_status
 from expense_analyzer.models import (
     Account,
     AccountType,
@@ -323,6 +326,14 @@ def main() -> None:
                 planned.mark_paid(session, planned_item_id=item.id, month=this_month)
 
         n_tx = len(session.exec(select(Transaction)).all())
+
+    # Fake an "update available" verdict so System → Updates has something to show.
+    # This is exactly the local file the cron check would write — no network here.
+    save_status(
+        UpdateStatus(current="v1.0.0", latest="v1.1.0", update_available=True),
+        path=get_settings().update_status_path,
+        checked_at=utc_now(),
+    )
 
     print("Demo data seeded.")
     print(f"  transactions: {n_tx}  |  rules applied: {applied}  |  transfers linked: {linked}")

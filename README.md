@@ -46,7 +46,8 @@ App: <http://127.0.0.1:8000> — health check at `/health`. Create a login user 
 
 To explore the app with something to click through, load a demo dataset — a few
 accounts, ~4 months of transactions, a variable-rate mortgage, an investment
-snapshot, budgets, planned cashflow items and rules:
+snapshot, budgets, planned cashflow items, rules, and a pending "update available"
+notification (so **System → Updates** has something to show):
 
 ```bash
 make migrate   # if you haven't already
@@ -132,8 +133,12 @@ make check-update   # is a newer release tagged? notify Home Assistant
 `scripts/check_update.sh` fetches tags from this repo and, if a newer
 **release tag** exists than the one deployed, publishes a retained
 `sensor.expense_analyzer_update` to Home Assistant (with `current` /
-`update_available` attributes) and fires an alert. It is **notify-only** — it
-never deploys; you run `make deploy` when you choose. The only egress is the git
+`update_available` attributes), fires an alert, and writes the verdict to
+`data/update_status.json`. The dashboard surfaces it read-only at **System →
+Updates** (`/dashboard/updates`) — "a new version is available, run `make deploy`",
+with a link to the release; the page only *reads* that file and never contacts the
+network itself. It is **notify-only** — it never deploys; you run `make deploy`
+when you choose. The only egress is the git
 fetch of our own repo (maintenance, not runtime — no Watchtower, no registry).
 
 This relies on release tags: tag what you want to ship with `git tag vX.Y.Z`
