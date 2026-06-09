@@ -26,8 +26,16 @@
   --color-fg: #e6e9ef;
   --color-muted: #9aa3b2;
   --color-accent: #4f8cff;
+  /* Darker accent for solid buttons only: white-on-#4f8cff is 3.2:1 (fails AA),
+   * but #4f8cff stays as-is for links/focus rings (5.2:1 on the dark bg). White
+   * on #3366cc is 5.4:1. WCAG 1.4.3. */
+  --color-accent-strong: #3366cc;
   --color-pos: #3fb950;
   --color-neg: #f0686b;
+  /* Field/secondary-control border. --color-line (#2a2f3a) is only ~1.3:1 on the
+   * panel, below the 3:1 that 1.4.11 wants for input boundaries; this is ~3.5:1
+   * while staying subtle. Structural dividers (tables, panels) keep --color-line. */
+  --color-field-border: #6b7280;
   --font-sans: system-ui, -apple-system, sans-serif;
 }
 
@@ -133,11 +141,13 @@
   }
   /* h-9 on every control so selects (forced line-height:normal), text inputs and
    * buttons line up at the same height in a row — without it buttons render ~3px
-   * taller than selects. */
+   * taller than selects. Bumped to h-10 (40px) below md so finger taps land
+   * comfortably; back to h-9 at md+ where a pointer is precise. They all scale
+   * together, so row alignment is preserved. */
   input,
   select,
   button {
-    @apply h-9 max-w-full rounded-md border border-line bg-bg px-2 text-fg;
+    @apply h-10 max-w-full rounded-md border border-field-border bg-bg px-2 text-fg md:h-9;
     font: inherit;
   }
   /* Custom dropdown chevron: the native arrow crowds the right border at our
@@ -157,15 +167,15 @@
     @apply w-full;
   }
   button {
-    @apply cursor-pointer border-accent bg-accent text-white;
+    @apply cursor-pointer border-accent-strong bg-accent-strong text-white;
   }
   button.ghost {
-    @apply border-line bg-transparent text-muted;
+    @apply border-field-border bg-transparent text-muted;
   }
   /* Multi-line text input (transaction note). Mirrors the input look but no fixed
    * h-9. Width comes from the form:not(.hstack) rule above. */
   textarea {
-    @apply max-w-full rounded-md border border-line bg-bg px-2 py-1.5 text-fg;
+    @apply max-w-full rounded-md border border-field-border bg-bg px-2 py-1.5 text-fg;
     font: inherit;
   }
 
@@ -178,6 +188,20 @@
   }
   footer a {
     @apply text-muted hover:text-fg;
+  }
+
+  /* Keyboard focus ring. The UA default is faint on our dark palette, so draw a
+   * clear accent outline — only for :focus-visible, so a mouse click never shows
+   * it. Scoped to interactive elements (incl. the focusable .nav-trigger). */
+  a:focus-visible,
+  button:focus-visible,
+  select:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  .nav-trigger:focus-visible,
+  .icon-btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
   }
 }
 
@@ -239,6 +263,19 @@
     font: inherit;
   }
 
+  /* Burger toggle — only rendered below md (md:hidden in the markup). Borderless
+   * icon button, sized like .icon-btn so it's a comfortable tap target. */
+  .nav-toggle {
+    @apply inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted hover:bg-line hover:text-fg;
+  }
+
+  /* Progressive disclosure: a control group that doesn't apply right now (the
+   * loan form's "Variable only" fields under a fixed rate). Visual cue only —
+   * the inputs are also disabled in JS so they don't post. */
+  .is-dimmed {
+    @apply opacity-50;
+  }
+
   .flash {
     @apply mb-4 rounded-md border border-pos bg-[#16321f] px-3.5 py-2.5 text-[#b9f6ca];
   }
@@ -264,7 +301,7 @@
   /* Link styled as a button — inline-flex + h-9 so it matches real <button>/select
    * height and centres its label (an inline-block link would top-align at h-9). */
   a.btn {
-    @apply inline-flex h-9 items-center whitespace-nowrap rounded-md border border-line bg-bg px-2 text-fg no-underline;
+    @apply inline-flex h-10 items-center whitespace-nowrap rounded-md border border-field-border bg-bg px-2 text-fg no-underline md:h-9;
   }
   a.btn[aria-disabled="true"] {
     @apply pointer-events-none text-muted opacity-50;
@@ -274,7 +311,7 @@
    * with the selects in the same row; borderless + muted so it doesn't shout.
    * Works for both <button> (overrides the accent base button) and <a>. */
   .icon-btn {
-    @apply inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted no-underline hover:bg-line hover:text-fg;
+    @apply inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted no-underline hover:bg-line hover:text-fg md:h-9 md:w-9;
   }
   /* The commit action (Save category) reads as the primary one. */
   .icon-btn.primary {
@@ -327,6 +364,36 @@
  * card. The header is hidden and each cell shows its column name from data-label.
  * Unlayered (after @layer blocks) so it wins over the base th/td rules on mobile. */
 @media (max-width: 767px) {
+  /* Mobile nav: collapsed behind the burger. When .is-open it stacks vertically
+   * and the dropdown groups expand statically — no hover, no second tap needed
+   * on a touch screen (the desktop hover/focus menus stay untouched at md+). */
+  header nav {
+    display: none;
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  header nav.is-open {
+    display: flex;
+  }
+  header nav .nav-group {
+    width: 100%;
+  }
+  /* The trigger becomes a plain group heading; drop its dropdown caret. */
+  header nav .nav-trigger::after {
+    content: "";
+  }
+  header nav .menu {
+    position: static;
+    display: flex;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    padding: 4px 0 4px 16px;
+    box-shadow: none;
+  }
+
   .table-cards thead {
     display: none;
   }

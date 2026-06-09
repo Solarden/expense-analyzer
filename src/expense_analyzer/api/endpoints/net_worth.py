@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 
 from expense_analyzer.api.deps import CurrentUser, DbSession
 from expense_analyzer.auth import require_user
+from expense_analyzer.models import AccountType
 from expense_analyzer.queries import net_worth
 from expense_analyzer.templating import templates
 
@@ -20,7 +21,30 @@ router = APIRouter(
 @router.get("", response_class=HTMLResponse)
 def net_worth_page(request: Request, user: CurrentUser, session: DbSession) -> HTMLResponse:
     balances = net_worth.account_balances(session)
-    total = sum(b.balance for b in balances)
+
+    # A single chart axis lets a large mortgage squash every asset bar to a hair,
+    # so split the figures: headline cards plus two independently-scaled charts.
+    # One pass derives every total and both chart series.
+    total = assets = liabilities = net_worth_excl_loans = 0
+    assets_chart: dict[str, list] = {"labels": [], "data": []}
+    liabilities_chart: dict[str, list] = {"labels": [], "data": []}
+    for b in balances:
+        total += b.balance
+        # "Net worth without the mortgage" — the number the household actually
+        # steers by month to month. Excludes every loan account, not just the
+        # largest.
+        if b.type != AccountType.loan:
+            net_worth_excl_loans += b.balance
+        if b.balance > 0:
+            assets += b.balance
+            assets_chart["labels"].append(b.name)
+            assets_chart["data"].append(b.balance)
+        elif b.balance < 0:
+            liabilities += b.balance
+            liabilities_chart["labels"].append(b.name)
+            # Signed (negative) so the chart agrees with the headline card: bars
+            # grow left from zero and tooltips show the same minus.
+            liabilities_chart["data"].append(b.balance)
 
     return templates.TemplateResponse(
         request,
@@ -29,10 +53,11 @@ def net_worth_page(request: Request, user: CurrentUser, session: DbSession) -> H
             "user": user,
             "balances": balances,
             "total": total,
-            # Assets (positive) vs debt (negative) for a simple chart.
-            "breakdown_chart": {
-                "labels": [b.name for b in balances],
-                "data": [b.balance for b in balances],
-            },
+            "assets": assets,
+            "liabilities": liabilities,
+            "net_worth_excl_loans": net_worth_excl_loans,
+            # Two charts on their own scales (built in the loop above).
+            "assets_chart": assets_chart,
+            "liabilities_chart": liabilities_chart,
         },
     )

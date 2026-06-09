@@ -86,13 +86,29 @@
       <symbol id="i-note" viewBox="0 0 24 24">
       <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
       </symbol>
+      <symbol id="i-menu" viewBox="0 0 24 24">
+      <path d="M3 6h18M3 12h18M3 18h18" />
+      </symbol>
     </svg>
     <header>
       <h1>💸 Expense Analyzer</h1>
       {% if user %}
+        {# Burger: shown only below md. Toggles the nav (hidden on a phone until
+           tapped) and flips aria-expanded for assistive tech. Inline handler —
+           same plain-JS idiom as the filter auto-submit, no framework. #}
+        <button class="nav-toggle md:hidden"
+                type="button"
+                aria-expanded="false"
+                aria-controls="primary-nav"
+                aria-label="Toggle menu"
+                onclick="const n=document.getElementById('primary-nav');this.setAttribute('aria-expanded',n.classList.toggle('is-open'));">
+          <svg class="nav-ico" aria-hidden="true">
+            <use href="#i-menu"></use>
+          </svg>
+        </button>
         {# Home stays a standalone link; the rest collapse into labelled dropdowns. #}
         {% set nav_groups = [('Money', [('/dashboard/stats', 'Overview', 'i-overview'), ('/dashboard/transactions', 'Transactions', 'i-transactions'), ('/dashboard/transfers', 'Transfers', 'i-transfers')]), ('Planning', [('/dashboard/budgets', 'Budgets', 'i-budgets'), ('/dashboard/subscriptions', 'Subscriptions', 'i-subscriptions'), ('/dashboard/loans', 'Loans', 'i-loans')]), ('Categorize', [('/dashboard/rules', 'Rules', 'i-rules'), ('/dashboard/queue', 'Review queue', 'i-queue')]), ('Wealth', [('/dashboard/investments', 'Investments', 'i-investments'), ('/dashboard/net-worth', 'Net worth', 'i-networth')]), ('System', [('/dashboard/upload', 'Import CSV', 'i-import'), ('/dashboard/home-assistant', 'Home Assistant', 'i-ha'), ('/dashboard/users', 'Users', 'i-users')])] %}
-        <nav>
+        <nav id="primary-nav">
           <a href="/dashboard">
             <svg class="nav-ico" aria-hidden="true">
               <use href="#i-home"></use>
@@ -133,5 +149,24 @@
          rel="noopener noreferrer">GNU AGPL v3</a>.
       <a href="{{ source_url }}" target="_blank" rel="noopener noreferrer">Source</a>
     </footer>
+    <script>
+      // Escape closes any open menu: blur the focused element (collapses the CSS
+      // :focus-within nav dropdowns) and close the mobile burger nav if open,
+      // returning focus to the toggle so keyboard users keep their place.
+      // Null-guarded so it's harmless on pages without a nav (e.g. login).
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        const nav = document.getElementById('primary-nav');
+        if (nav && nav.classList.contains('is-open')) {
+          nav.classList.remove('is-open');
+          const toggle = document.querySelector('.nav-toggle');
+          if (toggle) {
+            toggle.setAttribute('aria-expanded', 'false');
+            toggle.focus();
+          }
+        }
+      });
+    </script>
   </body>
 </html>

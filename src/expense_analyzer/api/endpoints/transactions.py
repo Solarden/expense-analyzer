@@ -32,6 +32,10 @@ router = APIRouter(
 
 _SCOPE_VALUES = {s.value for s in Scope}
 _LIST_PATH = "/dashboard/transactions"
+# Selectable rows-per-page. A whitelist (not a raw int) so a hand-edited ?size=
+# can't ask for a 100k-row page on the Pi. EA_PAGE_SIZE stays the default when no
+# (or an off-list) size is chosen.
+_PAGE_SIZES = (25, 50, 100, 200)
 
 
 def _safe_return_to(candidate: str) -> str:
@@ -55,6 +59,7 @@ def _list_context(
     scope: str | None = None,
     q: str | None = None,
     page: str | None = None,
+    size: str | None = None,
     error: str | None = None,
 ) -> dict:
     # The filter bar auto-submits every control on change, so the "— all … —"
@@ -66,6 +71,10 @@ def _list_context(
     parsed_account_id = int(account_id) if account_id and account_id.isdigit() else None
     parsed_scope = Scope(scope) if scope in _SCOPE_VALUES else None
     page_num = max(1, int(page)) if page and page.isdigit() else 1
+    # Explicit choice only if it's on the whitelist; otherwise fall back to the
+    # configured default (and don't echo a bogus value into the pager links).
+    parsed_size = int(size) if size and size.isdigit() and int(size) in _PAGE_SIZES else None
+    resolved_size = parsed_size if parsed_size is not None else get_settings().page_size
 
     filters = TransactionFilters(
         account_id=parsed_account_id,
@@ -76,7 +85,7 @@ def _list_context(
         search=q or None,
     )
     result = transactions.list_transactions(
-        session, filters, page=page_num, page_size=get_settings().page_size
+        session, filters, page=page_num, page_size=resolved_size
     )
 
     def page_query(target_page: int) -> str:
@@ -92,6 +101,8 @@ def _list_context(
             params.append(("scope", parsed_scope.value))
         if q:
             params.append(("q", q))
+        if parsed_size is not None:
+            params.append(("size", str(parsed_size)))
         params.append(("page", str(max(1, target_page))))
 
         return urlencode(params)
@@ -111,6 +122,7 @@ def _list_context(
         "months": stats.available_months(session),
         "scopes": [s.value for s in Scope],
         "directions": [d.value for d in TxDirection],
+        "page_sizes": list(_PAGE_SIZES),
         "today": local_today().isoformat(),
         "page_query": page_query,
         "return_to": return_to,
@@ -122,6 +134,7 @@ def _list_context(
         "f_category": category or "",
         "f_scope": parsed_scope.value if parsed_scope else "",
         "f_q": q or "",
+        "f_page_size": resolved_size,
     }
 
 
@@ -136,6 +149,7 @@ def list_transactions(
     scope: str | None = None,  # "" (any scope) or a Scope value
     q: str | None = None,
     page: str | None = None,
+    size: str | None = None,  # rows per page; off-list -> EA_PAGE_SIZE default
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
@@ -150,6 +164,7 @@ def list_transactions(
             scope=scope,
             q=q,
             page=page,
+            size=size,
         ),
     )
 

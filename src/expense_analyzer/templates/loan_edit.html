@@ -58,7 +58,7 @@
             For a fixed loan this is the annual rate; for a variable loan it's the margin over the base.
           </p>
         </div>
-        <div style="flex:1; min-width:240px;">
+        <div id="variable-only" style="flex:1; min-width:240px;">
           <h2 style="margin-top:0">Variable only</h2>
           <label for="base_rate_ref">Base rate reference</label>
           <input id="base_rate_ref"
@@ -80,5 +80,6 @@
         <a class="btn" href="/dashboard/loans/{{ loan.id }}">Cancel</a>
       </div>
     </form>
+    <script src="/static/loan-form.js"></script>
   </div>
 {% endblock %}
