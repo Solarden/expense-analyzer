@@ -32,6 +32,10 @@ def state_topic(base: str) -> str:
     return f"{base}/state"
 
 
+def update_topic(base: str) -> str:
+    return f"{base}/update"
+
+
 def availability_topic(base: str) -> str:
     return f"{base}/availability"
 
@@ -74,9 +78,42 @@ def discovery_config(metric: Metric, *, base: str) -> dict:
     }
 
 
+def update_sensor_config(*, base: str) -> dict:
+    """HA discovery config for the "deploy update available" sensor (Phase 18).
+
+    A plain text sensor (no ``device_class``/``unit``) whose state is the latest
+    available release tag; ``current``/``update_available`` ride along as
+    attributes from the same retained topic, so an HA automation can notify off
+    ``update_available`` while the entity stays glanceable on a dashboard. This is
+    one-directional like the rest — HA never triggers a deploy back.
+    """
+    return {
+        "name": "Update",
+        "unique_id": f"{_DEVICE_ID}_update",
+        "object_id": f"{_DEVICE_ID}_update",
+        "state_topic": update_topic(base),
+        "value_template": "{{ value_json.latest }}",
+        "json_attributes_topic": update_topic(base),
+        "availability_topic": availability_topic(base),
+        "icon": "mdi:package-up",
+        "device": _device(),
+    }
+
+
 def state_payload(metrics: list[Metric]) -> str:
     """The retained state JSON: every metric keyed by its slug."""
     return json.dumps({m.key: m.value for m in metrics})
+
+
+def update_payload(*, current: str | None, latest: str | None, update_available: bool) -> str:
+    """Retained state for the update sensor: latest version + current + the flag."""
+    return json.dumps(
+        {
+            "current": current or "unknown",
+            "latest": latest or "unknown",
+            "update_available": update_available,
+        }
+    )
 
 
 def alert_payload(title: str, message: str, *, severity: str) -> str:

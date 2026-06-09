@@ -71,6 +71,62 @@ Create the first login user, then sign in:
 docker compose run --rm app python -m expense_analyzer.create_user --username you --name "You"
 ```
 
+## Deploy on the Pi
+
+Once the stack is running, ship a new version with a single command:
+
+```bash
+make deploy a="--pull"   # git pull, then deploy
+make deploy              # deploy the code already checked out
+```
+
+`scripts/deploy.sh` builds the new images, **backs up the database before
+anything migrates it**, restarts the stack (the `app` container runs
+`alembic upgrade head` on boot), and waits for the health check. If the app
+doesn't come up healthy it **rolls back** — restoring the database copy and
+re-tagging the previous image. It's idempotent and safe to re-run. Preview the
+plan with `make deploy a="--dry-run"`.
+
+The only network egress is the optional `git pull` from this repo and the
+docker build fetching base layers — no Watchtower, no registry auto-pull.
+
+### Backups
+
+```bash
+make backup   # write a timestamped copy to data/backups
+```
+
+Backups use SQLite's online backup API, so they're a consistent single file
+even while the app is writing (WAL included). Wire `make backup` into cron on
+the Pi for periodic copies (design §10); `EA_BACKUP_KEEP` caps how many are
+retained. Restore by stopping the stack and copying a backup over
+`data/expense_analyzer.db` (delete any stale `-wal`/`-shm` sidecars first).
+
+### Update notifications
+
+```bash
+make check-update   # is a newer release tagged? notify Home Assistant
+```
+
+`scripts/check_update.sh` fetches tags from this repo and, if a newer
+**release tag** exists than the one deployed, publishes a retained
+`sensor.expense_analyzer_update` to Home Assistant (with `current` /
+`update_available` attributes) and fires an alert. It is **notify-only** — it
+never deploys; you run `make deploy` when you choose. The only egress is the git
+fetch of our own repo (maintenance, not runtime — no Watchtower, no registry).
+
+This relies on release tags: tag what you want to ship with `git tag vX.Y.Z`
+(plain `vMAJOR.MINOR.PATCH`; pre-releases like `v1.4.0-rc1` are ignored). Until
+the first tag exists the check is a no-op. **Forked it?** Point the check at your
+own repo with `EA_UPDATE_REMOTE` in `.env` (a git remote name like `origin`/
+`upstream`, or a full URL) — it defaults to `origin`. Run it periodically via a
+systemd timer or cron on the Pi, e.g.:
+
+```cron
+# /etc/cron.d/expense-analyzer-update — check for a new release each morning
+30 7 * * *  pi  cd /home/pi/expense-analyzer && make check-update >> data/check-update.log 2>&1
+```
+
 ## Migrations
 
 ```bash
