@@ -35,16 +35,38 @@
           {% for row in overview.rows %}
             <tr>
               <td data-label="Item">
-                {{ ui.swatch(category_colors.get(row.item.category_id) ) }}{{ row.item.name }}
+                {{ ui.swatch(category_colors.get(row.item.category_id) ) }}{{ row.display_name }}
+                {% if row.is_loan_backed %}<span class="muted">· loan</span>{% endif %}
                 {% if row.item.due_day %}<span class="muted">· due {{ row.item.due_day }}</span>{% endif %}
                 {% if row.item.note %}<div class="muted text-[12px]">{{ row.item.note }}</div>{% endif %}
+                {# "How to pay" card — title, amount and account, each copyable. #}
+                {% if not row.paid %}
+                  <div class="hstack text-[12px]"
+                       style="margin-top:4px;
+                              flex-wrap:wrap;
+                              gap:4px">
+                    <button type="button" class="ghost" data-copy="{{ row.transfer_title }}">Copy title</button>
+                    {% if row.effective_amount is not none %}
+                      <button type="button"
+                              class="ghost"
+                              data-copy="{{ row.effective_amount | plain }}">Copy amount</button>
+                    {% endif %}
+                    {% if row.payee_account %}
+                      <button type="button" class="ghost" data-copy="{{ row.payee_account }}">Copy account</button>
+                      <span class="muted">{{ row.payee_account }}</span>
+                    {% endif %}
+                  </div>
+                {% endif %}
               </td>
               <td class="num {{ 'pos' if row.is_income else 'neg' }}"
                   data-label="Expected">
                 {% if row.expected_amount is not none %}
                   {{ row.expected_amount | pln }}
+                {% elif row.real_amount is not none %}
+                  {{ row.real_amount | pln }} <span class="muted">(actual)</span>
                 {% else %}
                   <span class="muted">— variable</span>
+                  {% if row.last_hint is not none %}<div class="muted text-[12px]">last: {{ row.last_hint | pln }}</div>{% endif %}
                 {% endif %}
               </td>
               <td data-label="Status">
@@ -52,6 +74,9 @@
                   <span class="pos">✓ paid
                     {% if row.paid_date %}{{ row.paid_date | dpl }}{% endif %}
                   </span>
+                  {% if row.real_amount is not none and row.expected_amount is not none %}
+                    <div class="muted text-[12px]">{{ row.real_amount | pln }}</div>
+                  {% endif %}
                 {% elif row.overdue %}
                   <span class="neg">overdue</span>
                 {% else %}
@@ -59,16 +84,42 @@
                 {% endif %}
               </td>
               <td>
-                {% if row.paid %}
-                  <form method="post" action="/dashboard/plan/{{ row.item.id }}/mark-unpaid">
-                    <input type="hidden" name="month" value="{{ month }}">
-                    <button class="ghost" type="submit">Undo</button>
-                  </form>
+                {% if row.is_loan_backed %}
+                  {# Read-only overlay: the payment lives in the Loans module. #}
+                  <a class="btn" href="/dashboard/loans/{{ row.loan_id }}">Manage in Loans</a>
+                {% elif row.paid %}
+                  {% if row.linked %}
+                    <form method="post" action="/dashboard/plan/{{ row.item.id }}/unlink">
+                      <input type="hidden" name="month" value="{{ month }}">
+                      <button class="ghost" type="submit">Unlink</button>
+                    </form>
+                  {% else %}
+                    <form method="post" action="/dashboard/plan/{{ row.item.id }}/mark-unpaid">
+                      <input type="hidden" name="month" value="{{ month }}">
+                      <button class="ghost" type="submit">Undo</button>
+                    </form>
+                  {% endif %}
                 {% else %}
                   <form method="post" action="/dashboard/plan/{{ row.item.id }}/mark-paid">
                     <input type="hidden" name="month" value="{{ month }}">
                     <button type="submit">Mark paid</button>
                   </form>
+                  {% set matches = suggestions.get(row.item.id) %}
+                  {% if matches %}
+                    <div class="text-[12px]" style="margin-top:4px;">
+                      <span class="muted">Link a payment:</span>
+                      {% for tx in matches %}
+                        <form method="post" action="/dashboard/plan/{{ row.item.id }}/link">
+                          <input type="hidden" name="month" value="{{ month }}">
+                          <input type="hidden" name="tx_id" value="{{ tx.id }}">
+                          <button class="ghost" type="submit">
+                            {{ tx.booked_date | dpl }} · {{ tx.amount | abs | pln }}
+                            · {{ tx.merchant_normalized or tx.raw_description }}
+                          </button>
+                        </form>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
                 {% endif %}
               </td>
             </tr>
@@ -146,6 +197,18 @@
             {% endfor %}
           </select>
         </div>
+        <div style="flex:1; min-width:160px;">
+          <label for="loan_id">Backed by loan</label>
+          <select id="loan_id" name="loan_id">
+            <option value="">— none —</option>
+            {% for ln in loans %}
+              <option value="{{ ln.id }}"
+                      {% if form and form.loan_id == (ln.id | string) %}selected{% endif %}>
+                {{ accounts.get(ln.account_id, "Loan #" ~ ln.id) }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
         <div style="flex:1; min-width:120px;">
           <label for="due_day">Due day (1–31)</label>
           <input id="due_day"
@@ -172,6 +235,7 @@
       </div>
       <p class="muted" style="font-size:13px; margin:8px 0 0;">
         Leave the amount blank for a variable charge (ZUS, VAT, utilities) — it stays unestimated until you know the figure.
+        Pick a loan to make this a loan-backed line: its name, installment and amount come straight from the schedule.
       </p>
       <div class="hstack mt-3">
         <button type="submit">
@@ -202,6 +266,7 @@
             <tr>
               <td data-label="Item">
                 {{ ui.swatch(category_colors.get(it.category_id) ) }}{{ it.name }}
+                {% if it.loan_id %}<span class="muted">· loan</span>{% endif %}
                 {% if not it.active %}<span class="muted">· retired</span>{% endif %}
               </td>
               <td class="num" data-label="Expected">
@@ -244,4 +309,5 @@
       </table>
     </div>
   {% endif %}
+  <script src="/static/plan-copy.js"></script>
 {% endblock %}

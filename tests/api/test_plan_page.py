@@ -6,12 +6,21 @@ Bad input must come back as a 400 re-render with a flash, never a 500.
 """
 
 from collections.abc import Callable
+from datetime import date
 
 from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
-from expense_analyzer.models import Category, CategoryKind, PlannedItem
+from expense_analyzer.models import (
+    Account,
+    AccountType,
+    Category,
+    CategoryKind,
+    Loan,
+    PlannedItem,
+    Transaction,
+)
 from expense_analyzer.queries import planned as pq
 
 
@@ -214,3 +223,97 @@ def test_create_with_category(
 
     [item] = pq.list_planned_items(db_session)
     assert item.category_id == cat.id
+
+
+# --- Phase 19b: linking, loan-backed, payment card --------------------------
+
+
+def test_link_transaction_over_http(
+    auth_client: TestClient,
+    db_session: Session,
+    make_account: Callable[..., Account],
+    make_transaction: Callable[..., Transaction],
+    make_planned_item: Callable[..., PlannedItem],
+) -> None:
+    acc = make_account()
+    tx = make_transaction(account_id=acc.id, amount=-120_00, booked_date=date(2026, 6, 10))
+    item = make_planned_item(name="Internet", expected_amount=None)
+
+    resp = auth_client.post(
+        f"/dashboard/plan/{item.id}/link",
+        data={"tx_id": tx.id, "month": "2026-06"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
+    row = pq.plan_overview(db_session, "2026-06").rows[0]
+    assert row.paid is True
+    assert row.real_amount == -120_00
+
+
+def test_unlink_transaction_over_http(
+    auth_client: TestClient,
+    db_session: Session,
+    make_account: Callable[..., Account],
+    make_transaction: Callable[..., Transaction],
+    make_planned_item: Callable[..., PlannedItem],
+) -> None:
+    acc = make_account()
+    tx = make_transaction(account_id=acc.id, amount=-120_00, booked_date=date(2026, 6, 10))
+    item = make_planned_item(name="Internet", expected_amount=None)
+    pq.link_transaction(db_session, planned_item_id=item.id, month="2026-06", tx_id=tx.id)
+
+    auth_client.post(
+        f"/dashboard/plan/{item.id}/unlink", data={"month": "2026-06"}, follow_redirects=False
+    )
+    db_session.expire_all()
+    assert pq.plan_overview(db_session, "2026-06").rows[0].paid is False
+
+
+def test_create_loan_backed_item(
+    auth_client: TestClient,
+    db_session: Session,
+    make_account: Callable[..., Account],
+    make_loan: Callable[..., Loan],
+) -> None:
+    loan_acc = make_account(name="Mortgage", type=AccountType.loan)
+    loan = make_loan(account_id=loan_acc.id, term_months=12)
+
+    auth_client.post(
+        "/dashboard/plan",
+        data={"name": "Mortgage", "amount": "", "loan_id": str(loan.id)},
+        follow_redirects=False,
+    )
+
+    [item] = pq.list_planned_items(db_session)
+    assert item.loan_id == loan.id
+
+
+def test_loan_backed_row_renders(
+    auth_client: TestClient,
+    make_account: Callable[..., Account],
+    make_loan: Callable[..., Loan],
+    make_planned_item: Callable[..., PlannedItem],
+) -> None:
+    loan_acc = make_account(name="Mortgage", type=AccountType.loan)
+    loan = make_loan(account_id=loan_acc.id, term_months=12)
+    make_planned_item(name="Mortgage", expected_amount=None, loan_id=loan.id)
+
+    resp = auth_client.get("/dashboard/plan?month=2026-02")
+    assert resp.status_code == status.HTTP_200_OK
+    assert "Mortgage rata 1/12" in resp.text
+    assert "Manage in Loans" in resp.text  # loan-backed is read-only here
+
+
+def test_payment_card_has_copy_buttons(
+    auth_client: TestClient,
+    make_planned_item: Callable[..., PlannedItem],
+) -> None:
+    make_planned_item(
+        name="Rent",
+        expected_amount=-3000_00,
+        payee_account="PL61109010140000071219812874",
+    )
+
+    resp = auth_client.get("/dashboard/plan?month=2026-06")
+    assert "data-copy=" in resp.text  # the how-to-pay card copy controls
+    assert "PL61109010140000071219812874" in resp.text

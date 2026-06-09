@@ -20,12 +20,15 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlmodel import Session
 
 from expense_analyzer.api.deps import CurrentUser, DbSession
-from expense_analyzer.api.forms import PlannedItemForm, TxDirection
+from expense_analyzer.api.forms import PlannedItemForm, PlannedLinkForm, TxDirection
 from expense_analyzer.auth import require_user
 from expense_analyzer.clock import local_month, utc_now
+from expense_analyzer.config import get_settings
 from expense_analyzer.models import Owner, PlannedItem
 from expense_analyzer.money import MoneyParseError, from_minor_units, parse_pln
+from expense_analyzer.queries import accounts as account_queries
 from expense_analyzer.queries import categories as category_queries
+from expense_analyzer.queries import loans as loan_queries
 from expense_analyzer.queries import planned as planned_queries
 from expense_analyzer.queries import stats
 from expense_analyzer.templating import templates
@@ -57,18 +60,29 @@ def _safe_month(month: str | None) -> str:
 def _context(
     session: Session, user: Owner, selected_month: str, months: list[str], **extra
 ) -> dict:
-    """Shared context: the month's derived overview, the management list and the
-    category options for the define/edit form."""
+    """Shared context: the month's derived overview, per-item link suggestions, the
+    management list and the category options for the define/edit form."""
     all_categories = category_queries.list_categories(session)
+    settings = get_settings()
+    overview = planned_queries.plan_overview(session, selected_month)
+    suggestions = planned_queries.suggest_links(
+        session,
+        overview,
+        window_days=settings.loan_match_window_days,
+        tolerance_pct=settings.loan_match_amount_tolerance_pct,
+    )
     return {
         "user": user,
         "months": months,
         "month": selected_month,
-        "overview": planned_queries.plan_overview(session, selected_month),
+        "overview": overview,
+        "suggestions": suggestions,
         "items": planned_queries.list_planned_items(session),
         "categories": all_categories,
         "category_names": {c.id: c.name for c in all_categories if c.id is not None},
         "category_colors": {c.id: c.color for c in all_categories if c.id is not None},
+        "accounts": {a.id: a.name for a in account_queries.list_accounts(session)},
+        "loans": loan_queries.list_loans(session),
         "directions": [d.value for d in TxDirection],
         **extra,
     }
@@ -101,11 +115,13 @@ def _parse_item_form(form: PlannedItemForm) -> tuple[str | None, dict | None]:
         due_day = int(form.due_day)
 
     category_id = int(form.category_id) if form.category_id.isdigit() else None
+    loan_id = int(form.loan_id) if form.loan_id.isdigit() else None
 
     return None, {
         "name": name,
         "expected_amount": expected_amount,
         "category_id": category_id,
+        "loan_id": loan_id,
         "payee_account": form.payee_account.strip() or None,
         "due_day": due_day,
         "note": form.note.strip() or None,
@@ -126,6 +142,7 @@ def _item_form_from(item: PlannedItem) -> PlannedItemForm:
         amount=amount,
         direction=direction,
         category_id=str(item.category_id) if item.category_id is not None else "",
+        loan_id=str(item.loan_id) if item.loan_id is not None else "",
         payee_account=item.payee_account or "",
         due_day=str(item.due_day) if item.due_day is not None else "",
         note=item.note or "",
@@ -254,5 +271,25 @@ def mark_paid(item_id: int, session: DbSession, month: str = Form("")) -> Redire
 def mark_unpaid(item_id: int, session: DbSession, month: str = Form("")) -> RedirectResponse:
     safe = _safe_month(month)
     planned_queries.mark_unpaid(session, planned_item_id=item_id, month=safe)
+
+    return _redirect(safe)
+
+
+@router.post("/{item_id}/link")
+def link_transaction(
+    item_id: int,
+    form: Annotated[PlannedLinkForm, Form()],
+    session: DbSession,
+) -> RedirectResponse:
+    safe = _safe_month(form.month)
+    planned_queries.link_transaction(session, planned_item_id=item_id, month=safe, tx_id=form.tx_id)
+
+    return _redirect(safe)
+
+
+@router.post("/{item_id}/unlink")
+def unlink_transaction(item_id: int, session: DbSession, month: str = Form("")) -> RedirectResponse:
+    safe = _safe_month(month)
+    planned_queries.unlink_transaction(session, planned_item_id=item_id, month=safe)
 
     return _redirect(safe)
