@@ -87,14 +87,15 @@ def edit_category(
     user: CurrentUser,
     session: DbSession,
 ) -> Response:
-    name = form.name.strip()
-    # "Clear" wins over whatever the picker holds; otherwise validate the hex.
-    if form.clear:
-        color, error = None, None
-    else:
-        color, error = _parse_color(form.color)
-    if not name:
+    # Name is the required field, so check it first — its error shouldn't be
+    # masked by a colour problem. "Clear" wins over whatever the picker holds;
+    # otherwise validate the hex. Normalisation (strip) lives in the query layer,
+    # consistent with create_category.
+    color, error = None, None
+    if not form.name.strip():
         error = "Category name can't be empty."
+    elif not form.clear:
+        color, error = _parse_color(form.color)
 
     if error is not None:
         return templates.TemplateResponse(
@@ -105,7 +106,9 @@ def edit_category(
         )
 
     if (
-        categories.update_category(session, category_id, name=name, kind=form.kind, color=color)
+        categories.update_category(
+            session, category_id, name=form.name, kind=form.kind, color=color
+        )
         is None
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="category not found")

@@ -157,6 +157,20 @@ def test_edit_category_empty_name_rejected(
     assert cat.name == "Food"  # unchanged
 
 
+def test_edit_category_empty_name_wins_over_bad_colour(
+    auth_client: TestClient, db_session: Session, make_category: Callable[..., Category]
+):
+    # Name is the required field, so its error takes precedence (checked first).
+    cat = make_category(name="Food", kind=CategoryKind.expense)
+    resp = auth_client.post(
+        f"/dashboard/categories/{cat.id}/edit",
+        data={"name": "", "kind": "expense", "color": "nope"},
+    )
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    # Autoescape turns the apostrophe into "&#39;", so match the unambiguous tail.
+    assert "name can" in resp.text and "be empty" in resp.text
+
+
 def test_swatch_renders_for_coloured_category(
     auth_client: TestClient, db_session: Session, make_category: Callable[..., Category]
 ):
