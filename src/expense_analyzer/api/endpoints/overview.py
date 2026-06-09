@@ -11,16 +11,49 @@ from fastapi.responses import HTMLResponse
 from expense_analyzer.api.deps import CurrentUser, DbSession
 from expense_analyzer.auth import require_user
 from expense_analyzer.queries import categories, stats
+from expense_analyzer.queries.transactions import UNCATEGORIZED
 from expense_analyzer.templating import templates
 
 # Months of history on the overview trend chart.
 TREND_MONTHS = 12
 
-# Bar colour for a category with no colour set (and the uncategorized bucket), so
-# the chart degrades to a single neutral hue rather than the old all-red series.
+# Neutral bar colour for the uncategorized bucket (no category id to key a palette
+# slot on) — keeps it readable rather than the old all-red series.
 DEFAULT_CATEGORY_COLOR = "#4f8cff"
 
+# A small qualitative palette so categories *without* an explicit colour still get
+# distinct bars instead of all sharing one hue (Phase 20b auto-palette). Keyed by
+# category id (modulo), so a category keeps the same auto-colour across months.
+AUTO_PALETTE = (
+    "#4f8cff",
+    "#3fb950",
+    "#d29922",
+    "#a371f7",
+    "#f0686b",
+    "#39c5cf",
+    "#db61a2",
+    "#e3b341",
+)
+
 router = APIRouter(prefix="/dashboard", tags=["overview"], dependencies=[Depends(require_user)])
+
+
+def _bar_color(category_id: int | None, explicit: str | None) -> str:
+    """Colour for one category bar: its own colour if set, else a stable palette
+    slot keyed by id (auto-palette); the uncategorized bucket gets the neutral default."""
+    if explicit:
+        return explicit
+    if category_id is None:
+        return DEFAULT_CATEGORY_COLOR
+
+    return AUTO_PALETTE[category_id % len(AUTO_PALETTE)]
+
+
+def _drilldown_link(category_id: int | None, month: str) -> str:
+    """Overview bar → the filtered transactions list for that category + month."""
+    category = UNCATEGORIZED if category_id is None else category_id
+
+    return f"/dashboard/transactions?category={category}&month={month}"
 
 
 @router.get("/stats", response_class=HTMLResponse)
@@ -55,12 +88,14 @@ def stats_page(
             "category_chart": {
                 "labels": [c.name for c in summary.by_category],
                 "data": [c.total for c in summary.by_category],
-                # Per-bar colours from each category (uncategorized / colourless
-                # fall back to the neutral default) — breaks the all-red series.
+                # Per-bar colours: each category's own colour, else an auto-palette
+                # slot (colourless categories no longer share one hue).
                 "colors": [
-                    category_colors.get(c.category_id) or DEFAULT_CATEGORY_COLOR
+                    _bar_color(c.category_id, category_colors.get(c.category_id))
                     for c in summary.by_category
                 ],
+                # Click a bar to drill into that category's transactions for the month.
+                "links": [_drilldown_link(c.category_id, selected) for c in summary.by_category],
             },
             "trend_chart": {
                 "labels": [m.month for m in trend],

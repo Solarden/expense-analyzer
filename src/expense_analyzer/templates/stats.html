@@ -84,6 +84,16 @@
       },
       options: {
         indexAxis: 'y',
+        // Click a bar to drill into that category's transactions for the month.
+        onClick: (evt, elements) => {
+          if (elements.length) {
+            const link = categoryData.links[elements[0].index];
+            if (link) window.location = link;
+          }
+        },
+        onHover: (evt, elements) => {
+          evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+        },
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => fmt(c.parsed.x) } } },
         scales: { x: { ticks: { callback: fmt } } },
       },

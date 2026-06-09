@@ -43,10 +43,13 @@ class CategoryForm(BaseModel):
     color: str = ""  # "#rrggbb" from <input type="color">, or "" for no colour
 
 
-class CategoryColorForm(BaseModel):
-    """Set one category's colour from the inline picker. ``color`` is a "#rrggbb"
-    string; ``clear`` (a present submit button) wins and resets it to none."""
+class CategoryEditForm(BaseModel):
+    """Edit a category in place (Phase 20b): rename, change kind, and set/clear the
+    colour. ``color`` is a "#rrggbb" string; ``clear`` (a present submit button)
+    wins and resets it to none."""
 
+    name: str
+    kind: CategoryKind
     color: str = ""
     clear: str = ""
 
@@ -54,6 +57,12 @@ class CategoryColorForm(BaseModel):
 class UserForm(BaseModel):
     username: str
     name: str
+    password: SecretStr  # masked in repr/logs; read via .get_secret_value()
+
+
+class PasswordResetForm(BaseModel):
+    """Admin resets a user's password from the Users page (Phase 20a)."""
+
     password: SecretStr  # masked in repr/logs; read via .get_secret_value()
 
 

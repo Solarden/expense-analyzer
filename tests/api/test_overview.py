@@ -67,6 +67,54 @@ def test_stats_page_empty_db(auth_client: TestClient, db_session: Session):
     assert "No spending recorded" in resp.text
 
 
+# --- Phase 20b: auto-palette + chart drilldown ---
+
+
+def test_bar_color_prefers_explicit_then_palette():
+    from expense_analyzer.api.endpoints.overview import (
+        AUTO_PALETTE,
+        DEFAULT_CATEGORY_COLOR,
+        _bar_color,
+    )
+
+    # An explicit colour always wins.
+    assert _bar_color(3, "#abcdef") == "#abcdef"
+    # A colourless category gets a stable palette slot keyed by id.
+    assert _bar_color(3, None) == AUTO_PALETTE[3 % len(AUTO_PALETTE)]
+    assert _bar_color(3, None) == _bar_color(3, None)  # deterministic across calls
+    # The uncategorized bucket (no id) gets the neutral default.
+    assert _bar_color(None, None) == DEFAULT_CATEGORY_COLOR
+
+
+def test_drilldown_link_builds_filtered_url():
+    from expense_analyzer.api.endpoints.overview import _drilldown_link
+
+    assert _drilldown_link(7, "2026-05") == "/dashboard/transactions?category=7&month=2026-05"
+    # Uncategorized maps to the "none" filter the transactions list understands.
+    assert _drilldown_link(None, "2026-05") == "/dashboard/transactions?category=none&month=2026-05"
+
+
+def test_stats_page_embeds_drilldown_link(
+    auth_client: TestClient,
+    db_session: Session,
+    account: Account,
+    make_category: Callable[..., Category],
+    make_transaction: Callable[..., Transaction],
+):
+    food = make_category(name="Food", kind=CategoryKind.expense)
+    make_transaction(
+        account_id=account.id, amount=-7500, booked_date=date(2026, 5, 3), category_id=food.id
+    )
+
+    resp = auth_client.get("/dashboard/stats?month=2026-05")
+    assert resp.status_code == status.HTTP_200_OK
+    # The bar's drilldown link is serialised into the chart data for the onClick.
+    # `| tojson` html-escapes the "&" to "&" (decoded back to "&" by the JS
+    # at runtime), so assert the path and the month query separately.
+    assert f"/dashboard/transactions?category={food.id}" in resp.text
+    assert "month=2026-05" in resp.text
+
+
 def test_transactions_pagination(
     auth_client: TestClient,
     db_session: Session,

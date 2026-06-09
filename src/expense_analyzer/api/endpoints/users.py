@@ -1,5 +1,6 @@
 """Users page: list login identities, add new ones, and (admins only) manage
-them — delete or toggle active (design §10, Phase 15).
+them — delete, toggle active, grant/revoke admin, or reset a password
+(design §10, Phase 15; admin toggle + password reset added in Phase 20a).
 
 No public registration. Data stays a single shared household view with no roles
 for *viewing*; ``is_admin`` is a soft management role. The first user created
@@ -16,7 +17,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlmodel import Session
 
 from expense_analyzer.api.deps import AdminUser, CurrentUser, DbSession
-from expense_analyzer.api.forms import UserForm
+from expense_analyzer.api.forms import PasswordResetForm, UserForm
 from expense_analyzer.auth import require_user
 from expense_analyzer.models import Owner
 from expense_analyzer.queries import users as user_queries
@@ -131,5 +132,70 @@ def delete_user(
         )
 
     user_queries.delete_user(session, target)
+
+    return RedirectResponse("/dashboard/users", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{user_id}/toggle-admin", response_class=HTMLResponse)
+def toggle_admin(
+    request: Request,
+    user_id: int,
+    admin: AdminUser,
+    session: DbSession,
+) -> Response:
+    """Grant or revoke the admin role. Self is allowed (an admin may step down),
+    which is exactly when the "last active admin" guard earns its keep."""
+    target = user_queries.get(session, user_id)
+    if target is None:
+        return templates.TemplateResponse(
+            request,
+            "users.html",
+            _users_context(session, admin, error="That user no longer exists."),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Only revoking can lock the household out; granting is always safe.
+    if target.is_admin and _last_active_admin(session, target):
+        return templates.TemplateResponse(
+            request,
+            "users.html",
+            _users_context(session, admin, error="Can't revoke the last active admin."),
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user_queries.set_admin(session, target, is_admin=not target.is_admin)
+
+    return RedirectResponse("/dashboard/users", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{user_id}/reset-password", response_class=HTMLResponse)
+def reset_password(
+    request: Request,
+    user_id: int,
+    form: Annotated[PasswordResetForm, Form()],
+    admin: AdminUser,
+    session: DbSession,
+) -> Response:
+    """Set a new password for any user (including yourself). No lockout risk, so
+    no self-guard — it is also the only in-app way to change your own password."""
+    target = user_queries.get(session, user_id)
+    if target is None:
+        return templates.TemplateResponse(
+            request,
+            "users.html",
+            _users_context(session, admin, error="That user no longer exists."),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    password = form.password.get_secret_value()
+    if not password.strip():
+        return templates.TemplateResponse(
+            request,
+            "users.html",
+            _users_context(session, admin, error="Password can't be empty."),
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user_queries.set_password(session, target, password=password)
 
     return RedirectResponse("/dashboard/users", status_code=status.HTTP_303_SEE_OTHER)

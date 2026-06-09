@@ -37,10 +37,20 @@
             </td>
             {% if user.is_admin %}
               <td>
-                {% if u.id == user.id %}
-                  <span class="muted">—</span>
-                {% else %}
-                  <div class="hstack">
+                <div class="hstack">
+                  {# Admin toggle is allowed on yourself (step down) — the
+                     "last active admin" guard catches a lockout. #}
+                  <form method="post" action="/dashboard/users/{{ u.id }}/toggle-admin">
+                    <button class="btn" type="submit">
+                      {% if u.is_admin %}
+                        Revoke admin
+                      {% else %}
+                        Make admin
+                      {% endif %}
+                    </button>
+                  </form>
+                  {# Deactivate / Delete never act on your own account. #}
+                  {% if u.id != user.id %}
                     <form method="post" action="/dashboard/users/{{ u.id }}/toggle-active">
                       <button class="btn" type="submit">
                         {% if u.is_active %}
@@ -55,8 +65,21 @@
                           onsubmit="return confirm('Delete this user? Their imported data stays.');">
                       <button class="ghost" type="submit">Delete</button>
                     </form>
-                  </div>
-                {% endif %}
+                  {% endif %}
+                  {# Reset password — safe on yourself too (also the only in-app
+                     way to change your own password). #}
+                  <form method="post"
+                        action="/dashboard/users/{{ u.id }}/reset-password"
+                        class="hstack"
+                        onsubmit="return confirm('Set a new password for this user?');">
+                    <input name="password"
+                           type="password"
+                           placeholder="New password"
+                           autocomplete="new-password"
+                           required>
+                    <button class="btn" type="submit">Set password</button>
+                  </form>
+                </div>
               </td>
             {% endif %}
           </tr>

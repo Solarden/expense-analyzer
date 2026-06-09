@@ -62,6 +62,29 @@ def set_active(session: Session, user: Owner, *, is_active: bool) -> Owner:
     return user
 
 
+def set_admin(session: Session, user: Owner, *, is_admin: bool) -> Owner:
+    user.is_admin = is_admin
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+
+    return user
+
+
+def set_password(session: Session, user: Owner, *, password: str) -> Owner:
+    """Replace a user's password (admin reset from the UI / CLI bootstrap)."""
+    # Imported lazily: auth.py depends on this module, so a top-level import
+    # would create a cycle (same reason as create_user).
+    from expense_analyzer.auth import hash_password
+
+    user.password_hash = hash_password(password)
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+
+    return user
+
+
 def delete_user(session: Session, user: Owner) -> None:
     """Delete a login identity, keeping the household data they imported.
 

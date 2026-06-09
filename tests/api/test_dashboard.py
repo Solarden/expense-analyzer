@@ -65,13 +65,16 @@ def test_create_category_invalid_colour_rejected(auth_client: TestClient, db_ses
     assert db_session.exec(select(Category)).all() == []  # nothing created on bad input
 
 
-def test_set_category_colour(
+# --- Phase 20b: full category edit (rename / change kind / set-clear colour) ---
+
+
+def test_edit_category_sets_colour(
     auth_client: TestClient, db_session: Session, make_category: Callable[..., Category]
 ):
     cat = make_category(name="Food", kind=CategoryKind.expense)
     resp = auth_client.post(
-        f"/dashboard/categories/{cat.id}/color",
-        data={"color": "#3fb950"},
+        f"/dashboard/categories/{cat.id}/edit",
+        data={"name": "Food", "kind": "expense", "color": "#3fb950"},
         follow_redirects=False,
     )
     assert resp.status_code == status.HTTP_303_SEE_OTHER
@@ -79,40 +82,79 @@ def test_set_category_colour(
     assert cat.color == "#3fb950"
 
 
-def test_clear_category_colour(
+def test_edit_category_clears_colour(
     auth_client: TestClient, db_session: Session, make_category: Callable[..., Category]
 ):
     cat = make_category(name="Food", kind=CategoryKind.expense, color="#3fb950")
     # The clear button wins even when a colour value is also submitted.
     auth_client.post(
-        f"/dashboard/categories/{cat.id}/color",
-        data={"color": "#3fb950", "clear": "1"},
+        f"/dashboard/categories/{cat.id}/edit",
+        data={"name": "Food", "kind": "expense", "color": "#3fb950", "clear": "1"},
         follow_redirects=False,
     )
     db_session.refresh(cat)
     assert cat.color is None
 
 
-def test_set_category_colour_invalid_rejected(
+def test_edit_category_invalid_colour_rejected(
     auth_client: TestClient, db_session: Session, make_category: Callable[..., Category]
 ):
     cat = make_category(name="Food", kind=CategoryKind.expense)
     resp = auth_client.post(
-        f"/dashboard/categories/{cat.id}/color",
-        data={"color": "nope"},
+        f"/dashboard/categories/{cat.id}/edit",
+        data={"name": "Food", "kind": "expense", "color": "nope"},
     )
     assert resp.status_code == status.HTTP_400_BAD_REQUEST
     db_session.refresh(cat)
     assert cat.color is None
 
 
-def test_set_category_colour_unknown_404(auth_client: TestClient, db_session: Session):
+def test_edit_category_unknown_404(auth_client: TestClient, db_session: Session):
     resp = auth_client.post(
-        "/dashboard/categories/9999/color",
-        data={"color": "#3fb950"},
+        "/dashboard/categories/9999/edit",
+        data={"name": "Food", "kind": "expense", "color": "#3fb950"},
         follow_redirects=False,
     )
     assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_edit_category_renames(
+    auth_client: TestClient, db_session: Session, make_category: Callable[..., Category]
+):
+    cat = make_category(name="Food", kind=CategoryKind.expense)
+    auth_client.post(
+        f"/dashboard/categories/{cat.id}/edit",
+        data={"name": "  Groceries  ", "kind": "expense"},  # whitespace is trimmed
+        follow_redirects=False,
+    )
+    db_session.refresh(cat)
+    assert cat.name == "Groceries"
+
+
+def test_edit_category_changes_kind(
+    auth_client: TestClient, db_session: Session, make_category: Callable[..., Category]
+):
+    cat = make_category(name="Salary", kind=CategoryKind.expense)
+    auth_client.post(
+        f"/dashboard/categories/{cat.id}/edit",
+        data={"name": "Salary", "kind": "income"},
+        follow_redirects=False,
+    )
+    db_session.refresh(cat)
+    assert cat.kind == CategoryKind.income
+
+
+def test_edit_category_empty_name_rejected(
+    auth_client: TestClient, db_session: Session, make_category: Callable[..., Category]
+):
+    cat = make_category(name="Food", kind=CategoryKind.expense)
+    resp = auth_client.post(
+        f"/dashboard/categories/{cat.id}/edit",
+        data={"name": "   ", "kind": "expense"},
+    )
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    db_session.refresh(cat)
+    assert cat.name == "Food"  # unchanged
 
 
 def test_swatch_renders_for_coloured_category(
