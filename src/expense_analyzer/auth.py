@@ -24,6 +24,14 @@ class NotAuthenticatedError(Exception):
     """
 
 
+class NotAuthorizedError(Exception):
+    """Raised by :func:`require_admin` when a logged-in user lacks the admin role.
+
+    Handled in ``main.py`` by rendering a 403 page (the user *is* logged in, so
+    redirecting to login would be wrong).
+    """
+
+
 def hash_password(plain: str) -> str:
     return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
@@ -56,5 +64,16 @@ def require_user(user: Owner | None = Depends(current_user)) -> Owner:
     """Dependency that enforces login on protected routes."""
     if user is None:
         raise NotAuthenticatedError
+
+    return user
+
+
+def require_admin(user: Owner = Depends(require_user)) -> Owner:
+    """Dependency that gates user-management actions to admins.
+
+    Builds on :func:`require_user`, so an anonymous request still redirects to
+    login; a logged-in non-admin gets a 403 instead."""
+    if not user.is_admin:
+        raise NotAuthorizedError
 
     return user

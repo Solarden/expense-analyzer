@@ -1,16 +1,17 @@
 from pathlib import Path
 
 from fastapi import FastAPI, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 # Importing the importers package registers the available bank parsers.
 import expense_analyzer.importers.registry  # noqa: F401
 from expense_analyzer import __version__, api
-from expense_analyzer.auth import NotAuthenticatedError
+from expense_analyzer.auth import NotAuthenticatedError, NotAuthorizedError
 from expense_analyzer.config import INSECURE_DEFAULT_SECRET, get_settings
 from expense_analyzer.logging_config import configure_logging
+from expense_analyzer.templating import templates
 
 
 def create_app() -> FastAPI:
@@ -52,6 +53,13 @@ def create_app() -> FastAPI:
     @app.exception_handler(NotAuthenticatedError)
     async def _redirect_to_login(request: Request, exc: NotAuthenticatedError) -> RedirectResponse:
         return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
+
+    @app.exception_handler(NotAuthorizedError)
+    async def _forbidden(request: Request, exc: NotAuthorizedError) -> HTMLResponse:
+        # The user is logged in but lacks the admin role; show a 403, don't redirect.
+        return templates.TemplateResponse(
+            request, "forbidden.html", {}, status_code=status.HTTP_403_FORBIDDEN
+        )
 
     return app
 

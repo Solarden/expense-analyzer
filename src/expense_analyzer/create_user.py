@@ -38,7 +38,8 @@ def main() -> None:
             password=password,
         )
 
-    print(f"Created user {user.username!r} (id={user.id}).")
+    role = "admin" if user.is_admin else "member"
+    print(f"Created user {user.username!r} (id={user.id}, {role}).")
 
 
 if __name__ == "__main__":

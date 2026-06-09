@@ -84,9 +84,12 @@ class Owner(SQLModel, table=True):
     """A login identity. Originally the multi-user hook for ``owner_id``; now
     also the authenticatable user (username + password).
 
-    No roles/permissions — every active user has the same shared household view
-    (design's "scope is a tag, not a permission" still holds). ``owner_id`` on
-    accounts/transactions stays an analytical tag (who imported), not a filter.
+    Data stays a single shared household view — every active user sees the same
+    transactions (design's "scope is a tag, not a permission" still holds, and
+    ``owner_id`` stays an analytical "who imported" tag, not a filter). The one
+    distinction is ``is_admin``: a *soft* role gating user management (add/delete
+    users, toggle active), not data isolation. The first user created (CLI
+    bootstrap, while the table is empty) becomes admin; everyone after does not.
     """
 
     __tablename__ = "owner"
@@ -96,6 +99,7 @@ class Owner(SQLModel, table=True):
     username: str = Field(unique=True, index=True)  # login handle
     password_hash: str
     is_active: bool = Field(default=True)  # deactivate without deleting
+    is_admin: bool = Field(default=False)  # may manage other users (soft role)
     created_at: datetime = Field(default_factory=utc_now)
 
 
