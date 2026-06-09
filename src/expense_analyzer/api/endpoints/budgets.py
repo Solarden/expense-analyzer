@@ -21,7 +21,7 @@ from expense_analyzer.api.deps import CurrentUser, DbSession
 from expense_analyzer.api.forms import BudgetForm
 from expense_analyzer.auth import require_user
 from expense_analyzer.models import CategoryKind, Owner
-from expense_analyzer.money import MoneyParseError, parse_pln
+from expense_analyzer.money import MoneyParseError, from_minor_units, parse_pln
 from expense_analyzer.queries import budgets as budget_queries
 from expense_analyzer.queries import categories as category_queries
 from expense_analyzer.queries import stats
@@ -56,13 +56,31 @@ def _context(
 
 @router.get("", response_class=HTMLResponse)
 def budgets_page(
-    request: Request, user: CurrentUser, session: DbSession, month: str | None = None
+    request: Request,
+    user: CurrentUser,
+    session: DbSession,
+    month: str | None = None,
+    edit: str | None = None,
 ) -> HTMLResponse:
     months = stats.available_months(session)
     selected = stats.default_month(months, month)
 
+    # ``?edit=<id>`` prefills the form to change one budget's limit. Category and
+    # month are the budget's identity (the upsert key), so they're shown read-only
+    # — only the limit is editable, and the existing set_budget upsert hits the
+    # same row. A non-numeric or stale id just falls back to the create form (taken
+    # as a string so a malformed ``?edit=`` degrades gracefully, not a 422).
+    edit_id = int(edit) if edit is not None and edit.isdigit() else None
+    edit_budget = budget_queries.get_budget(session, edit_id) if edit_id is not None else None
+    extra: dict = {}
+    if edit_budget is not None:
+        extra = {
+            "edit_budget": edit_budget,
+            "edit_limit": str(from_minor_units(edit_budget.limit_amount)),
+        }
+
     return templates.TemplateResponse(
-        request, "budgets.html", _context(session, user, selected, months)
+        request, "budgets.html", _context(session, user, selected, months, **extra)
     )
 
 

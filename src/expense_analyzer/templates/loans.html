@@ -32,12 +32,14 @@
               <td class="muted" data-label="Start">{{ loan.start_date | dpl }}</td>
               <td class="num" data-label="Term">{{ loan.term_months }}</td>
               <td>
-                <form class="hstack"
-                      method="post"
-                      action="/dashboard/loans/{{ loan.id }}/delete"
-                      onsubmit="return confirm('Delete this loan and its schedule? Linked payments are kept but unlinked.');">
-                  <button class="ghost" type="submit">Delete</button>
-                </form>
+                <div class="hstack">
+                  <a class="btn" href="/dashboard/loans/{{ loan.id }}/edit">Edit</a>
+                  <form method="post"
+                        action="/dashboard/loans/{{ loan.id }}/delete"
+                        onsubmit="return confirm('Delete this loan and its schedule? Linked payments are kept but unlinked.');">
+                    <button class="ghost" type="submit">Delete</button>
+                  </form>
+                </div>
               </td>
             </tr>
           {% endfor %}

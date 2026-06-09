@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block content %}
+  <p style="margin-top:0">
+    <a href="/dashboard/loans/{{ loan.id }}">← Back to loan</a>
+  </p>
+  <h2 style="margin-top:0">Edit loan</h2>
+  <div class="panel">
+    <p class="muted" style="margin-top:0">
+      Editing the definition recomputes the amortization schedule. For a variable loan
+      the initial base rate updates the earliest observation; later rate changes stay.
+    </p>
+    <form method="post" action="/dashboard/loans/{{ loan.id }}/edit">
+      <div class="cols">
+        <div style="flex:1; min-width:240px;">
+          <label for="account_id">Loan account</label>
+          <select id="account_id" name="account_id" required>
+            {% for a in loan_accounts %}
+              <option value="{{ a.id }}"
+                      {% if a.id == form.account_id %}selected{% endif %}>{{ a.name }}</option>
+            {% endfor %}
+          </select>
+          <label for="principal">Principal (PLN)</label>
+          <input id="principal" name="principal" value="{{ form.principal }}" required>
+          <label for="start_date">Start date (disbursement)</label>
+          <input id="start_date"
+                 type="date"
+                 name="start_date"
+                 value="{{ form.start_date.isoformat() }}"
+                 required>
+          <label for="term_months">Term (months)</label>
+          <input id="term_months"
+                 type="number"
+                 name="term_months"
+                 min="1"
+                 value="{{ form.term_months }}"
+                 required>
+        </div>
+        <div style="flex:1; min-width:240px;">
+          <label for="installment_type">Installment type</label>
+          <select id="installment_type" name="installment_type">
+            {% for t in installment_types %}
+              <option value="{{ t }}"
+                      {% if t == form.installment_type.value %}selected{% endif %}>{{ t }}</option>
+            {% endfor %}
+          </select>
+          <label for="rate_type">Rate type</label>
+          <select id="rate_type" name="rate_type">
+            {% for t in rate_types %}
+              <option value="{{ t }}" {% if t == form.rate_type.value %}selected{% endif %}>{{ t }}</option>
+            {% endfor %}
+          </select>
+          <label for="rate_percent">Rate / margin (% per year)</label>
+          <input id="rate_percent"
+                 name="rate_percent"
+                 value="{{ form.rate_percent }}"
+                 required>
+          <p class="muted" style="font-size:13px; margin:4px 0 0;">
+            For a fixed loan this is the annual rate; for a variable loan it's the margin over the base.
+          </p>
+        </div>
+        <div style="flex:1; min-width:240px;">
+          <h2 style="margin-top:0">Variable only</h2>
+          <label for="base_rate_ref">Base rate reference</label>
+          <input id="base_rate_ref"
+                 name="base_rate_ref"
+                 value="{{ form.base_rate_ref }}"
+                 placeholder="WIBOR 3M">
+          <label for="base_rate_percent">Initial base rate (% per year)</label>
+          <input id="base_rate_percent"
+                 name="base_rate_percent"
+                 value="{{ form.base_rate_percent }}"
+                 placeholder="5.85">
+          <p class="muted" style="font-size:13px; margin:4px 0 0;">
+            Updates the start-date observation. Required for a variable loan.
+          </p>
+        </div>
+      </div>
+      <div class="hstack mt-3">
+        <button type="submit">Save changes</button>
+        <a class="btn" href="/dashboard/loans/{{ loan.id }}">Cancel</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}
