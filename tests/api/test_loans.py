@@ -15,7 +15,9 @@ from sqlmodel import Session
 from expense_analyzer.models import (
     Account,
     AccountType,
+    InstallmentType,
     Loan,
+    LoanCreate,
     RateType,
     Transaction,
 )
@@ -143,6 +145,141 @@ def test_delete_loan_clears_link_on_soft_deleted_payment(
     db_session.refresh(tx)
     assert tx.loan_id is None
     assert tx.loan_installment_index is None
+
+
+def test_update_loan_changes_fields_and_reseeds_earliest_rate(
+    db_session: Session,
+    make_account: Callable[..., Account],
+    make_loan: Callable[..., Loan],
+):
+    acc = make_account(name="Mortgage", type=AccountType.loan)
+    loan = make_loan(
+        account_id=acc.id,
+        rate_type=RateType.variable,
+        rate_bp=150,
+        term_months=12,
+        start_date=date(2026, 1, 15),
+    )
+    lq.add_rate_change(
+        db_session, loan_id=loan.id, effective_date=date(2026, 1, 15), base_rate_bp=400
+    )
+    later = lq.add_rate_change(
+        db_session, loan_id=loan.id, effective_date=date(2026, 7, 1), base_rate_bp=600
+    )
+
+    updated = lq.update_loan(
+        db_session,
+        loan.id,
+        LoanCreate(
+            account_id=acc.id,
+            principal=20_000_000,
+            rate_type=RateType.variable,
+            rate_bp=200,
+            installment_type=InstallmentType.equal,
+            start_date=date(2026, 3, 10),
+            term_months=24,
+            base_rate_ref="WIBOR 3M",
+            initial_base_rate_bp=450,
+        ),
+    )
+
+    assert updated is not None
+    assert updated.principal == 20_000_000
+    assert updated.term_months == 24
+    changes = lq.list_rate_changes(db_session, loan.id)
+    # Earliest observation moved to the new start date + new base rate; the later
+    # one the user added on the detail page is untouched.
+    assert (changes[0].effective_date, changes[0].base_rate_bp) == (date(2026, 3, 10), 450)
+    assert (changes[1].id, changes[1].base_rate_bp) == (later.id, 600)
+
+
+def test_update_loan_reseeds_start_observation_when_moved_past_a_later_one(
+    db_session: Session,
+    make_account: Callable[..., Account],
+    make_loan: Callable[..., Loan],
+):
+    # The start-date observation is matched by the *old* start date, so moving the
+    # start past a later observation still updates the right one (not whatever is
+    # earliest now), and the later observation is preserved untouched.
+    acc = make_account(name="Mortgage", type=AccountType.loan)
+    loan = make_loan(
+        account_id=acc.id,
+        rate_type=RateType.variable,
+        rate_bp=150,
+        term_months=24,
+        start_date=date(2026, 1, 15),
+    )
+    lq.add_rate_change(
+        db_session, loan_id=loan.id, effective_date=date(2026, 1, 15), base_rate_bp=400
+    )
+    later = lq.add_rate_change(
+        db_session, loan_id=loan.id, effective_date=date(2026, 7, 1), base_rate_bp=600
+    )
+
+    lq.update_loan(
+        db_session,
+        loan.id,
+        LoanCreate(
+            account_id=acc.id,
+            principal=loan.principal,
+            rate_type=RateType.variable,
+            rate_bp=150,
+            installment_type=InstallmentType.equal,
+            start_date=date(2026, 8, 1),  # moved *after* the later observation
+            term_months=24,
+            initial_base_rate_bp=420,
+        ),
+    )
+
+    changes = {c.effective_date: c.base_rate_bp for c in lq.list_rate_changes(db_session, loan.id)}
+    assert changes == {date(2026, 7, 1): 600, date(2026, 8, 1): 420}  # later kept, seed moved
+    # The user's later observation row is the same one, untouched.
+    db_session.refresh(later)
+    assert later.base_rate_bp == 600
+
+
+def test_update_loan_seeds_rate_when_switching_to_variable(
+    db_session: Session,
+    make_account: Callable[..., Account],
+    make_loan: Callable[..., Loan],
+):
+    acc = make_account(name="Mortgage", type=AccountType.loan)
+    loan = make_loan(account_id=acc.id, rate_type=RateType.fixed, rate_bp=700)
+    assert lq.list_rate_changes(db_session, loan.id) == []
+
+    lq.update_loan(
+        db_session,
+        loan.id,
+        LoanCreate(
+            account_id=acc.id,
+            principal=loan.principal,
+            rate_type=RateType.variable,
+            rate_bp=150,
+            installment_type=loan.installment_type,
+            start_date=loan.start_date,
+            term_months=loan.term_months,
+            initial_base_rate_bp=500,
+        ),
+    )
+
+    [seed] = lq.list_rate_changes(db_session, loan.id)
+    assert (seed.effective_date, seed.base_rate_bp) == (loan.start_date, 500)
+
+
+def test_update_loan_missing_returns_none(
+    db_session: Session, make_account: Callable[..., Account]
+):
+    acc = make_account(name="Mortgage", type=AccountType.loan)
+    data = LoanCreate(
+        account_id=acc.id,
+        principal=1_000_00,
+        rate_type=RateType.fixed,
+        rate_bp=500,
+        installment_type=InstallmentType.equal,
+        start_date=date(2026, 1, 15),
+        term_months=12,
+    )
+    assert lq.update_loan(db_session, 9999, data) is None
 
 
 # --- HTTP layer ------------------------------------------------------------
@@ -297,3 +434,83 @@ def test_delete_loan_over_http(
     assert resp.status_code == status.HTTP_303_SEE_OTHER
     db_session.expire_all()  # drop the cached instance so get reloads from the DB
     assert lq.get_loan(db_session, loan_id) is None
+
+
+def test_loan_edit_form_prefills_current_values(
+    auth_client: TestClient,
+    make_account: Callable[..., Account],
+    make_loan: Callable[..., Loan],
+):
+    acc = make_account(name="Mortgage", type=AccountType.loan)
+    loan = make_loan(account_id=acc.id, principal=30_000_000, rate_bp=725)
+
+    resp = auth_client.get(f"/dashboard/loans/{loan.id}/edit")
+
+    assert resp.status_code == status.HTTP_200_OK
+    assert "Edit loan" in resp.text
+    assert 'value="300000.00"' in resp.text  # principal round-trips to PLN
+    assert 'value="7.25"' in resp.text  # rate_bp 725 -> "7.25"%
+
+
+def test_edit_fixed_loan_updates_and_redirects(
+    auth_client: TestClient,
+    db_session: Session,
+    make_account: Callable[..., Account],
+    make_loan: Callable[..., Loan],
+):
+    acc = make_account(name="Mortgage", type=AccountType.loan)
+    loan = make_loan(account_id=acc.id, principal=30_000_000, rate_bp=725, term_months=360)
+
+    resp = auth_client.post(
+        f"/dashboard/loans/{loan.id}/edit",
+        data={
+            "account_id": acc.id,
+            "principal": "250000",
+            "rate_type": "fixed",
+            "rate_percent": "6.50",
+            "installment_type": "equal",
+            "start_date": "2026-02-01",
+            "term_months": "300",
+        },
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
+    assert resp.headers["location"] == f"/dashboard/loans/{loan.id}"
+    db_session.expire_all()
+    updated = lq.get_loan(db_session, loan.id)
+    assert (updated.principal, updated.rate_bp, updated.term_months) == (25_000_000, 650, 300)
+
+
+def test_edit_variable_loan_missing_base_rate_flashes_not_500(
+    auth_client: TestClient,
+    db_session: Session,
+    make_account: Callable[..., Account],
+    make_loan: Callable[..., Loan],
+):
+    acc = make_account(name="Mortgage", type=AccountType.loan)
+    loan = make_loan(account_id=acc.id, rate_type=RateType.fixed, rate_bp=700)
+
+    resp = auth_client.post(
+        f"/dashboard/loans/{loan.id}/edit",
+        data={
+            "account_id": acc.id,
+            "principal": "300000",
+            "rate_type": "variable",
+            "rate_percent": "1.50",
+            "installment_type": "equal",
+            "start_date": "2026-01-15",
+            "term_months": "360",
+            # no base_rate_percent
+        },
+    )
+
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    assert "base rate" in resp.text.lower()
+    db_session.expire_all()
+    unchanged = lq.get_loan(db_session, loan.id)
+    assert unchanged.rate_type is RateType.fixed  # the bad edit didn't persist
+
+
+def test_edit_loan_404_for_missing_loan(auth_client: TestClient):
+    assert auth_client.get("/dashboard/loans/9999/edit").status_code == status.HTTP_404_NOT_FOUND

@@ -57,43 +57,86 @@
       <p class="muted">No budgets defined yet. Set one below.</p>
     {% endif %}
   </div>
-  <h2>Set a budget</h2>
-  <div class="panel">
-    {% if categories %}
+  {% if edit_budget %}
+    <h2>Edit budget</h2>
+    <div class="panel">
       <form method="post" action="/dashboard/budgets">
+        <input type="hidden"
+               name="category_id"
+               value="{{ edit_budget.category_id }}">
+        <input type="hidden" name="month" value="{{ edit_budget.month or '' }}">
         <div class="cols">
           <div style="flex:1; min-width:200px;">
-            <label for="category_id">Category</label>
-            <select id="category_id" name="category_id" required>
-              {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
-            </select>
+            <p class="muted" style="margin:1rem 0 4px; font-size:13px">Category</p>
+            <p style="margin:0">{{ category_names.get(edit_budget.category_id, "#" ~ edit_budget.category_id) }}</p>
           </div>
           <div style="flex:1; min-width:200px;">
             <label for="limit_amount">Monthly limit (PLN)</label>
-            <input id="limit_amount" name="limit_amount" placeholder="2000" required>
+            <input id="limit_amount"
+                   name="limit_amount"
+                   value="{{ edit_limit }}"
+                   placeholder="2000"
+                   required>
           </div>
           <div style="flex:1; min-width:200px;">
-            <label for="budget_applies">Applies to</label>
-            <select id="budget_applies" name="month">
-              <option value="">Every month (recurring)</option>
-              {% for m in months %}<option value="{{ m }}">Only {{ m }} (override)</option>{% endfor %}
-              {% if month not in months %}<option value="{{ month }}">Only {{ month }} (override)</option>{% endif %}
-            </select>
+            <p class="muted" style="margin:1rem 0 4px; font-size:13px">Applies to</p>
+            <p style="margin:0">
+              {% if edit_budget.month %}
+                Only {{ edit_budget.month }} <span class="muted">(override)</span>
+              {% else %}
+                Every month <span class="muted">(recurring)</span>
+              {% endif %}
+            </p>
           </div>
         </div>
         <p class="muted" style="font-size:13px; margin:8px 0 0;">
-          A recurring limit applies to every month; a month override replaces it for that month only.
+          Category and "applies to" identify the budget — change the limit here, or delete and re-create to move it.
         </p>
-        <p>
-          <button type="submit">Save budget</button>
-        </p>
+        <div class="hstack mt-3">
+          <button type="submit">Save changes</button>
+          <a class="btn" href="/dashboard/budgets?month={{ month }}">Cancel</a>
+        </div>
       </form>
-    {% else %}
-      <p class="muted">
-        No expense categories yet. <a href="/dashboard">Create an expense category</a> first.
-      </p>
-    {% endif %}
-  </div>
+    </div>
+  {% else %}
+    <h2>Set a budget</h2>
+    <div class="panel">
+      {% if categories %}
+        <form method="post" action="/dashboard/budgets">
+          <div class="cols">
+            <div style="flex:1; min-width:200px;">
+              <label for="category_id">Category</label>
+              <select id="category_id" name="category_id" required>
+                {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div style="flex:1; min-width:200px;">
+              <label for="limit_amount">Monthly limit (PLN)</label>
+              <input id="limit_amount" name="limit_amount" placeholder="2000" required>
+            </div>
+            <div style="flex:1; min-width:200px;">
+              <label for="budget_applies">Applies to</label>
+              <select id="budget_applies" name="month">
+                <option value="">Every month (recurring)</option>
+                {% for m in months %}<option value="{{ m }}">Only {{ m }} (override)</option>{% endfor %}
+                {% if month not in months %}<option value="{{ month }}">Only {{ month }} (override)</option>{% endif %}
+              </select>
+            </div>
+          </div>
+          <p class="muted" style="font-size:13px; margin:8px 0 0;">
+            A recurring limit applies to every month; a month override replaces it for that month only.
+          </p>
+          <p>
+            <button type="submit">Save budget</button>
+          </p>
+        </form>
+      {% else %}
+        <p class="muted">
+          No expense categories yet. <a href="/dashboard">Create an expense category</a> first.
+        </p>
+      {% endif %}
+    </div>
+  {% endif %}
   {% if budgets %}
     <h2>Defined budgets</h2>
     <div class="panel">
@@ -119,12 +162,15 @@
               </td>
               <td class="num" data-label="Limit">{{ b.limit_amount | pln }}</td>
               <td>
-                <form class="hstack"
-                      method="post"
-                      action="/dashboard/budgets/{{ b.id }}/delete"
-                      onsubmit="return confirm('Delete this budget?');">
-                  <button class="ghost" type="submit">Delete</button>
-                </form>
+                <div class="hstack">
+                  <a class="btn"
+                     href="/dashboard/budgets?month={{ month }}&edit={{ b.id }}#limit_amount">Edit</a>
+                  <form method="post"
+                        action="/dashboard/budgets/{{ b.id }}/delete"
+                        onsubmit="return confirm('Delete this budget?');">
+                    <button class="ghost" type="submit">Delete</button>
+                  </form>
+                </div>
               </td>
             </tr>
           {% endfor %}

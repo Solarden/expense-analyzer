@@ -122,6 +122,57 @@ def test_delete_budget_over_http(
     assert bq.list_budgets(db_session) == []
 
 
+def test_budget_edit_prefills_form(
+    auth_client: TestClient, db_session: Session, make_category: Callable[..., Category]
+) -> None:
+    cat = make_category(name="Food", kind=CategoryKind.expense)
+    budget = bq.set_budget(db_session, category_id=cat.id, month=None, limit_amount=2000_00)
+
+    resp = auth_client.get(f"/dashboard/budgets?edit={budget.id}")
+
+    assert resp.status_code == status.HTTP_200_OK
+    assert "Edit budget" in resp.text
+    assert 'value="2000.00"' in resp.text  # limit prefilled, parser round-trips
+    # Category + month are the identity (upsert key) — carried as hidden fields.
+    assert 'name="category_id"' in resp.text
+    assert f'value="{cat.id}"' in resp.text
+
+
+def test_budget_edit_updates_same_row_via_upsert(
+    auth_client: TestClient, db_session: Session, make_category: Callable[..., Category]
+) -> None:
+    cat = make_category(name="Food", kind=CategoryKind.expense)
+    budget = bq.set_budget(db_session, category_id=cat.id, month=None, limit_amount=2000_00)
+
+    # Posting back the locked category+month with a new limit upserts the same row.
+    resp = auth_client.post(
+        "/dashboard/budgets",
+        data={"category_id": cat.id, "month": "", "limit_amount": "2500"},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
+    db_session.expire_all()  # the app committed in its own session; drop cached rows
+    [only] = bq.list_budgets(db_session)  # still one row, not a duplicate
+    assert only.id == budget.id
+    assert only.limit_amount == 2500_00
+
+
+def test_budget_edit_stale_id_falls_back_to_create_form(auth_client: TestClient) -> None:
+    resp = auth_client.get("/dashboard/budgets?edit=9999")
+
+    assert resp.status_code == status.HTTP_200_OK
+    assert "Set a budget" in resp.text  # no edit_budget -> the create form
+
+
+def test_budget_edit_malformed_id_falls_back_not_422(auth_client: TestClient) -> None:
+    # A non-numeric ?edit= degrades to the create form rather than 422-ing the page.
+    resp = auth_client.get("/dashboard/budgets?edit=abc")
+
+    assert resp.status_code == status.HTTP_200_OK
+    assert "Set a budget" in resp.text
+
+
 def test_overview_shows_remaining_for_over_budget_category(
     auth_client: TestClient,
     db_session: Session,

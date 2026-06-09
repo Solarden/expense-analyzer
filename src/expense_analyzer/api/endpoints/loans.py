@@ -17,8 +17,15 @@ from expense_analyzer.api.forms import LoanForm, PaymentLinkForm, RateChangeForm
 from expense_analyzer.auth import require_user
 from expense_analyzer.config import get_settings
 from expense_analyzer.loans import LoanScheduleError
-from expense_analyzer.models import AccountType, InstallmentType, LoanCreate, Owner, RateType
-from expense_analyzer.money import MoneyParseError, parse_pln
+from expense_analyzer.models import (
+    AccountType,
+    InstallmentType,
+    Loan,
+    LoanCreate,
+    Owner,
+    RateType,
+)
+from expense_analyzer.money import MoneyParseError, from_minor_units, parse_pln
 from expense_analyzer.queries import accounts
 from expense_analyzer.queries import loans as loan_queries
 from expense_analyzer.templating import templates
@@ -39,6 +46,80 @@ def _loans_context(session: Session, user: Owner, **extra) -> dict:
     }
 
 
+def _parse_loan_form(session: Session, form: LoanForm) -> tuple[str | None, LoanCreate | None]:
+    """Validate a submitted loan form into a :class:`LoanCreate`, or an error string.
+
+    Shared by create and edit so both apply the same rules — bad input becomes a
+    red flash, never a 500. The amounts/rate arrive as PLN/percent text and are
+    parsed into minor units / basis points here (``"7,25"`` -> ``725`` bp)."""
+    account = accounts.get_account(session, form.account_id)
+    if account is None or account.type != AccountType.loan:
+        return "Pick a loan account (create one of type 'loan' first).", None
+    if form.term_months < 1:
+        return "Term must be at least one month.", None
+    try:
+        principal_minor = parse_pln(form.principal)
+        rate_bp = parse_pln(form.rate_percent)  # "7,25" -> 725 basis points
+        initial_base_rate_bp = (
+            parse_pln(form.base_rate_percent) if form.base_rate_percent.strip() else None
+        )
+    except MoneyParseError as exc:
+        return f"Could not read the amounts/rate: {exc}", None
+    if principal_minor <= 0:
+        return "Principal must be a positive amount.", None
+    if form.rate_type is RateType.variable and initial_base_rate_bp is None:
+        return "A variable-rate loan needs an initial base rate (e.g. current WIBOR).", None
+
+    return None, LoanCreate(
+        account_id=form.account_id,
+        principal=principal_minor,
+        rate_type=form.rate_type,
+        rate_bp=rate_bp,
+        installment_type=form.installment_type,
+        start_date=form.start_date,
+        term_months=form.term_months,
+        base_rate_ref=form.base_rate_ref.strip() or None,
+        initial_base_rate_bp=initial_base_rate_bp,
+    )
+
+
+def _loan_edit_context(session: Session, user: Owner, loan: Loan, form: LoanForm, **extra) -> dict:
+    """Context for the loan edit form. Prefill values come from ``form`` (the raw
+    submitted/derived text) so a validation re-render keeps what the user typed."""
+    return {
+        "user": user,
+        "loan": loan,
+        "loan_accounts": loan_queries.loan_accounts(session),
+        "rate_types": [t.value for t in RateType],
+        "installment_types": [t.value for t in InstallmentType],
+        "form": form,
+        **extra,
+    }
+
+
+def _loan_form_from(session: Session, loan: Loan) -> LoanForm:
+    """Build a prefilled :class:`LoanForm` from a stored loan.
+
+    Minor units / basis points share the same two-decimal scale as the PLN/percent
+    parser, so :func:`from_minor_units` round-trips both back to the input text
+    (``30_000_000`` -> ``"300000.00"``, ``725`` -> ``"7.25"``) with no float. The
+    initial base rate echoes the earliest observation, the one edit re-seeds."""
+    changes = loan_queries.list_rate_changes(session, loan.id)
+    base_rate_percent = str(from_minor_units(changes[0].base_rate_bp)) if changes else ""
+
+    return LoanForm(
+        account_id=loan.account_id,
+        principal=str(from_minor_units(loan.principal)),
+        rate_type=loan.rate_type,
+        rate_percent=str(from_minor_units(loan.rate_bp)),
+        installment_type=loan.installment_type,
+        start_date=loan.start_date,
+        term_months=loan.term_months,
+        base_rate_ref=loan.base_rate_ref or "",
+        base_rate_percent=base_rate_percent,
+    )
+
+
 @router.get("", response_class=HTMLResponse)
 def loans_page(request: Request, user: CurrentUser, session: DbSession) -> HTMLResponse:
     return templates.TemplateResponse(request, "loans.html", _loans_context(session, user))
@@ -51,27 +132,7 @@ def create_loan(
     user: CurrentUser,
     session: DbSession,
 ) -> Response:
-    account = accounts.get_account(session, form.account_id)
-    error: str | None = None
-    if account is None or account.type != AccountType.loan:
-        error = "Pick a loan account (create one of type 'loan' first)."
-    elif form.term_months < 1:
-        error = "Term must be at least one month."
-    else:
-        try:
-            principal_minor = parse_pln(form.principal)
-            rate_bp = parse_pln(form.rate_percent)  # "7,25" -> 725 basis points
-            initial_base_rate_bp = (
-                parse_pln(form.base_rate_percent) if form.base_rate_percent.strip() else None
-            )
-        except MoneyParseError as exc:
-            error = f"Could not read the amounts/rate: {exc}"
-        else:
-            if principal_minor <= 0:
-                error = "Principal must be a positive amount."
-            elif form.rate_type is RateType.variable and initial_base_rate_bp is None:
-                error = "A variable-rate loan needs an initial base rate (e.g. current WIBOR)."
-
+    error, data = _parse_loan_form(session, form)
     if error is not None:
         return templates.TemplateResponse(
             request,
@@ -80,20 +141,7 @@ def create_loan(
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
-    loan = loan_queries.create_loan(
-        session,
-        LoanCreate(
-            account_id=form.account_id,
-            principal=principal_minor,
-            rate_type=form.rate_type,
-            rate_bp=rate_bp,
-            installment_type=form.installment_type,
-            start_date=form.start_date,
-            term_months=form.term_months,
-            base_rate_ref=form.base_rate_ref.strip() or None,
-            initial_base_rate_bp=initial_base_rate_bp,
-        ),
-    )
+    loan = loan_queries.create_loan(session, data)
 
     return RedirectResponse(f"/dashboard/loans/{loan.id}", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -148,6 +196,55 @@ def loan_detail(
             "flash": flash,
         },
     )
+
+
+@router.get("/{loan_id}/edit", response_class=HTMLResponse)
+def loan_edit_form(
+    request: Request,
+    loan_id: int,
+    user: CurrentUser,
+    session: DbSession,
+) -> HTMLResponse:
+    loan = loan_queries.get_loan(session, loan_id)
+    if loan is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"loan {loan_id} not found"
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "loan_edit.html",
+        _loan_edit_context(session, user, loan, _loan_form_from(session, loan)),
+    )
+
+
+@router.post("/{loan_id}/edit", response_class=HTMLResponse)
+def edit_loan(
+    request: Request,
+    loan_id: int,
+    form: Annotated[LoanForm, Form()],
+    user: CurrentUser,
+    session: DbSession,
+) -> Response:
+    loan = loan_queries.get_loan(session, loan_id)
+    if loan is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"loan {loan_id} not found"
+        )
+
+    error, data = _parse_loan_form(session, form)
+    if error is not None:
+        # Re-render with what the user typed (echo `form`), not the stored loan.
+        return templates.TemplateResponse(
+            request,
+            "loan_edit.html",
+            _loan_edit_context(session, user, loan, form, error=error),
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    loan_queries.update_loan(session, loan_id, data)
+
+    return RedirectResponse(f"/dashboard/loans/{loan_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{loan_id}/rate-changes")

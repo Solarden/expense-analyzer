@@ -64,6 +64,55 @@ def create_loan(session: Session, data: LoanCreate) -> Loan:
     return loan
 
 
+def update_loan(session: Session, loan_id: int, data: LoanCreate) -> Loan | None:
+    """Update a loan's definition; the schedule recomputes from it on demand.
+
+    Nothing about the amortization plan is stored (see :func:`loan_schedule`), so
+    rewriting these fields *is* the recalculation — there's no cached schedule to
+    invalidate. For a variable rate, the **start-date observation** (the one
+    :func:`create_loan` seeded on the original start date) tracks the loan's start
+    date and initial base rate, so it's moved/updated to match ``data.start_date``
+    / ``data.initial_base_rate_bp`` (later observations the user added on the detail
+    page are left intact — matching on the old start date avoids mistargeting one of
+    them when the start date moves). A loan with no observation yet — e.g. one just
+    switched from fixed to variable — gets one seeded; a loan switched to fixed keeps
+    any old observations, harmless since a fixed schedule ignores them. Returns None
+    if the loan doesn't exist.
+    """
+    loan = session.get(Loan, loan_id)
+    if loan is None:
+        return None
+
+    old_start = loan.start_date  # the start-date observation sits here (pre-edit)
+    # initial_base_rate_bp is not a Loan column — it seeds/updates a rate change.
+    for field, value in data.model_dump(exclude={"initial_base_rate_bp"}).items():
+        setattr(loan, field, value)
+    session.add(loan)
+
+    if data.rate_type is RateType.variable and data.initial_base_rate_bp is not None:
+        changes = list_rate_changes(session, loan_id)  # ordered by effective_date
+        # The seed is the observation on the old start date; fall back to the
+        # earliest if it's gone (e.g. hand-edited history).
+        seed = next((c for c in changes if c.effective_date == old_start), None)
+        seed = seed or (changes[0] if changes else None)
+        if seed is not None:
+            seed.effective_date = data.start_date
+            seed.base_rate_bp = data.initial_base_rate_bp
+            session.add(seed)
+        else:
+            session.add(
+                LoanRateChange(
+                    loan_id=loan_id,
+                    effective_date=data.start_date,
+                    base_rate_bp=data.initial_base_rate_bp,
+                )
+            )
+    session.commit()
+    session.refresh(loan)
+
+    return loan
+
+
 def delete_loan(session: Session, loan_id: int) -> bool:
     """Delete a loan, its rate-change history, and unlink any payments.
 
