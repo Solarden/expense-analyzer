@@ -196,6 +196,9 @@ class LoanBase(SQLModel):
     installment_type: InstallmentType
     start_date: date  # disbursement; first installment is one month later
     term_months: int
+    # Bank contract number (e.g. "BLP0068094260"). Display meta on its own; from
+    # Phase 19b it also feeds the planned-item transfer-title hint ("umowa nr …").
+    contract_number: str | None = Field(default=None)
 
 
 class Loan(LoanBase, table=True):
@@ -364,3 +367,74 @@ class LoanRateChange(SQLModel, table=True):
     loan_id: int = Field(foreign_key="loan.id", index=True)
     effective_date: date = Field(index=True)
     base_rate_bp: int  # basis points
+
+
+class PlannedItem(SQLModel, table=True):
+    """One recurring line in the monthly cashflow checklist (design §11, Phase 19).
+
+    Replaces the Google-Sheet that listed every monthly obligation (income at the
+    top, fixed charges below, "FOR LIVING" as the remainder). The user defines each
+    repeating line once; the per-month view is **derived** (no "generate" step) from
+    these items plus their payment status for the selected month.
+
+    ``expected_amount`` is **signed** minor units — positive for income (salary),
+    negative for an expense (rent, ZUS, a subscription). It is **nullable**: a
+    variable charge (ZUS/US/VAT/utilities) has no fixed figure, so the real amount
+    only becomes known once a transaction is linked (Phase 19b). A row with no
+    expected amount reads as *unestimated* (never a silent zero).
+
+    ``loan_id`` (nullable) marks a **loan-backed** line: from Phase 19b its name,
+    installment counter and amount are computed live from the loan's amortization
+    schedule, not from ``expected_amount``. The column exists from 19a so 19b needs
+    no migration; the derivation itself lands in 19b.
+
+    ``category_id`` ties the line into spending stats/budgets; ``payee_account`` is
+    the destination IBAN (structured, for the Phase 19b "how to pay" card rather
+    than wedged into ``note``); ``due_day`` (1–31) is the typical payment day that
+    drives the overdue flag. ``active`` retires a line without deleting its history;
+    ``sort_order`` arranges the rows (income first, then charges).
+    """
+
+    __tablename__ = "planned_item"
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str
+    # signed minor units: + income / - expense. None = variable (unestimated until
+    # a real amount is known) — never treated as a silent zero.
+    expected_amount: int | None = Field(default=None)
+    category_id: int | None = Field(default=None, foreign_key="category.id", index=True)
+    # Set => loan-backed; name/counter/amount derive from the schedule (Phase 19b).
+    loan_id: int | None = Field(default=None, foreign_key="loan.id", index=True)
+    payee_account: str | None = Field(default=None)  # destination IBAN (how-to-pay card)
+    due_day: int | None = Field(default=None)  # 1–31 typical pay day; drives overdue
+    note: str | None = Field(default=None)  # free-text annotation
+    active: bool = Field(default=True)  # retire without deleting history
+    sort_order: int = Field(default=0)  # income first, then charges
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class PlannedItemPayment(SQLModel, table=True):
+    """The paid/unpaid status of a **non-loan** planned item for one month (Phase 19).
+
+    One row per ``(planned_item_id, month)`` records that the obligation was met
+    that month, either by a linked real transaction (``transaction_id`` — Phase 19b)
+    **or** a manual tick (``paid_at`` — cash/untracked, Phase 19a). The unique
+    constraint guards against a duplicate status row for the same month.
+
+    **Loan-backed items have no row here.** Their "paid this month" status is
+    *derived* from loan reconciliation (the installment due that month plus its
+    linked payment) so the Loans module stays the single source of truth — see the
+    :class:`PlannedItem` docstring.
+    """
+
+    __tablename__ = "planned_item_payment"
+    __table_args__ = (
+        UniqueConstraint("planned_item_id", "month", name="uq_planned_item_payment_month"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    planned_item_id: int = Field(foreign_key="planned_item.id", index=True)
+    month: str = Field(index=True)  # "YYYY-MM"
+    transaction_id: int | None = Field(default=None, foreign_key="transaction.id")  # Phase 19b link
+    paid_at: datetime | None = Field(default=None)  # manual tick (no linked tx)
+    created_at: datetime = Field(default_factory=utc_now)

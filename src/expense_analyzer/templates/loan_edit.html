@@ -34,6 +34,11 @@
                  min="1"
                  value="{{ form.term_months }}"
                  required>
+          <label for="contract_number">Contract number</label>
+          <input id="contract_number"
+                 name="contract_number"
+                 value="{{ form.contract_number }}"
+                 placeholder="optional, e.g. BLP0068094260">
         </div>
         <div style="flex:1; min-width:240px;">
           <label for="installment_type">Installment type</label>

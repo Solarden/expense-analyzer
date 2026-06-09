@@ -26,6 +26,12 @@
       <div class="k">Term</div>
       <div class="v">{{ loan.term_months }} mo from {{ loan.start_date | dpl }}</div>
     </div>
+    {% if loan.contract_number %}
+      <div class="card">
+        <div class="k">Contract</div>
+        <div class="v">{{ loan.contract_number }}</div>
+      </div>
+    {% endif %}
   </div>
   {% if loan.rate_type.value == "variable" %}
     <h2>Base rate history</h2>
