@@ -89,6 +89,11 @@
       <symbol id="i-menu" viewBox="0 0 24 24">
       <path d="M3 6h18M3 12h18M3 18h18" />
       </symbol>
+      <symbol id="i-plan" viewBox="0 0 24 24">
+      <path d="M9 4h6a1 1 0 011 1v1H8V5a1 1 0 011-1z" />
+      <path d="M8 5H6a1 1 0 00-1 1v13a1 1 0 001 1h12a1 1 0 001-1V6a1 1 0 00-1-1h-2" />
+      <path d="M9 13l2 2 4-4" />
+      </symbol>
     </svg>
     <header>
       <h1>💸 Expense Analyzer</h1>
@@ -107,7 +112,7 @@
           </svg>
         </button>
         {# Home stays a standalone link; the rest collapse into labelled dropdowns. #}
-        {% set nav_groups = [('Money', [('/dashboard/stats', 'Overview', 'i-overview'), ('/dashboard/transactions', 'Transactions', 'i-transactions'), ('/dashboard/transfers', 'Transfers', 'i-transfers')]), ('Planning', [('/dashboard/budgets', 'Budgets', 'i-budgets'), ('/dashboard/subscriptions', 'Subscriptions', 'i-subscriptions'), ('/dashboard/loans', 'Loans', 'i-loans')]), ('Categorize', [('/dashboard/rules', 'Rules', 'i-rules'), ('/dashboard/queue', 'Review queue', 'i-queue')]), ('Wealth', [('/dashboard/investments', 'Investments', 'i-investments'), ('/dashboard/net-worth', 'Net worth', 'i-networth')]), ('System', [('/dashboard/upload', 'Import CSV', 'i-import'), ('/dashboard/home-assistant', 'Home Assistant', 'i-ha'), ('/dashboard/users', 'Users', 'i-users')])] %}
+        {% set nav_groups = [('Money', [('/dashboard/stats', 'Overview', 'i-overview'), ('/dashboard/transactions', 'Transactions', 'i-transactions'), ('/dashboard/transfers', 'Transfers', 'i-transfers')]), ('Planning', [('/dashboard/plan', 'Plan', 'i-plan'), ('/dashboard/budgets', 'Budgets', 'i-budgets'), ('/dashboard/subscriptions', 'Subscriptions', 'i-subscriptions'), ('/dashboard/loans', 'Loans', 'i-loans')]), ('Categorize', [('/dashboard/rules', 'Rules', 'i-rules'), ('/dashboard/queue', 'Review queue', 'i-queue')]), ('Wealth', [('/dashboard/investments', 'Investments', 'i-investments'), ('/dashboard/net-worth', 'Net worth', 'i-networth')]), ('System', [('/dashboard/upload', 'Import CSV', 'i-import'), ('/dashboard/home-assistant', 'Home Assistant', 'i-ha'), ('/dashboard/users', 'Users', 'i-users')])] %}
         <nav id="primary-nav">
           <a href="/dashboard">
             <svg class="nav-ico" aria-hidden="true">

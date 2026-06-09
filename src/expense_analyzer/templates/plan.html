@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block content %}
+  <h2 style="margin-top:0">Monthly plan</h2>
+  <div class="panel">
+    <form class="hstack" method="get" action="/dashboard/plan">
+      <label style="margin:0" for="plan_month">Month</label>
+      <select id="plan_month" name="month" onchange="this.form.submit()">
+        {% for m in months %}
+          <option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ m }}</option>
+        {% endfor %}
+        {% if month not in months %}<option value="{{ month }}" selected>{{ month }}</option>{% endif %}
+      </select>
+      <noscript>
+        <button type="submit">Show</button>
+      </noscript>
+    </form>
+    <p class="muted" style="margin:8px 0 0">
+      Income at the top, charges below — "FOR LIVING" is what's left. Tick a line as paid when you settle it.
+    </p>
+  </div>
+  <div class="panel">
+    <h2 style="margin-top:0">{{ month }}</h2>
+    {% if overview.rows %}
+      <table class="table-cards">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th class="num">Expected</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in overview.rows %}
+            <tr>
+              <td data-label="Item">
+                {{ ui.swatch(category_colors.get(row.item.category_id) ) }}{{ row.item.name }}
+                {% if row.item.due_day %}<span class="muted">· due {{ row.item.due_day }}</span>{% endif %}
+                {% if row.item.note %}<div class="muted text-[12px]">{{ row.item.note }}</div>{% endif %}
+              </td>
+              <td class="num {{ 'pos' if row.is_income else 'neg' }}"
+                  data-label="Expected">
+                {% if row.expected_amount is not none %}
+                  {{ row.expected_amount | pln }}
+                {% else %}
+                  <span class="muted">— variable</span>
+                {% endif %}
+              </td>
+              <td data-label="Status">
+                {% if row.paid %}
+                  <span class="pos">✓ paid
+                    {% if row.paid_date %}{{ row.paid_date | dpl }}{% endif %}
+                  </span>
+                {% elif row.overdue %}
+                  <span class="neg">overdue</span>
+                {% else %}
+                  <span class="muted">unpaid</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.paid %}
+                  <form method="post" action="/dashboard/plan/{{ row.item.id }}/mark-unpaid">
+                    <input type="hidden" name="month" value="{{ month }}">
+                    <button class="ghost" type="submit">Undo</button>
+                  </form>
+                {% else %}
+                  <form method="post" action="/dashboard/plan/{{ row.item.id }}/mark-paid">
+                    <input type="hidden" name="month" value="{{ month }}">
+                    <button type="submit">Mark paid</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <th>Income</th>
+            <td class="num pos">{{ overview.income_total | pln }}</td>
+            <td colspan="2"></td>
+          </tr>
+          <tr>
+            <th>Charges</th>
+            <td class="num neg">{{ (-overview.charges_total) | pln }}</td>
+            <td data-label="Left to pay" class="muted">Left to pay: {{ overview.left_to_pay | pln }}</td>
+            <td></td>
+          </tr>
+          <tr>
+            <th>FOR LIVING</th>
+            <td class="num {{ 'pos' if overview.for_living >= 0 else 'neg' }}">{{ overview.for_living | pln }}</td>
+            <td colspan="2">
+              {% if overview.unestimated_count %}
+                <span class="muted text-[12px]">{{ overview.unestimated_count }} variable item(s) not yet estimated — total is approximate.</span>
+              {% endif %}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    {% else %}
+      <p class="muted">No active plan items. Add one below.</p>
+    {% endif %}
+  </div>
+  {% if edit_item %}
+    <h2>Edit plan item</h2>
+  {% else %}
+    <h2>Add a plan item</h2>
+  {% endif %}
+  <div class="panel">
+    <form method="post"
+          action="{% if edit_item %}/dashboard/plan/{{ edit_item.id }}/edit?month={{ month }}{% else %}/dashboard/plan?month={{ month }}{% endif %}">
+      <div class="cols">
+        <div style="flex:2; min-width:200px;">
+          <label for="name">Name</label>
+          <input id="name"
+                 name="name"
+                 value="{{ form.name if form else '' }}"
+                 placeholder="Rent, ZUS, Salary…"
+                 required>
+        </div>
+        <div style="flex:1; min-width:120px;">
+          <label for="direction">Direction</label>
+          <select id="direction" name="direction">
+            {% for d in directions %}
+              <option value="{{ d }}"
+                      {% if form and form.direction.value == d %}selected{% endif %}>{{ d }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div style="flex:1; min-width:140px;">
+          <label for="amount">Amount (PLN)</label>
+          <input id="amount"
+                 name="amount"
+                 value="{{ form.amount if form else '' }}"
+                 placeholder="leave blank if variable">
+        </div>
+      </div>
+      <div class="cols">
+        <div style="flex:1; min-width:160px;">
+          <label for="category_id">Category</label>
+          <select id="category_id" name="category_id">
+            <option value="">— none —</option>
+            {% for c in categories %}
+              <option value="{{ c.id }}"
+                      {% if form and form.category_id == (c.id | string) %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div style="flex:1; min-width:120px;">
+          <label for="due_day">Due day (1–31)</label>
+          <input id="due_day"
+                 name="due_day"
+                 value="{{ form.due_day if form else '' }}"
+                 placeholder="e.g. 10">
+        </div>
+        <div style="flex:2; min-width:200px;">
+          <label for="payee_account">Payee account (IBAN)</label>
+          <input id="payee_account"
+                 name="payee_account"
+                 value="{{ form.payee_account if form else '' }}"
+                 placeholder="optional">
+        </div>
+      </div>
+      <div class="cols">
+        <div style="flex:1; min-width:200px;">
+          <label for="note">Note</label>
+          <input id="note"
+                 name="note"
+                 value="{{ form.note if form else '' }}"
+                 placeholder="optional">
+        </div>
+      </div>
+      <p class="muted" style="font-size:13px; margin:8px 0 0;">
+        Leave the amount blank for a variable charge (ZUS, VAT, utilities) — it stays unestimated until you know the figure.
+      </p>
+      <div class="hstack mt-3">
+        <button type="submit">
+          {% if edit_item %}
+            Save changes
+          {% else %}
+            Add item
+          {% endif %}
+        </button>
+        {% if edit_item %}<a class="btn" href="/dashboard/plan?month={{ month }}">Cancel</a>{% endif %}
+      </div>
+    </form>
+  </div>
+  {% if items %}
+    <h2>Plan items</h2>
+    <div class="panel">
+      <table class="table-cards">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th class="num">Expected</th>
+            <th>Due day</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for it in items %}
+            <tr>
+              <td data-label="Item">
+                {{ ui.swatch(category_colors.get(it.category_id) ) }}{{ it.name }}
+                {% if not it.active %}<span class="muted">· retired</span>{% endif %}
+              </td>
+              <td class="num" data-label="Expected">
+                {% if it.expected_amount is not none %}
+                  {{ it.expected_amount | pln }}
+                {% else %}
+                  <span class="muted">— variable</span>
+                {% endif %}
+              </td>
+              <td data-label="Due day">{{ it.due_day or "—" }}</td>
+              <td>
+                <div class="hstack">
+                  <form method="post" action="/dashboard/plan/{{ it.id }}/move">
+                    <input type="hidden" name="month" value="{{ month }}">
+                    <input type="hidden" name="dir" value="up">
+                    <button class="ghost" type="submit" aria-label="Move up">↑</button>
+                  </form>
+                  <form method="post" action="/dashboard/plan/{{ it.id }}/move">
+                    <input type="hidden" name="month" value="{{ month }}">
+                    <input type="hidden" name="dir" value="down">
+                    <button class="ghost" type="submit" aria-label="Move down">↓</button>
+                  </form>
+                  <a class="btn"
+                     href="/dashboard/plan?month={{ month }}&edit={{ it.id }}#name">Edit</a>
+                  <form method="post" action="/dashboard/plan/{{ it.id }}/toggle-active">
+                    <input type="hidden" name="month" value="{{ month }}">
+                    <button class="ghost" type="submit">{{ "Activate" if not it.active else "Retire" }}</button>
+                  </form>
+                  <form method="post"
+                        action="/dashboard/plan/{{ it.id }}/delete"
+                        onsubmit="return confirm('Delete this plan item?');">
+                    <input type="hidden" name="month" value="{{ month }}">
+                    <button class="ghost" type="submit">Delete</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+{% endblock %}

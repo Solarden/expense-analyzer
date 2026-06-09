@@ -80,6 +80,7 @@ def _parse_loan_form(session: Session, form: LoanForm) -> tuple[str | None, Loan
         term_months=form.term_months,
         base_rate_ref=form.base_rate_ref.strip() or None,
         initial_base_rate_bp=initial_base_rate_bp,
+        contract_number=form.contract_number.strip() or None,
     )
 
 
@@ -117,6 +118,7 @@ def _loan_form_from(session: Session, loan: Loan) -> LoanForm:
         term_months=loan.term_months,
         base_rate_ref=loan.base_rate_ref or "",
         base_rate_percent=base_rate_percent,
+        contract_number=loan.contract_number or "",
     )
 
 

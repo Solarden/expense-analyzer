@@ -165,3 +165,19 @@ class LoanForm(BaseModel):
     term_months: int
     base_rate_ref: str = ""
     base_rate_percent: str = ""  # variable only: initial base rate
+    contract_number: str = ""  # bank contract number, e.g. "BLP0068094260"
+
+
+class PlannedItemForm(BaseModel):
+    """Raw planned-item form fields (Phase 19). ``amount`` is a positive PLN string
+    with ``direction`` giving its sign (income/expense), or ``""`` for a variable
+    item with no fixed figure. ``category_id``/``due_day`` are digit strings or
+    ``""`` (none), parsed and range-checked in the handler."""
+
+    name: str
+    amount: str = ""  # positive PLN magnitude; "" -> unestimated (variable)
+    direction: TxDirection = TxDirection.expense
+    category_id: str = ""  # digit string or "" (none)
+    payee_account: str = ""
+    due_day: str = ""  # "" or "1".."31"
+    note: str = ""

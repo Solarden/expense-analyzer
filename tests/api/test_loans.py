@@ -312,6 +312,35 @@ def test_create_fixed_loan_redirects_to_detail(
     assert loan.rate_bp == 725  # 7.25% -> basis points
 
 
+def test_create_loan_with_contract_number(
+    auth_client: TestClient,
+    db_session: Session,
+    make_account: Callable[..., Account],
+):
+    """Phase 19a: the contract number is stored and surfaced on the detail page."""
+    acc = make_account(name="Mortgage", type=AccountType.loan)
+    resp = auth_client.post(
+        "/dashboard/loans",
+        data={
+            "account_id": acc.id,
+            "principal": "300000",
+            "rate_type": "fixed",
+            "rate_percent": "7.25",
+            "installment_type": "equal",
+            "start_date": "2026-01-15",
+            "term_months": "360",
+            "contract_number": "BLP0068094260",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
+
+    loan = lq.list_loans(db_session)[0]
+    assert loan.contract_number == "BLP0068094260"
+    detail = auth_client.get(f"/dashboard/loans/{loan.id}")
+    assert "BLP0068094260" in detail.text
+
+
 def test_create_variable_loan_requires_initial_base_rate(
     auth_client: TestClient,
     make_account: Callable[..., Account],

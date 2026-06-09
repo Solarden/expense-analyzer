@@ -33,6 +33,7 @@ from expense_analyzer.models import (
     InstallmentType,
     InvestmentPosition,
     Loan,
+    PlannedItem,
     RateType,
     Rule,
     Subscription,
@@ -274,6 +275,18 @@ def make_rule(db_session: Session) -> Callable[..., Rule]:
         db_session.commit()
         db_session.refresh(rule)
         return rule
+
+    return _make
+
+
+@pytest.fixture
+def make_planned_item(db_session: Session) -> Callable[..., PlannedItem]:
+    def _make(*, name: str = "Rent", expected_amount: int | None = -200_000, **kw) -> PlannedItem:
+        item = PlannedItem(name=name, expected_amount=expected_amount, **kw)
+        db_session.add(item)
+        db_session.commit()
+        db_session.refresh(item)
+        return item
 
     return _make
 
