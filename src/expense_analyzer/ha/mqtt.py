@@ -166,6 +166,34 @@ class MqttPublisher:
 
         self._with_connection(body, will=(avail, discovery.OFFLINE))
 
+    def publish_plan(self, *, paid: int, total: int, overdue: int) -> None:
+        """Publish the retained monthly-plan progress sensor (Phase 19c).
+
+        Mirrors :meth:`publish_update` (availability + retained discovery + retained
+        state) on its own ``<base>/plan`` topic, so it never clobbers the money
+        state doc. Published every cycle so the progress reflects the current month.
+        """
+        avail = discovery.availability_topic(self._base_topic)
+
+        def body(client: MqttClient) -> list[object]:
+            return [
+                client.publish(avail, discovery.ONLINE, qos=_QOS, retain=True),
+                client.publish(
+                    discovery.discovery_topic(self._discovery_prefix, self._base_topic, "plan"),
+                    json.dumps(discovery.plan_sensor_config(base=self._base_topic)),
+                    qos=_QOS,
+                    retain=True,
+                ),
+                client.publish(
+                    discovery.plan_topic(self._base_topic),
+                    discovery.plan_payload(paid=paid, total=total, overdue=overdue),
+                    qos=_QOS,
+                    retain=True,
+                ),
+            ]
+
+        self._with_connection(body, will=(avail, discovery.OFFLINE))
+
     def publish_alert(self, title: str, message: str, *, severity: str = "warning") -> None:
         """Publish a one-off alert event (not retained) for an HA automation.
 
@@ -266,6 +294,7 @@ def publish_snapshot(
     from expense_analyzer.config import get_settings
     from expense_analyzer.money import format_pln
     from expense_analyzer.queries import budgets as budget_queries
+    from expense_analyzer.queries import planned as planned_queries
     from expense_analyzer.queries import subscriptions as subscription_queries
 
     metrics = collect_metrics(session)
@@ -274,6 +303,23 @@ def publish_snapshot(
 
     today = local_today()
     month = today.strftime("%Y-%m")
+
+    # Monthly plan progress sensor + overdue alert (Phase 19c). The plan sensor is
+    # its own retained topic; the alert is fired statelessly every cycle (HA's
+    # throttle decides when to notify), like the budget/subscription alerts below.
+    plan = planned_queries.plan_overview(session, month, today=today)
+    paid = sum(1 for row in plan.rows if row.paid)
+    overdue = sum(1 for row in plan.rows if row.overdue)
+    publisher.publish_plan(paid=paid, total=len(plan.rows), overdue=overdue)
+    if overdue:
+        publisher.publish_alert(
+            title="Bills overdue",
+            message=(
+                f"{overdue} planned bill(s) overdue this month; "
+                f"{format_pln(plan.left_to_pay)} still to pay."
+            ),
+            severity="warning",
+        )
     for status in budget_queries.budget_overview(session, month):
         if status.over:
             publisher.publish_alert(

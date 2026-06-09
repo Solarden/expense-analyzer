@@ -16,7 +16,7 @@
       </noscript>
     </form>
     <p class="muted" style="margin:8px 0 0">
-      Income at the top, charges below — "FOR LIVING" is what's left. Tick a line as paid when you settle it.
+      Income at the top, charges below — "For living" is what's left. Tick a line as paid when you settle it.
     </p>
   </div>
   <div class="panel">
@@ -138,7 +138,7 @@
             <td></td>
           </tr>
           <tr>
-            <th>FOR LIVING</th>
+            <th>For living</th>
             <td class="num {{ 'pos' if overview.for_living >= 0 else 'neg' }}">{{ overview.for_living | pln }}</td>
             <td colspan="2">
               {% if overview.unestimated_count %}
@@ -152,6 +152,12 @@
       <p class="muted">No active plan items. Add one below.</p>
     {% endif %}
   </div>
+  {% if items and for_living_chart.labels %}
+    <div class="panel">
+      <h2 style="margin-top:0">For living trend</h2>
+      <canvas id="forLivingChart" height="200"></canvas>
+    </div>
+  {% endif %}
   {% if edit_item %}
     <h2>Edit plan item</h2>
   {% else %}
@@ -310,4 +316,26 @@
     </div>
   {% endif %}
   <script src="/static/plan-copy.js"></script>
+  {% if items and for_living_chart.labels %}
+    <script src="/static/chart.min.js"></script>
+    <script src="/static/chart-theme.js"></script>
+    <script>
+      const forLivingData = {{ for_living_chart | tojson }};
+      // Values are integer minor units (1/100 PLN); fmt divides by 100 for ticks/tooltips.
+      const fmtFL = (minor) => (minor / 100).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' });
+      if (window.Chart && forLivingData.labels.length) {
+        new Chart(document.getElementById('forLivingChart'), {
+          type: 'line',
+          data: {
+            labels: forLivingData.labels,
+            datasets: [{ label: 'FOR LIVING', data: forLivingData.data, borderColor: '#4f8cff', tension: 0.2 }],
+          },
+          options: {
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => fmtFL(c.parsed.y) } } },
+            scales: { y: { ticks: { callback: fmtFL } } },
+          },
+        });
+      }
+    </script>
+  {% endif %}
 {% endblock %}

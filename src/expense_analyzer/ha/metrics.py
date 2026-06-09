@@ -18,6 +18,7 @@ from expense_analyzer.config import get_settings
 from expense_analyzer.money import from_minor_units
 from expense_analyzer.queries import budgets as budget_queries
 from expense_analyzer.queries import net_worth as net_worth_queries
+from expense_analyzer.queries import planned as planned_queries
 from expense_analyzer.queries import stats as stats_queries
 from expense_analyzer.queries import subscriptions as subscription_queries
 
@@ -101,6 +102,15 @@ def collect_metrics(session: Session) -> list[Metric]:
             value=_pln(status.remaining),
         )
         for status in budget_queries.budget_overview(session, month, spendable=spendable)
+    ]
+
+    # Monthly cashflow checklist (Phase 19c): the remainder after all obligations
+    # ("FOR LIVING") and what's still unpaid this month. The paid X/Y progress and
+    # overdue count ride on a separate plan sensor (see ``publish_plan``).
+    plan = planned_queries.plan_overview(session, month, today=today)
+    metrics += [
+        Metric("plan_for_living", "For Living This Month", _pln(plan.for_living)),
+        Metric("plan_left_to_pay", "Left To Pay This Month", _pln(plan.left_to_pay)),
     ]
 
     return metrics

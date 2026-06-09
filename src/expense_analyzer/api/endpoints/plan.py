@@ -84,8 +84,16 @@ def _context(
         "accounts": {a.id: a.name for a in account_queries.list_accounts(session)},
         "loans": loan_queries.list_loans(session),
         "directions": [d.value for d in TxDirection],
+        "for_living_chart": _for_living_chart(session),
         **extra,
     }
+
+
+def _for_living_chart(session: Session) -> dict:
+    """Labels + FOR LIVING values (minor units) for the trend chart, last 6 months."""
+    trend = planned_queries.for_living_trend(session, months=6)
+
+    return {"labels": [m for m, _ in trend], "data": [v for _, v in trend]}
 
 
 def _parse_item_form(form: PlannedItemForm) -> tuple[str | None, dict | None]:

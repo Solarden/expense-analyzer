@@ -649,3 +649,26 @@ def _match_candidates(
         matches.sort(key=lambda tx: abs((tx.booked_date - due).days))
 
     return matches[:limit]
+
+
+def for_living_trend(
+    session: Session, *, months: int, today: date | None = None
+) -> list[tuple[str, int]]:
+    """ "FOR LIVING" (income − charges) per month for the last ``months`` months,
+    ending at the current local month, oldest first (left-to-right on a chart).
+
+    Each month is a full :func:`plan_overview` derivation, so the trend reflects the
+    same figures the checklist shows (loan-backed installments included, variable
+    items only when estimated). Cheap at household scale; ``today`` is injectable so
+    the month window is deterministic in tests."""
+    today = today or local_today()
+    year, month = today.year, today.month
+    keys: list[str] = []
+    for _ in range(max(1, months)):
+        keys.append(f"{year:04d}-{month:02d}")
+        month -= 1
+        if month == 0:
+            month, year = 12, year - 1
+    keys.reverse()
+
+    return [(key, plan_overview(session, key, today=today).for_living) for key in keys]
