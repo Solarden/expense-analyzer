@@ -178,6 +178,14 @@ class PlannedItemForm(BaseModel):
     amount: str = ""  # positive PLN magnitude; "" -> unestimated (variable)
     direction: TxDirection = TxDirection.expense
     category_id: str = ""  # digit string or "" (none)
+    loan_id: str = ""  # digit string or "" -> loan-backed when set (amount derived)
     payee_account: str = ""
     due_day: str = ""  # "" or "1".."31"
     note: str = ""
+
+
+class PlannedLinkForm(BaseModel):
+    """Link a real transaction to a non-loan planned item for a month (Phase 19b)."""
+
+    tx_id: int
+    month: str = ""
