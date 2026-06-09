@@ -101,11 +101,13 @@ def _list_context(
     if request.url.query and request.method == "GET":
         return_to += f"?{request.url.query}"
 
+    all_categories = categories.list_categories(session)
     return {
         "user": user,
         "page": result,
         "accounts": accounts.list_accounts(session),
-        "categories": categories.list_categories(session),
+        "categories": all_categories,
+        "category_colors": {c.id: c.color for c in all_categories if c.id is not None},
         "months": stats.available_months(session),
         "scopes": [s.value for s in Scope],
         "directions": [d.value for d in TxDirection],

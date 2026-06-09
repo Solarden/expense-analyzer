@@ -192,6 +192,13 @@
   .num {
     @apply whitespace-nowrap text-right tabular-nums;
   }
+
+  /* Per-category colour chip before a category name / on the colour picker row
+   * (Phase 16). The colour itself is set inline (data-driven); this only carries
+   * the size, shape and a faint border so light chips stay visible on the panel. */
+  .swatch {
+    @apply mr-1.5 inline-block h-3 w-3 shrink-0 rounded-[3px] border border-line align-middle;
+  }
   .muted {
     @apply text-muted;
   }

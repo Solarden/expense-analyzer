@@ -121,6 +121,10 @@ class Category(SQLModel, table=True):
     name: str
     parent_id: int | None = Field(default=None, foreign_key="category.id")  # tree: Food > Groceries
     kind: CategoryKind
+    # Optional display colour as a "#rrggbb" hex string (Phase 16). Drives the
+    # swatch next to the category name and its series colour on the overview
+    # chart. NULL = no colour chosen (legacy rows, or cleared) -> no swatch.
+    color: str | None = Field(default=None)
 
 
 class ImportBatch(SQLModel, table=True):

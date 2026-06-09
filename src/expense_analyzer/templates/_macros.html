@@ -1,0 +1,9 @@
+{# Shared render helpers. Import with: {% import "_macros.html" as ui %} #}
+{# A small colour chip shown before a category name (Phase 16). Renders nothing
+   when the category has no colour, so colourless categories read exactly as
+   before. The colour is data-driven, so it goes in an inline style; .swatch
+   carries the size/shape. #}
+{% macro swatch(color) -%}
+  {%- if color %}<span class="swatch" style="background:{{ color }}" aria-hidden="true"></span>
+{% endif -%}
+{%- endmacro %}

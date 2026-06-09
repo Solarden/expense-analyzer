@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block content %}
   {% macro status_badge(s) %}
     {% if s == "active" %}
@@ -17,7 +18,7 @@
         {% if d.is_new %}<span class="pos text-[12px]">· new</span>{% endif %}
         {% if d.category_id %}
           <br>
-          <span class="muted text-[12px]">{{ category_names.get(d.category_id, "#" ~ d.category_id) }}</span>
+          <span class="muted text-[12px]">{{ ui.swatch(category_colors.get(d.category_id) ) }}{{ category_names.get(d.category_id, "#" ~ d.category_id) }}</span>
         {% endif %}
       </td>
       <td data-label="Cadence">

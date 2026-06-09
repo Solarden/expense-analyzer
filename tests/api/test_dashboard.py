@@ -39,6 +39,98 @@ def test_create_category(auth_client: TestClient, db_session: Session):
     assert cats[0].kind == CategoryKind.expense
 
 
+# --- Phase 16: per-category colour ---
+
+
+def test_create_category_with_colour(auth_client: TestClient, db_session: Session):
+    auth_client.post(
+        "/dashboard/categories",
+        data={"name": "Food", "kind": "expense", "color": "#FF8800"},
+    )
+    cat = db_session.exec(select(Category)).one()
+    assert cat.color == "#ff8800"  # normalised to lower-case
+
+
+def test_create_category_blank_colour_is_none(auth_client: TestClient, db_session: Session):
+    auth_client.post("/dashboard/categories", data={"name": "Food", "kind": "expense", "color": ""})
+    assert db_session.exec(select(Category)).one().color is None
+
+
+def test_create_category_invalid_colour_rejected(auth_client: TestClient, db_session: Session):
+    resp = auth_client.post(
+        "/dashboard/categories",
+        data={"name": "Food", "kind": "expense", "color": "red"},
+    )
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    assert db_session.exec(select(Category)).all() == []  # nothing created on bad input
+
+
+def test_set_category_colour(
+    auth_client: TestClient, db_session: Session, make_category: Callable[..., Category]
+):
+    cat = make_category(name="Food", kind=CategoryKind.expense)
+    resp = auth_client.post(
+        f"/dashboard/categories/{cat.id}/color",
+        data={"color": "#3fb950"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
+    db_session.refresh(cat)
+    assert cat.color == "#3fb950"
+
+
+def test_clear_category_colour(
+    auth_client: TestClient, db_session: Session, make_category: Callable[..., Category]
+):
+    cat = make_category(name="Food", kind=CategoryKind.expense, color="#3fb950")
+    # The clear button wins even when a colour value is also submitted.
+    auth_client.post(
+        f"/dashboard/categories/{cat.id}/color",
+        data={"color": "#3fb950", "clear": "1"},
+        follow_redirects=False,
+    )
+    db_session.refresh(cat)
+    assert cat.color is None
+
+
+def test_set_category_colour_invalid_rejected(
+    auth_client: TestClient, db_session: Session, make_category: Callable[..., Category]
+):
+    cat = make_category(name="Food", kind=CategoryKind.expense)
+    resp = auth_client.post(
+        f"/dashboard/categories/{cat.id}/color",
+        data={"color": "nope"},
+    )
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    db_session.refresh(cat)
+    assert cat.color is None
+
+
+def test_set_category_colour_unknown_404(auth_client: TestClient, db_session: Session):
+    resp = auth_client.post(
+        "/dashboard/categories/9999/color",
+        data={"color": "#3fb950"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_swatch_renders_for_coloured_category(
+    auth_client: TestClient, db_session: Session, make_category: Callable[..., Category]
+):
+    make_category(name="Food", kind=CategoryKind.expense, color="#abcdef")
+    # The index Categories table renders the swatch for every coloured category.
+    assert "background:#abcdef" in auth_client.get("/dashboard").text
+
+
+def test_no_swatch_for_colourless_category(
+    auth_client: TestClient, db_session: Session, make_category: Callable[..., Category]
+):
+    make_category(name="Food", kind=CategoryKind.expense)
+    # Colourless categories render no swatch span (the picker still defaults to one).
+    assert 'class="swatch"' not in auth_client.get("/dashboard").text
+
+
 def test_upload_imports_transactions(
     auth_client: TestClient,
     db_session: Session,
