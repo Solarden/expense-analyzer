@@ -8,7 +8,9 @@
         <tr>
           <th>Username</th>
           <th>Name</th>
+          <th>Role</th>
           <th>Active</th>
+          {% if user.is_admin %}<th>Manage</th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -20,12 +22,43 @@
             </td>
             <td>{{ u.name }}</td>
             <td>
+              {% if u.is_admin %}
+                admin
+              {% else %}
+                <span class="muted">member</span>
+              {% endif %}
+            </td>
+            <td>
               {% if u.is_active %}
                 yes
               {% else %}
                 <span class="muted">no</span>
               {% endif %}
             </td>
+            {% if user.is_admin %}
+              <td>
+                {% if u.id == user.id %}
+                  <span class="muted">—</span>
+                {% else %}
+                  <div class="hstack">
+                    <form method="post" action="/dashboard/users/{{ u.id }}/toggle-active">
+                      <button class="btn" type="submit">
+                        {% if u.is_active %}
+                          Deactivate
+                        {% else %}
+                          Activate
+                        {% endif %}
+                      </button>
+                    </form>
+                    <form method="post"
+                          action="/dashboard/users/{{ u.id }}/delete"
+                          onsubmit="return confirm('Delete this user? Their imported data stays.');">
+                      <button class="ghost" type="submit">Delete</button>
+                    </form>
+                  </div>
+                {% endif %}
+              </td>
+            {% endif %}
           </tr>
         {% endfor %}
       </tbody>
@@ -44,6 +77,9 @@
         <button type="submit">Add user</button>
       </p>
     </form>
-    <p class="muted">New users get the same shared household view — no roles, no private data.</p>
+    <p class="muted">
+      New users get the same shared household view — no roles for the data,
+      no private data. Only admins can manage (delete/deactivate) users.
+    </p>
   </div>
 {% endblock %}
