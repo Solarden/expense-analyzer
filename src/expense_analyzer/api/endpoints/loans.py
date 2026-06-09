@@ -6,12 +6,25 @@ all DB access goes through :mod:`expense_analyzer.queries.loans`. Bad form input
 (wrong numbers/date, missing base rate) becomes a red flash, not a 500.
 """
 
+from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from sqlmodel import Session
 
+from expense_analyzer import attachments
 from expense_analyzer.api.deps import CurrentUser, DbSession
 from expense_analyzer.api.forms import LoanForm, PaymentLinkForm, RateChangeForm
 from expense_analyzer.auth import require_user
@@ -27,6 +40,7 @@ from expense_analyzer.models import (
 )
 from expense_analyzer.money import MoneyParseError, from_minor_units, parse_pln
 from expense_analyzer.queries import accounts
+from expense_analyzer.queries import loan_documents as doc_queries
 from expense_analyzer.queries import loans as loan_queries
 from expense_analyzer.templating import templates
 
@@ -122,6 +136,20 @@ def _loan_form_from(session: Session, loan: Loan) -> LoanForm:
     )
 
 
+def _redirect_detail(
+    loan_id: int, *, flash: str | None = None, error: str | None = None
+) -> RedirectResponse:
+    """Redirect (303) back to a loan's detail page, optionally with a flash/error
+    banner. The message is reflected via the ``flash``/``error`` query params that
+    :func:`loan_detail` reads; the template autoescapes it."""
+    params = {k: v for k, v in (("flash", flash), ("error", error)) if v}
+    query = f"?{urlencode(params)}" if params else ""
+
+    return RedirectResponse(
+        f"/dashboard/loans/{loan_id}{query}", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
 @router.get("", response_class=HTMLResponse)
 def loans_page(request: Request, user: CurrentUser, session: DbSession) -> HTMLResponse:
     return templates.TemplateResponse(request, "loans.html", _loans_context(session, user))
@@ -155,6 +183,7 @@ def loan_detail(
     user: CurrentUser,
     session: DbSession,
     flash: str | None = None,
+    error: str | None = None,
 ) -> HTMLResponse:
     loan = loan_queries.get_loan(session, loan_id)
     if loan is None:
@@ -195,7 +224,11 @@ def loan_detail(
             "rate_changes": loan_queries.list_rate_changes(session, loan_id),
             "suggestions": suggestions,
             "accounts": {a.id: a.name for a in accounts.list_accounts(session)},
+            "documents": doc_queries.list_documents(session, loan_id),
+            "max_upload_mb": get_settings().attachment_max_bytes // (1024 * 1024),
+            "allowed_types": attachments.allowed_types_label(),
             "flash": flash,
+            "error": error,
         },
     )
 
@@ -295,8 +328,98 @@ def unlink_loan_payment(loan_id: int, tx_id: int, session: DbSession) -> Redirec
     return RedirectResponse(f"/dashboard/loans/{loan_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
+@router.post("/{loan_id}/documents")
+async def upload_loan_document(
+    loan_id: int,
+    session: DbSession,
+    file: UploadFile = File(...),
+) -> RedirectResponse:
+    """Attach a document to a loan. The file's type is decided by sniffing its
+    bytes (not the browser's declared type) and it must be within the size limit;
+    a bad upload becomes a red flash on the detail page, never a 500."""
+    loan = loan_queries.get_loan(session, loan_id)
+    if loan is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"loan {loan_id} not found"
+        )
+
+    settings = get_settings()
+    max_bytes = settings.attachment_max_bytes
+    max_mb = max_bytes // (1024 * 1024)
+    # Cheap pre-read guard on the declared part size, so a huge body isn't read
+    # fully into memory before we reject it; len(data) below is authoritative.
+    if file.size is not None and file.size > max_bytes:
+        return _redirect_detail(loan_id, error=f"File too large (max {max_mb} MB).")
+
+    data = await file.read()
+    if not data:
+        return _redirect_detail(loan_id, error="The file is empty.")
+    if len(data) > max_bytes:
+        return _redirect_detail(loan_id, error=f"File too large (max {max_mb} MB).")
+
+    content_type = attachments.sniff_content_type(data)
+    if content_type is None:
+        return _redirect_detail(
+            loan_id,
+            error=f"Unsupported file type. Allowed: {attachments.allowed_types_label()}.",
+        )
+
+    stored_name = attachments.store_loan_document(
+        settings.attachments_path, loan_id, data, content_type
+    )
+    # Keep only the basename of the upload's own filename as display metadata
+    # (the on-disk name is the generated stored_name); fall back if it's blank.
+    display_name = Path(file.filename or "").name or stored_name
+    doc_queries.create_document(
+        session,
+        loan_id=loan_id,
+        filename=display_name,
+        stored_name=stored_name,
+        content_type=content_type,
+        size_bytes=len(data),
+    )
+
+    return _redirect_detail(loan_id, flash=f"Uploaded {display_name}.")
+
+
+@router.get("/{loan_id}/documents/{doc_id}")
+def download_loan_document(loan_id: int, doc_id: int, session: DbSession) -> FileResponse:
+    """Serve a stored document as a download (always an attachment, never inline)."""
+    doc = doc_queries.get_document(session, doc_id)
+    # Check the document belongs to this loan so the URL path is self-consistent
+    # (a doc id from another loan 404s rather than leaking across loans).
+    if doc is None or doc.loan_id != loan_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")
+
+    path = attachments.document_path(get_settings().attachments_path, loan_id, doc.stored_name)
+    if not path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="file missing")
+
+    return FileResponse(
+        path,
+        media_type=doc.content_type,
+        filename=doc.filename,
+        content_disposition_type="attachment",
+    )
+
+
+@router.post("/{loan_id}/documents/{doc_id}/delete")
+def delete_loan_document(loan_id: int, doc_id: int, session: DbSession) -> RedirectResponse:
+    doc = doc_queries.get_document(session, doc_id)
+    if doc is None or doc.loan_id != loan_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")
+
+    doc_queries.delete_document(session, doc)
+    attachments.delete_document_file(get_settings().attachments_path, loan_id, doc.stored_name)
+
+    return _redirect_detail(loan_id, flash="Document deleted.")
+
+
 @router.post("/{loan_id}/delete")
 def delete_loan(loan_id: int, session: DbSession) -> RedirectResponse:
     loan_queries.delete_loan(session, loan_id)
+    # delete_loan removed the document rows; remove their files too (the query
+    # layer never touches the filesystem).
+    attachments.delete_loan_dir(get_settings().attachments_path, loan_id)
 
     return RedirectResponse("/dashboard/loans", status_code=status.HTTP_303_SEE_OTHER)

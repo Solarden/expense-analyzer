@@ -29,6 +29,7 @@ from expense_analyzer.models import (
     AccountType,
     Loan,
     LoanCreate,
+    LoanDocument,
     LoanRateChange,
     RateType,
     Transaction,
@@ -114,17 +115,22 @@ def update_loan(session: Session, loan_id: int, data: LoanCreate) -> Loan | None
 
 
 def delete_loan(session: Session, loan_id: int) -> bool:
-    """Delete a loan, its rate-change history, and unlink any payments.
+    """Delete a loan, its rate-change history and documents, and unlink payments.
 
     Loans aren't financial records to preserve (unlike transactions, which are
     soft-deleted) — a wrong definition is just re-entered. Linked transactions are
-    kept but un-pinned (``loan_id``/``loan_installment_index`` cleared)."""
+    kept but un-pinned (``loan_id``/``loan_installment_index`` cleared). Document
+    *rows* are deleted here (a lingering FK would block the delete with
+    foreign_keys=ON); the route removes the files on disk (the query layer never
+    touches the filesystem)."""
     loan = session.get(Loan, loan_id)
     if loan is None:
         return False
 
     for change in list_rate_changes(session, loan_id):
         session.delete(change)
+    for doc in session.exec(select(LoanDocument).where(LoanDocument.loan_id == loan_id)).all():
+        session.delete(doc)
     # Clear the link on *every* referencing transaction, including soft-deleted
     # ones — a payment can be linked and then soft-deleted by a batch rollback,
     # and with foreign_keys=ON a lingering loan_id would block the loan delete.
