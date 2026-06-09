@@ -10,8 +10,8 @@ from datetime import date
 from sqlmodel import Session
 
 from expense_analyzer.models import Account, Category, CategoryKind, Scope, Transaction, TxSource
-from expense_analyzer.queries import transactions
-from expense_analyzer.queries.transactions import (
+from expense_analyzer.queries.money import transactions
+from expense_analyzer.queries.money.transactions import (
     MANUAL_BATCH_SOURCE,
     TransactionFilters,
 )

@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block content %}
+  <h2 style="margin-top:0">Budgets</h2>
+  <div class="panel">
+    <form class="hstack" method="get" action="/dashboard/budgets">
+      <label style="margin:0" for="budget_month">Month</label>
+      <select id="budget_month" name="month" onchange="this.form.submit()">
+        {% for m in months %}
+          <option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ m }}</option>
+        {% endfor %}
+        {% if month not in months %}<option value="{{ month }}" selected>{{ month }}</option>{% endif %}
+      </select>
+      <noscript>
+        <button type="submit">Show</button>
+      </noscript>
+    </form>
+    <p class="muted" style="margin:8px 0 0">Spending excludes transfers and loan installment payments.</p>
+  </div>
+  <div class="panel">
+    <h2 style="margin-top:0">This month — {{ month }}</h2>
+    {% if statuses %}
+      <table class="table-cards">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th class="num">Limit</th>
+            <th class="num">Spent</th>
+            <th class="num">Remaining</th>
+            <th>Progress</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in statuses %}
+            <tr>
+              <td data-label="Category">
+                {{ s.name }}
+                {% if s.is_override %}<span class="muted">· override</span>{% endif %}
+              </td>
+              <td class="num" data-label="Limit">{{ s.limit_amount | pln }}</td>
+              <td class="num" data-label="Spent">{{ s.spent | pln }}</td>
+              <td class="num {{ 'neg' if s.over else 'pos' }}" data-label="Remaining">{{ s.remaining | pln }}</td>
+              <td data-label="Progress">
+                <div class="flex items-center gap-2">
+                  <div class="h-2 min-w-[80px] flex-1 overflow-hidden rounded bg-bg">
+                    <div class="h-full {{ 'bg-neg' if s.over else 'bg-pos' }}"
+                         style="width: {{ s.pct }}%"></div>
+                  </div>
+                  <span class="muted text-[12px]">{{ s.pct_full }}%</span>
+                  {% if s.over %}<span class="neg text-[12px]">over</span>{% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">No budgets defined yet. Set one below.</p>
+    {% endif %}
+  </div>
+  {% if edit_budget %}
+    <h2>Edit budget</h2>
+    <div class="panel">
+      <form method="post" action="/dashboard/budgets">
+        <input type="hidden"
+               name="category_id"
+               value="{{ edit_budget.category_id }}">
+        <input type="hidden" name="month" value="{{ edit_budget.month or '' }}">
+        <div class="cols">
+          <div style="flex:1; min-width:200px;">
+            <p class="muted" style="margin:1rem 0 4px; font-size:13px">Category</p>
+            <p style="margin:0">{{ category_names.get(edit_budget.category_id, "#" ~ edit_budget.category_id) }}</p>
+          </div>
+          <div style="flex:1; min-width:200px;">
+            <label for="limit_amount">Monthly limit (PLN)</label>
+            <input id="limit_amount"
+                   name="limit_amount"
+                   value="{{ edit_limit }}"
+                   placeholder="2000"
+                   required>
+          </div>
+          <div style="flex:1; min-width:200px;">
+            <p class="muted" style="margin:1rem 0 4px; font-size:13px">Applies to</p>
+            <p style="margin:0">
+              {% if edit_budget.month %}
+                Only {{ edit_budget.month }} <span class="muted">(override)</span>
+              {% else %}
+                Every month <span class="muted">(recurring)</span>
+              {% endif %}
+            </p>
+          </div>
+        </div>
+        <p class="muted" style="font-size:13px; margin:8px 0 0;">
+          Category and "applies to" identify the budget — change the limit here, or delete and re-create to move it.
+        </p>
+        <div class="hstack mt-3">
+          <button type="submit">Save changes</button>
+          <a class="btn" href="/dashboard/budgets?month={{ month }}">Cancel</a>
+        </div>
+      </form>
+    </div>
+  {% else %}
+    <h2>Set a budget</h2>
+    <div class="panel">
+      {% if categories %}
+        <form method="post" action="/dashboard/budgets">
+          <div class="form-row">
+            <div class="field">
+              <label for="category_id">Category</label>
+              <select id="category_id" name="category_id" required>
+                {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div style="flex:1; min-width:140px;">
+              <label for="limit_amount">Monthly limit (PLN)</label>
+              <input id="limit_amount" name="limit_amount" placeholder="2000" required>
+            </div>
+            <div class="field">
+              <label for="budget_applies">Applies to</label>
+              <select id="budget_applies" name="month">
+                <option value="">Every month (recurring)</option>
+                {% for m in months %}<option value="{{ m }}">Only {{ m }} (override)</option>{% endfor %}
+                {% if month not in months %}<option value="{{ month }}">Only {{ month }} (override)</option>{% endif %}
+              </select>
+            </div>
+            <div>
+              <button type="submit">Save budget</button>
+            </div>
+          </div>
+          <p class="muted" style="font-size:13px; margin:8px 0 0;">
+            A recurring limit applies to every month; a month override replaces it for that month only.
+          </p>
+        </form>
+      {% else %}
+        <p class="muted">
+          No expense categories yet. <a href="/dashboard/settings">Create an expense category</a> first.
+        </p>
+      {% endif %}
+    </div>
+  {% endif %}
+  {% if budgets %}
+    <h2>Defined budgets</h2>
+    <div class="panel">
+      <table class="table-cards">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Applies to</th>
+            <th class="num">Limit</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in budgets %}
+            <tr>
+              <td data-label="Category">
+                {{ ui.swatch(category_colors.get(b.category_id) ) }}{{ category_names.get(b.category_id, "#" ~ b.category_id) }}
+              </td>
+              <td data-label="Applies to">
+                {% if b.month %}
+                  {{ b.month }} <span class="muted">override</span>
+                {% else %}
+                  <span class="muted">Every month</span>
+                {% endif %}
+              </td>
+              <td class="num" data-label="Limit">{{ b.limit_amount | pln }}</td>
+              <td>
+                <div class="hstack">
+                  <a class="btn"
+                     href="/dashboard/budgets?month={{ month }}&edit={{ b.id }}#limit_amount">Edit</a>
+                  <form method="post"
+                        action="/dashboard/budgets/{{ b.id }}/delete"
+                        onsubmit="return confirm('Delete this budget?');">
+                    <button class="ghost" type="submit">Delete</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+{% endblock %}

@@ -92,7 +92,7 @@ def auth_client(client: TestClient, db_session: Session) -> TestClient:
     The session cookie set by /login persists on the client, so subsequent
     requests hit the (auth-protected) dashboard as that user.
     """
-    from expense_analyzer.queries import users
+    from expense_analyzer.queries.core import users
 
     users.create_user(db_session, username="tester", name="Tester", password="secret123")
     resp = client.post(

@@ -17,7 +17,7 @@ from expense_analyzer.ha import discovery
 from expense_analyzer.ha.metrics import collect_metrics
 from expense_analyzer.ha.mqtt import publish_snapshot
 from expense_analyzer.models import PlannedItem
-from expense_analyzer.queries import planned as pq
+from expense_analyzer.queries.planning import planned as pq
 
 
 def test_plan_sensor_config_is_a_text_sensor_with_attributes() -> None:

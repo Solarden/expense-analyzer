@@ -218,7 +218,7 @@ class Loan(LoanBase, table=True):
 
 class LoanCreate(LoanBase):
     """Input for creating a loan (bundles what would otherwise be a long argument
-    list to :func:`expense_analyzer.queries.loans.create_loan`).
+    list to :func:`expense_analyzer.queries.planning.loans.create_loan`).
 
     ``initial_base_rate_bp`` is **not** a Loan column: for a variable-rate loan it
     seeds the first :class:`LoanRateChange` (effective on ``start_date``) so the
@@ -284,7 +284,7 @@ class Budget(SQLModel, table=True):
     overrides for the same month. SQLite treats ``NULL`` months as *distinct*, so
     it does **not** stop a second recurring row on its own — the single-writer
     query layer enforces "one recurring per category" by upserting (find-or-update
-    by category + month) in :func:`expense_analyzer.queries.budgets.set_budget`.
+    by category + month) in :func:`expense_analyzer.queries.planning.budgets.set_budget`.
     """
 
     __tablename__ = "budget"
@@ -339,7 +339,7 @@ class Rule(SQLModel, table=True):
 
     Rules run automatically on import and on demand ("Apply rules now"). The pure
     matcher lives in :mod:`expense_analyzer.rules`; the DB side (CRUD + apply) in
-    :mod:`expense_analyzer.queries.rules`. A rule only ever (re)categorizes a row
+    :mod:`expense_analyzer.queries.categorize.rules`. A rule only ever (re)categorizes a row
     that is uncategorized or was itself set by a rule (``source = rule``) — a
     human's manual categorization is never overwritten.
     """

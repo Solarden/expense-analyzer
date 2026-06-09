@@ -22,7 +22,7 @@ schedule always ends at a balance of exactly zero regardless of rounding.
 
 Linking real payments to the plan (plan vs reality) lives in :func:`reconcile`,
 which is also pure over a preloaded list of transactions — the DB side is in
-:mod:`expense_analyzer.queries.loans`.
+:mod:`expense_analyzer.queries.planning.loans`.
 """
 
 import calendar

@@ -6,8 +6,8 @@ from datetime import date
 from sqlmodel import Session
 
 from expense_analyzer.models import Account, AccountType, InvestmentPosition, Loan, Transaction
-from expense_analyzer.queries import investments, net_worth
-from expense_analyzer.queries import loans as loan_queries
+from expense_analyzer.queries.planning import loans as loan_queries
+from expense_analyzer.queries.wealth import investments, net_worth
 
 
 def test_cash_balance_sums_live_transactions(

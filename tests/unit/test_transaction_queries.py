@@ -6,8 +6,8 @@ from datetime import date
 from sqlmodel import Session
 
 from expense_analyzer.models import Account, Category, CategoryKind, Scope, Transaction
-from expense_analyzer.queries import transactions
-from expense_analyzer.queries.transactions import TransactionFilters
+from expense_analyzer.queries.money import transactions
+from expense_analyzer.queries.money.transactions import TransactionFilters
 
 
 def test_pagination_windows_and_counts(
@@ -86,7 +86,7 @@ def test_invalid_month_filter_is_ignored_not_fatal(
 
 
 def test_page_defensive_against_zero_page_size():
-    from expense_analyzer.queries.transactions import TransactionPage
+    from expense_analyzer.queries.money.transactions import TransactionPage
 
     page = TransactionPage(rows=[], total=0, page=1, page_size=0)
 

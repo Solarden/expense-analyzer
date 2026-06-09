@@ -13,7 +13,7 @@ import sys
 from sqlmodel import Session
 
 from expense_analyzer.db import get_engine
-from expense_analyzer.queries import users
+from expense_analyzer.queries.core import users
 
 
 def main() -> None:

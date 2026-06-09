@@ -12,7 +12,7 @@ from sqlmodel import Session
 
 from expense_analyzer.db import get_session
 from expense_analyzer.models import Owner
-from expense_analyzer.queries import users
+from expense_analyzer.queries.core import users
 
 _SESSION_USER_KEY = "user_id"
 

@@ -32,10 +32,31 @@ All financial data stays on your own hardware — nothing leaves for the cloud.
 ```bash
 uv sync --extra dev          # create .venv and install deps
 uv run alembic upgrade head  # apply migrations
-uv run uvicorn expense_analyzer.main:app --reload
+make dev                     # run with autoreload (sets EA_DEBUG so the dev default secret is allowed)
 ```
 
-App: <http://127.0.0.1:8000> — health check at `/health`.
+`make dev` is shorthand for `EA_DEBUG=true uv run uvicorn expense_analyzer.main:app --reload`.
+Outside debug mode the app refuses to start on the insecure default secret, so set
+`EA_SECRET_KEY` if you run uvicorn directly without `EA_DEBUG`.
+
+App: <http://127.0.0.1:8000> — health check at `/health`. Create a login user with
+`make user u=you n="You"` (or `make seed` for the demo dataset below) before signing in.
+
+### Demo data
+
+To explore the app with something to click through, load a demo dataset — a few
+accounts, ~4 months of transactions, a variable-rate mortgage, an investment
+snapshot, budgets, planned cashflow items and rules:
+
+```bash
+make migrate   # if you haven't already
+make seed      # reset the local DB to the demo dataset
+make dev
+```
+
+Then sign in as **`admin` / `demo1234`**. `make seed` wipes the data tables and
+rebuilds from scratch each run, so it's safe to re-run; it only touches the local
+gitignored `data/` database. (Don't run it against real data.)
 
 Run the tests:
 

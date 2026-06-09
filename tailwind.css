@@ -118,7 +118,7 @@
   }
   th,
   td {
-    @apply border-b border-line px-2.5 py-1.5 text-left;
+    @apply border-b border-line px-3 py-2.5 text-left;
   }
   th {
     @apply text-[13px] font-semibold text-muted;
@@ -167,10 +167,10 @@
     @apply w-full;
   }
   button {
-    @apply cursor-pointer border-accent-strong bg-accent-strong text-white;
+    @apply cursor-pointer border-accent-strong bg-accent-strong text-white transition-colors hover:border-accent hover:bg-accent;
   }
   button.ghost {
-    @apply border-field-border bg-transparent text-muted;
+    @apply border-field-border bg-transparent text-muted transition-colors hover:border-fg hover:bg-line hover:text-fg;
   }
   /* Multi-line text input (transaction note). Mirrors the input look but no fixed
    * h-9. Width comes from the form:not(.hstack) rule above. */
@@ -242,6 +242,16 @@
     @apply min-w-[280px] flex-1;
   }
 
+  /* A form field row: like .cols but bottom-aligned, so a trailing submit button
+   * (no label above it) lines up with the inputs. .field is one equal-width column
+   * with a sensible min width; wider/narrower fields keep an inline min-width. */
+  .form-row {
+    @apply flex flex-wrap items-end gap-4;
+  }
+  .field {
+    @apply min-w-[160px] flex-1;
+  }
+
   .cards {
     @apply flex flex-wrap gap-4;
   }
@@ -301,10 +311,16 @@
   /* Link styled as a button — inline-flex + h-9 so it matches real <button>/select
    * height and centres its label (an inline-block link would top-align at h-9). */
   a.btn {
-    @apply inline-flex h-10 items-center whitespace-nowrap rounded-md border border-field-border bg-bg px-2 text-fg no-underline md:h-9;
+    @apply inline-flex h-10 items-center whitespace-nowrap rounded-md border border-field-border bg-bg px-2 text-fg no-underline transition-colors hover:border-fg hover:bg-line md:h-9;
   }
   a.btn[aria-disabled="true"] {
     @apply pointer-events-none text-muted opacity-50;
+  }
+  /* A <button class="btn"> reads as a secondary action (bordered, not the loud
+   * accent fill of the base primary button) — same look as the a.btn link.
+   * Overrides the primary base by specificity. */
+  button.btn {
+    @apply border-field-border bg-bg text-fg hover:border-fg hover:bg-line;
   }
 
   /* Small, unobtrusive square icon action (row Save/Edit/Note). h-9 to line up
@@ -317,8 +333,23 @@
   .icon-btn.primary {
     @apply text-accent hover:text-fg;
   }
+  /* Styled hover tooltip for the note icon (data-tip). Pops to the LEFT of the
+   * icon, vertically centred — staying inside the row band and panel width, so
+   * the panel's overflow-x-auto never clips it (a tooltip above/below would).
+   * Pure CSS, instant, no JS; the note text also stays on aria-label for SR. */
+  .tip {
+    @apply relative;
+  }
+  .tip::after {
+    content: attr(data-tip);
+    @apply pointer-events-none invisible absolute left-full top-1/2 z-50 ml-2 w-max max-w-[260px] -translate-y-1/2 whitespace-normal rounded-md border border-field-border bg-panel px-2 py-1 text-left text-[12px] font-normal normal-case leading-snug text-fg opacity-0 shadow-lg transition-opacity;
+  }
+  .tip:hover::after,
+  .tip:focus-visible::after {
+    @apply visible opacity-100;
+  }
   /* A row that already has a note: its note icon glows so it's spottable at a
-   * glance (the title attribute carries the note text for a hover peek). */
+   * glance (the data-tip tooltip above carries the note text for a hover peek). */
   .icon-btn.has-note {
     @apply text-accent;
   }
@@ -337,7 +368,7 @@
     @apply absolute inset-0 bg-black/60;
   }
   .modal-card {
-    @apply relative z-10 w-full max-w-[460px] rounded-lg border border-line bg-panel p-4;
+    @apply relative z-10 max-h-[85vh] w-full max-w-[460px] overflow-y-auto rounded-lg border border-line bg-panel p-4;
   }
   .modal-card h3 {
     @apply m-0 mb-2 text-[15px] uppercase tracking-wider text-muted;

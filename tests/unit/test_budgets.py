@@ -21,7 +21,7 @@ from expense_analyzer.models import (
     Loan,
     Transaction,
 )
-from expense_analyzer.queries import budgets as bq
+from expense_analyzer.queries.planning import budgets as bq
 
 # --- pure helpers ----------------------------------------------------------
 
@@ -61,18 +61,21 @@ def test_budget_status_remaining_over_and_clamped_pct() -> None:
     assert under.remaining == 50_00
     assert under.over is False
     assert under.pct == 75
+    assert under.pct_full == 75  # under budget: label matches the bar
 
     over = bq.BudgetStatus(
         category_id=1, name="Food", limit_amount=200_00, spent=250_00, is_override=False
     )
     assert over.remaining == -50_00
     assert over.over is True
-    assert over.pct == 100  # clamped, never past full
+    assert over.pct == 100  # bar clamped, never past full
+    assert over.pct_full == 125  # label keeps counting past 100% when over
 
     zero_limit = bq.BudgetStatus(
         category_id=1, name="X", limit_amount=0, spent=10_00, is_override=False
     )
     assert zero_limit.pct == 100  # any spend against a zero limit reads as full
+    assert zero_limit.pct_full == 100
 
 
 # --- query layer -----------------------------------------------------------

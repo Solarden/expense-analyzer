@@ -18,7 +18,7 @@ from expense_analyzer.config import Settings
 from expense_analyzer.importers import NormalizedTransaction
 from expense_analyzer.importers.pipeline import run_import
 from expense_analyzer.models import Account, Category, Scope, Transaction, TxSource
-from expense_analyzer.queries import classifier as cq
+from expense_analyzer.queries.categorize import classifier as cq
 
 # A permissive config so a handful of fixture rows is enough to train.
 _LOW = Settings(classifier_min_training_samples=4, classifier_confidence_threshold=0.5)

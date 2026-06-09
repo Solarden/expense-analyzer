@@ -7,7 +7,7 @@ from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
-from expense_analyzer.api.endpoints import home_assistant
+from expense_analyzer.api.endpoints.core import home_assistant
 from expense_analyzer.config import get_settings
 from expense_analyzer.models import Account, Transaction
 

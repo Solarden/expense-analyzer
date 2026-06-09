@@ -12,7 +12,7 @@ from datetime import date
 from sqlmodel import Session, select
 
 from expense_analyzer.models import PlannedItem, PlannedItemPayment
-from expense_analyzer.queries import planned as pq
+from expense_analyzer.queries.planning import planned as pq
 
 
 def _payments(session: Session) -> list[PlannedItemPayment]:

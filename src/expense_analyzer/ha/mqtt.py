@@ -293,9 +293,9 @@ def publish_snapshot(
     from expense_analyzer.clock import local_today
     from expense_analyzer.config import get_settings
     from expense_analyzer.money import format_pln
-    from expense_analyzer.queries import budgets as budget_queries
-    from expense_analyzer.queries import planned as planned_queries
-    from expense_analyzer.queries import subscriptions as subscription_queries
+    from expense_analyzer.queries.planning import budgets as budget_queries
+    from expense_analyzer.queries.planning import planned as planned_queries
+    from expense_analyzer.queries.planning import subscriptions as subscription_queries
 
     metrics = collect_metrics(session)
     publisher = MqttPublisher.from_settings(settings, client=client)

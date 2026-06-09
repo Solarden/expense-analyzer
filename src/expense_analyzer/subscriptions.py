@@ -9,9 +9,9 @@ must not be mistaken for one. So a group qualifies only when both its **interval
 regular — same merchant alone is not enough.
 
 This module finds the candidates; persisting the user's confirm/dismiss verdict
-over a group lives in :mod:`expense_analyzer.queries.subscriptions`. The input is
+over a group lives in :mod:`expense_analyzer.queries.planning.subscriptions`. The input is
 expected to be already transfer- and loan-excluded (see
-:func:`expense_analyzer.queries.stats.spendable_transactions`) — those are
+:func:`expense_analyzer.queries.money.stats.spendable_transactions`) — those are
 recurring too but are not consumption subscriptions.
 
 Money stays integer minor units throughout (never float; design §5); the

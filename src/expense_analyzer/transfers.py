@@ -4,7 +4,7 @@ A move of, say, 2000 PLN from PKO to mBank is neither an expense nor income —
 it's a transfer (design §6, §7.2). Left unpaired it shows as a fake expense on
 one account and a fake inflow on the other, and every spending/income number is
 junk. This module finds the two legs; linking and labelling them lives in
-:mod:`expense_analyzer.queries.transfers`.
+:mod:`expense_analyzer.queries.money.transfers`.
 
 Pairing rule — two transactions on **different** accounts are a candidate when:
 

@@ -58,7 +58,7 @@ def create_app() -> FastAPI:
     async def _forbidden(request: Request, exc: NotAuthorizedError) -> HTMLResponse:
         # The user is logged in but lacks the admin role; show a 403, don't redirect.
         return templates.TemplateResponse(
-            request, "forbidden.html", {}, status_code=status.HTTP_403_FORBIDDEN
+            request, "core/forbidden.html", {}, status_code=status.HTTP_403_FORBIDDEN
         )
 
     return app

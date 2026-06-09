@@ -22,6 +22,20 @@ def test_index_renders(auth_client: TestClient, db_session: Session):
     assert "Expense Analyzer" in resp.text
 
 
+def test_dashboard_home_is_overview(auth_client: TestClient, db_session: Session):
+    # /dashboard now lands on the Overview, not the account/category setup page.
+    body = auth_client.get("/dashboard").text
+    assert "Overview" in body
+    assert "Add account" not in body
+
+
+def test_settings_page_is_config(auth_client: TestClient, db_session: Session):
+    # The setup page (accounts & categories) moved to /dashboard/settings.
+    body = auth_client.get("/dashboard/settings").text
+    assert "Add account" in body
+    assert "Add category" in body
+
+
 def test_create_account_then_listed(auth_client: TestClient, db_session: Session):
     resp = auth_client.post(
         "/dashboard/accounts",
@@ -29,7 +43,7 @@ def test_create_account_then_listed(auth_client: TestClient, db_session: Session
         follow_redirects=False,
     )
     assert resp.status_code == status.HTTP_303_SEE_OTHER
-    assert auth_client.get("/dashboard").text.count("PKO checking") >= 1
+    assert auth_client.get("/dashboard/settings").text.count("PKO checking") >= 1
 
 
 def test_create_category(auth_client: TestClient, db_session: Session):
@@ -176,7 +190,7 @@ def test_swatch_renders_for_coloured_category(
 ):
     make_category(name="Food", kind=CategoryKind.expense, color="#abcdef")
     # The index Categories table renders the swatch for every coloured category.
-    assert "background:#abcdef" in auth_client.get("/dashboard").text
+    assert "background:#abcdef" in auth_client.get("/dashboard/settings").text
 
 
 def test_no_swatch_for_colourless_category(
@@ -184,7 +198,7 @@ def test_no_swatch_for_colourless_category(
 ):
     make_category(name="Food", kind=CategoryKind.expense)
     # Colourless categories render no swatch span (the picker still defaults to one).
-    assert 'class="swatch"' not in auth_client.get("/dashboard").text
+    assert 'class="swatch"' not in auth_client.get("/dashboard/settings").text
 
 
 def test_upload_imports_transactions(

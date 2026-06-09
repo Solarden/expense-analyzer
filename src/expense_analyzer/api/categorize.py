@@ -12,8 +12,8 @@ from fastapi import HTTPException, status
 from sqlmodel import Session
 
 from expense_analyzer.models import Scope
-from expense_analyzer.queries import categories as category_queries
-from expense_analyzer.queries import transactions as transaction_queries
+from expense_analyzer.queries.categorize import categories as category_queries
+from expense_analyzer.queries.money import transactions as transaction_queries
 
 
 def parse_category_id(session: Session, raw_category_id: str) -> int | None:

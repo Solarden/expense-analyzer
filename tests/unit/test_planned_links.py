@@ -11,8 +11,8 @@ from datetime import date
 from sqlmodel import Session
 
 from expense_analyzer.models import Account, AccountType, Loan, PlannedItem, Transaction
-from expense_analyzer.queries import loans as loan_queries
-from expense_analyzer.queries import planned as pq
+from expense_analyzer.queries.planning import loans as loan_queries
+from expense_analyzer.queries.planning import planned as pq
 
 # --- transaction linking (non-loan items) ----------------------------------
 

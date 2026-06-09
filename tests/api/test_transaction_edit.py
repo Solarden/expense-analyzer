@@ -13,8 +13,8 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from expense_analyzer.models import Account, Category, CategoryKind, Scope, Transaction, TxSource
-from expense_analyzer.queries import transactions
-from expense_analyzer.queries.transactions import TransactionFilters
+from expense_analyzer.queries.money import transactions
+from expense_analyzer.queries.money.transactions import TransactionFilters
 
 
 def _only_row(db_session: Session) -> Transaction:
@@ -349,7 +349,7 @@ def test_manual_batch_offers_no_rollback_button(
         owner_id=None,
     )
     batch = transactions.ensure_manual_batch(db_session)
-    resp = auth_client.get("/dashboard")
+    resp = auth_client.get("/dashboard/settings")
     assert f"/dashboard/batches/{batch.id}/rollback" not in resp.text
 
 
