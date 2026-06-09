@@ -16,7 +16,7 @@
       </noscript>
     </form>
     <p class="muted" style="margin:8px 0 0">
-      Income at the top, charges below — "FOR LIVING" is what's left. Tick a line as paid when you settle it.
+      Income at the top, charges below — "For living" is what's left. Tick a line as paid when you settle it.
     </p>
   </div>
   <div class="panel">
@@ -138,7 +138,7 @@
             <td></td>
           </tr>
           <tr>
-            <th>FOR LIVING</th>
+            <th>For living</th>
             <td class="num {{ 'pos' if overview.for_living >= 0 else 'neg' }}">{{ overview.for_living | pln }}</td>
             <td colspan="2">
               {% if overview.unestimated_count %}
@@ -154,7 +154,7 @@
   </div>
   {% if items and for_living_chart.labels %}
     <div class="panel">
-      <h2 style="margin-top:0">FOR LIVING trend</h2>
+      <h2 style="margin-top:0">For living trend</h2>
       <canvas id="forLivingChart" height="200"></canvas>
     </div>
   {% endif %}

@@ -109,7 +109,7 @@ def collect_metrics(session: Session) -> list[Metric]:
     # overdue count ride on a separate plan sensor (see ``publish_plan``).
     plan = planned_queries.plan_overview(session, month, today=today)
     metrics += [
-        Metric("plan_for_living", "FOR LIVING This Month", _pln(plan.for_living)),
+        Metric("plan_for_living", "For Living This Month", _pln(plan.for_living)),
         Metric("plan_left_to_pay", "Left To Pay This Month", _pln(plan.left_to_pay)),
     ]
 
