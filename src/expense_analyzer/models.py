@@ -369,6 +369,31 @@ class LoanRateChange(SQLModel, table=True):
     base_rate_bp: int  # basis points
 
 
+class LoanDocument(SQLModel, table=True):
+    """A file attached to a loan — contract, schedule, payment proof (Phase 21).
+
+    Local-only document storage (design's keep-everything-on-the-LAN principle,
+    no OCR): the bytes live in a directory on the ``data/`` volume next to the
+    SQLite file (see :mod:`expense_analyzer.attachments`); this row is the
+    metadata. ``filename`` is the original name, shown in the UI and used as the
+    download name. ``stored_name`` is the **generated** on-disk name (a UUID plus
+    the validated extension) — never derived from user input, so a crafted upload
+    name cannot escape the storage directory (no path traversal). ``content_type``
+    is the sniffed-and-validated MIME (we trust the bytes, not the browser's
+    declared type); it's echoed on download. Deleting the loan deletes its
+    documents (rows in the query layer, files in the route)."""
+
+    __tablename__ = "loan_document"
+
+    id: int | None = Field(default=None, primary_key=True)
+    loan_id: int = Field(foreign_key="loan.id", index=True)
+    filename: str  # original upload name (display + download name)
+    stored_name: str  # generated on-disk name (UUID + ext); never user input
+    content_type: str  # sniffed + validated MIME (not the browser's declared type)
+    size_bytes: int
+    uploaded_at: datetime = Field(default_factory=utc_now)
+
+
 class PlannedItem(SQLModel, table=True):
     """One recurring line in the monthly cashflow checklist (design §11, Phase 19).
 

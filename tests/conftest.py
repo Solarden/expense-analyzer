@@ -41,7 +41,10 @@ from expense_analyzer.models import (
     Transaction,
 )
 
-os.environ["EA_DATABASE_PATH"] = str(Path(tempfile.mkdtemp(prefix="ea-test-")) / "test.db")
+_TEST_DATA_DIR = Path(tempfile.mkdtemp(prefix="ea-test-"))
+os.environ["EA_DATABASE_PATH"] = str(_TEST_DATA_DIR / "test.db")
+# Loan attachments (Phase 21) land in a throwaway temp dir, never the real data/.
+os.environ["EA_ATTACHMENTS_PATH"] = str(_TEST_DATA_DIR / "attachments")
 os.environ.setdefault("EA_SECRET_KEY", "test-secret-not-for-production")  # app refuses default
 # Layer 3 (Phase 12) off by default in the suite: its logic is tested directly with
 # an injected fake embedder, so the real path must never load the heavy

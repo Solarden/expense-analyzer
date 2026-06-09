@@ -33,6 +33,58 @@
       </div>
     {% endif %}
   </div>
+  <h2>Documents</h2>
+  <div class="panel">
+    <p class="muted" style="margin-top:0">
+      Contract, repayment schedule, payment proofs. Stored locally on this device only.
+    </p>
+    {% if documents %}
+      <table class="table-cards">
+        <thead>
+          <tr>
+            <th>File</th>
+            <th class="num">Size</th>
+            <th>Uploaded</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for doc in documents %}
+            <tr>
+              <td data-label="File">
+                <a href="/dashboard/loans/{{ loan.id }}/documents/{{ doc.id }}">{{ doc.filename }}</a>
+              </td>
+              <td class="num muted" data-label="Size">{{ (doc.size_bytes / 1024) | round(1) }} KB</td>
+              <td class="muted" data-label="Uploaded">{{ doc.uploaded_at | dpl }}</td>
+              <td>
+                <form class="hstack"
+                      method="post"
+                      action="/dashboard/loans/{{ loan.id }}/documents/{{ doc.id }}/delete"
+                      onsubmit="return confirm('Delete this document?');">
+                  <button class="ghost" type="submit">Delete</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">No documents yet.</p>
+    {% endif %}
+    <h2>Add a document</h2>
+    <form class="hstack"
+          method="post"
+          action="/dashboard/loans/{{ loan.id }}/documents"
+          enctype="multipart/form-data">
+      <input type="file"
+             name="file"
+             accept=".pdf,.jpg,.jpeg,.png,.webp"
+             aria-label="Document file"
+             required>
+      <button type="submit">Upload</button>
+    </form>
+    <p class="muted" style="font-size:14px;">{{ allowed_types }} · up to {{ max_upload_mb }} MB.</p>
+  </div>
   {% if loan.rate_type.value == "variable" %}
     <h2>Base rate history</h2>
     <div class="panel">
