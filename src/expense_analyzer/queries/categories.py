@@ -31,13 +31,24 @@ def create_category(
     return category
 
 
-def set_category_color(session: Session, category_id: int, color: str | None) -> Category | None:
-    """Set (or clear, with ``None``) a category's display colour. Returns the
-    updated category, or ``None`` if the id doesn't exist (the handler 404s/flashes)."""
+def update_category(
+    session: Session,
+    category_id: int,
+    *,
+    name: str,
+    kind: CategoryKind,
+    color: str | None,
+) -> Category | None:
+    """Edit a category in place — rename, change kind, and set/clear the display
+    colour (Phase 20b). Returns the updated category, or ``None`` if the id doesn't
+    exist (the handler 404s). Changing ``kind`` reclassifies the category for stats
+    (income/expense/transfer); transactions keep their ``category_id`` link."""
     category = session.get(Category, category_id)
     if category is None:
         return None
 
+    category.name = name.strip()
+    category.kind = kind
     category.color = color
     session.add(category)
     session.commit()

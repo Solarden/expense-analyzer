@@ -46,27 +46,34 @@
           <thead>
             <tr>
               <th>Name</th>
-              <th>Kind</th>
-              <th>Colour</th>
+              <th>Edit</th>
             </tr>
           </thead>
           <tbody>
             {% for c in categories %}
               <tr>
                 <td>{{ ui.swatch(c.color) }}{{ c.name }}</td>
-                <td class="muted">{{ c.kind.value }}</td>
                 <td>
-                  {# Inline colour picker per category — there's no full category
-                     edit, so this is how existing categories get a colour. Set
-                     upserts the colour; Clear (only when set) resets to none. #}
+                  {# Inline edit per category (Phase 20b): rename, change kind, and
+                     set the colour in one Save. Clear (only when set) drops the
+                     colour back to none. Changing kind reclassifies it for stats. #}
                   <form class="hstack"
                         method="post"
-                        action="/dashboard/categories/{{ c.id }}/color">
+                        action="/dashboard/categories/{{ c.id }}/edit">
+                    <input name="name"
+                           value="{{ c.name }}"
+                           aria-label="Name for {{ c.name }}"
+                           required>
+                    <select name="kind" aria-label="Kind for {{ c.name }}">
+                      {% for k in category_kinds %}
+                        <option value="{{ k }}" {% if k == c.kind.value %}selected{% endif %}>{{ k }}</option>
+                      {% endfor %}
+                    </select>
                     <input type="color"
                            name="color"
                            value="{{ c.color or '#4f8cff' }}"
                            aria-label="Colour for {{ c.name }}">
-                    <button class="ghost" type="submit">Set</button>
+                    <button class="ghost" type="submit">Save</button>
                     {% if c.color %}<button class="ghost" type="submit" name="clear" value="1">Clear</button>{% endif %}
                   </form>
                 </td>

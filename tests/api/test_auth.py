@@ -216,3 +216,102 @@ def test_users_page_shows_manage_only_for_admin(client: TestClient, db_session: 
     client.post("/logout")
     _login_as(client, "plain", "pw")
     assert "Deactivate" not in client.get("/dashboard/users").text
+
+
+# --- Phase 20a: password reset + admin toggle from the UI ---
+
+
+def test_admin_can_reset_member_password(client: TestClient, db_session: Session):
+    users.create_user(db_session, username="admin", name="Admin", password="pw")
+    member = users.create_user(db_session, username="plain", name="Plain", password="oldpw")
+    _login_as(client, "admin", "pw")
+
+    resp = client.post(
+        f"/dashboard/users/{member.id}/reset-password",
+        data={"password": "newpw"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
+    # The new password works and the old one no longer does.
+    db_session.refresh(member)
+    assert verify_password("newpw", member.password_hash)
+    assert not verify_password("oldpw", member.password_hash)
+
+
+def test_reset_password_rejects_empty(client: TestClient, db_session: Session):
+    users.create_user(db_session, username="admin", name="Admin", password="pw")
+    member = users.create_user(db_session, username="plain", name="Plain", password="oldpw")
+    _login_as(client, "admin", "pw")
+
+    resp = client.post(
+        f"/dashboard/users/{member.id}/reset-password",
+        data={"password": "   "},
+        follow_redirects=False,
+    )
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    # Password is untouched.
+    db_session.refresh(member)
+    assert verify_password("oldpw", member.password_hash)
+
+
+def test_non_admin_cannot_reset_password(client: TestClient, db_session: Session):
+    admin = users.create_user(db_session, username="admin", name="Admin", password="pw")
+    users.create_user(db_session, username="plain", name="Plain", password="pw")
+    _login_as(client, "plain", "pw")
+
+    resp = client.post(
+        f"/dashboard/users/{admin.id}/reset-password",
+        data={"password": "hijack"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == status.HTTP_403_FORBIDDEN
+    db_session.refresh(admin)
+    assert not verify_password("hijack", admin.password_hash)
+
+
+def test_admin_can_grant_and_revoke_admin(client: TestClient, db_session: Session):
+    users.create_user(db_session, username="admin", name="Admin", password="pw")
+    member = users.create_user(db_session, username="plain", name="Plain", password="pw")
+    _login_as(client, "admin", "pw")
+
+    client.post(f"/dashboard/users/{member.id}/toggle-admin", follow_redirects=False)
+    db_session.refresh(member)
+    assert member.is_admin is True
+
+    client.post(f"/dashboard/users/{member.id}/toggle-admin", follow_redirects=False)
+    db_session.refresh(member)
+    assert member.is_admin is False
+
+
+def test_cannot_revoke_last_active_admin(client: TestClient, db_session: Session):
+    admin = users.create_user(db_session, username="admin", name="Admin", password="pw")
+    _login_as(client, "admin", "pw")
+
+    # Sole admin tries to step down — blocked so the household keeps an admin.
+    resp = client.post(f"/dashboard/users/{admin.id}/toggle-admin", follow_redirects=False)
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    db_session.refresh(admin)
+    assert admin.is_admin is True
+
+
+def test_admin_can_step_down_when_another_admin_exists(client: TestClient, db_session: Session):
+    admin = users.create_user(db_session, username="admin", name="Admin", password="pw")
+    other = users.create_user(db_session, username="other", name="Other", password="pw")
+    users.set_admin(db_session, other, is_admin=True)
+    _login_as(client, "admin", "pw")
+
+    resp = client.post(f"/dashboard/users/{admin.id}/toggle-admin", follow_redirects=False)
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
+    db_session.refresh(admin)
+    assert admin.is_admin is False
+
+
+def test_non_admin_cannot_toggle_admin(client: TestClient, db_session: Session):
+    admin = users.create_user(db_session, username="admin", name="Admin", password="pw")
+    users.create_user(db_session, username="plain", name="Plain", password="pw")
+    _login_as(client, "plain", "pw")
+
+    resp = client.post(f"/dashboard/users/{admin.id}/toggle-admin", follow_redirects=False)
+    assert resp.status_code == status.HTTP_403_FORBIDDEN
+    db_session.refresh(admin)
+    assert admin.is_admin is True

@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlmodel import Session
 
 from expense_analyzer.api.deps import CurrentUser, DbSession
-from expense_analyzer.api.forms import AccountForm, CategoryColorForm, CategoryForm
+from expense_analyzer.api.forms import AccountForm, CategoryEditForm, CategoryForm
 from expense_analyzer.auth import require_user
 from expense_analyzer.importers.pipeline import rollback_batch
 from expense_analyzer.models import AccountType, CategoryKind, ImportBatch, Owner
@@ -79,18 +79,22 @@ def create_category(
     return RedirectResponse("/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@router.post("/categories/{category_id}/color")
-def set_category_color(
+@router.post("/categories/{category_id}/edit")
+def edit_category(
     request: Request,
     category_id: int,
-    form: Annotated[CategoryColorForm, Form()],
+    form: Annotated[CategoryEditForm, Form()],
     user: CurrentUser,
     session: DbSession,
 ) -> Response:
-    # "Clear" wins over whatever the picker holds; otherwise validate the hex.
-    if form.clear:
-        color, error = None, None
-    else:
+    # Name is the required field, so check it first — its error shouldn't be
+    # masked by a colour problem. "Clear" wins over whatever the picker holds;
+    # otherwise validate the hex. Normalisation (strip) lives in the query layer,
+    # consistent with create_category.
+    color, error = None, None
+    if not form.name.strip():
+        error = "Category name can't be empty."
+    elif not form.clear:
         color, error = _parse_color(form.color)
 
     if error is not None:
@@ -101,7 +105,12 @@ def set_category_color(
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
-    if categories.set_category_color(session, category_id, color) is None:
+    if (
+        categories.update_category(
+            session, category_id, name=form.name, kind=form.kind, color=color
+        )
+        is None
+    ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="category not found")
 
     return RedirectResponse("/dashboard", status_code=status.HTTP_303_SEE_OTHER)
