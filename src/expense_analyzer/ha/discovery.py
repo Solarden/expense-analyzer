@@ -36,6 +36,10 @@ def update_topic(base: str) -> str:
     return f"{base}/update"
 
 
+def plan_topic(base: str) -> str:
+    return f"{base}/plan"
+
+
 def availability_topic(base: str) -> str:
     return f"{base}/availability"
 
@@ -100,9 +104,37 @@ def update_sensor_config(*, base: str) -> dict:
     }
 
 
+def plan_sensor_config(*, base: str) -> dict:
+    """HA discovery config for the monthly-plan progress sensor (Phase 19c).
+
+    A plain text sensor whose state is the paid progress (``"8/14"``); the paid /
+    total / overdue counts ride along as attributes from the same retained topic,
+    so an HA automation can notify off ``overdue`` while the entity stays glanceable
+    next to the FOR LIVING / Left To Pay money sensors. Read-only like the rest.
+    """
+    return {
+        "name": "Monthly Plan",
+        "unique_id": f"{_DEVICE_ID}_plan",
+        "object_id": f"{_DEVICE_ID}_plan",
+        "state_topic": plan_topic(base),
+        "value_template": "{{ value_json.progress }}",
+        "json_attributes_topic": plan_topic(base),
+        "availability_topic": availability_topic(base),
+        "icon": "mdi:calendar-check",
+        "device": _device(),
+    }
+
+
 def state_payload(metrics: list[Metric]) -> str:
     """The retained state JSON: every metric keyed by its slug."""
     return json.dumps({m.key: m.value for m in metrics})
+
+
+def plan_payload(*, paid: int, total: int, overdue: int) -> str:
+    """Retained state for the plan sensor: paid progress plus the raw counts."""
+    return json.dumps(
+        {"progress": f"{paid}/{total}", "paid": paid, "total": total, "overdue": overdue}
+    )
 
 
 def update_payload(*, current: str | None, latest: str | None, update_available: bool) -> str:

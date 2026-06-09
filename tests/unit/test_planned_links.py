@@ -211,3 +211,30 @@ def test_loan_backed_paid_from_reconciliation(
     assert row.paid is True
     assert row.real_amount == -2600_00
     assert row.paid_date == date(2026, 2, 15)
+
+
+# --- FOR LIVING trend (Phase 19c) -------------------------------------------
+
+
+def test_for_living_trend(
+    db_session: Session, make_planned_item: Callable[..., PlannedItem]
+) -> None:
+    make_planned_item(name="Salary", expected_amount=8000_00)
+    make_planned_item(name="Rent", expected_amount=-3000_00)
+
+    trend = pq.for_living_trend(db_session, months=3, today=date(2026, 6, 15))
+
+    # Last 3 months ending at the current one, oldest first.
+    assert [m for m, _ in trend] == ["2026-04", "2026-05", "2026-06"]
+    # Recurring items -> the same remainder every month.
+    assert [v for _, v in trend] == [5000_00, 5000_00, 5000_00]
+
+
+def test_for_living_trend_crosses_year_boundary(
+    db_session: Session, make_planned_item: Callable[..., PlannedItem]
+) -> None:
+    make_planned_item(name="Salary", expected_amount=8000_00)
+
+    trend = pq.for_living_trend(db_session, months=3, today=date(2026, 1, 10))
+
+    assert [m for m, _ in trend] == ["2025-11", "2025-12", "2026-01"]

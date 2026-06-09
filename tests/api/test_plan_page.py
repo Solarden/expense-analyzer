@@ -317,3 +317,17 @@ def test_payment_card_has_copy_buttons(
     resp = auth_client.get("/dashboard/plan?month=2026-06")
     assert "data-copy=" in resp.text  # the how-to-pay card copy controls
     assert "PL61109010140000071219812874" in resp.text
+
+
+def test_for_living_chart_hidden_on_empty_plan(auth_client: TestClient) -> None:
+    resp = auth_client.get("/dashboard/plan")
+    assert "FOR LIVING trend" not in resp.text  # no flat-zero chart with no items
+
+
+def test_for_living_chart_shown_with_items(
+    auth_client: TestClient, make_planned_item: Callable[..., PlannedItem]
+) -> None:
+    make_planned_item(name="Rent", expected_amount=-3000_00)
+    resp = auth_client.get("/dashboard/plan")
+    assert "FOR LIVING trend" in resp.text
+    assert "forLivingChart" in resp.text
