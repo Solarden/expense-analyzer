@@ -53,6 +53,18 @@
              aria-label="Search transactions"
              onchange="this.form.submit()"
              class="flex-[2] min-w-[200px]">
+      <select name="size"
+              aria-label="Rows per page"
+              onchange="this.form.submit()"
+              class="min-w-[110px]">
+        {% for s in page_sizes %}
+          <option value="{{ s }}" {% if s == f_page_size %}selected{% endif %}>{{ s }} / page</option>
+        {% endfor %}
+        {# A custom EA_PAGE_SIZE (off the whitelist) still shows as the current choice. #}
+        {% if f_page_size not in page_sizes %}
+          <option value="{{ f_page_size }}" selected>{{ f_page_size }} / page</option>
+        {% endif %}
+      </select>
       <a class="btn" href="/dashboard/transactions">Reset</a>
       {# Selects + search auto-submit on change; the explicit Filter button is only
          needed when JavaScript is off. #}

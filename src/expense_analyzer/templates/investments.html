@@ -96,6 +96,7 @@
     {% endfor %}
     {% if allocation_chart.labels %}
       <script src="/static/chart.min.js"></script>
+      <script src="/static/chart-theme.js"></script>
       <script>
   const allocation = {{ allocation_chart | tojson }};
   // Amounts are integer minor units (1/100 PLN); fmt divides by 100 in one place.

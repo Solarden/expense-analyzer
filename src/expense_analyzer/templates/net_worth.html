@@ -6,6 +6,18 @@
       <div class="k">Net worth</div>
       <div class="v {{ 'pos' if total >= 0 else 'neg' }}">{{ total | pln }}</div>
     </div>
+    <div class="card">
+      <div class="k">Assets</div>
+      <div class="v pos">{{ assets | pln }}</div>
+    </div>
+    <div class="card">
+      <div class="k">Liabilities</div>
+      <div class="v {{ 'neg' if liabilities < 0 else 'muted' }}">{{ liabilities | pln }}</div>
+    </div>
+    <div class="card">
+      <div class="k">Net worth excl. loans</div>
+      <div class="v {{ 'pos' if net_worth_excl_loans >= 0 else 'neg' }}">{{ net_worth_excl_loans | pln }}</div>
+    </div>
   </div>
   <div class="cols" style="margin-top:16px">
     <div class="panel">
@@ -51,36 +63,45 @@
       {% endif %}
     </div>
     <div class="panel">
-      <h2 style="margin-top:0">Breakdown</h2>
-      {% if balances %}
-        <canvas id="breakdownChart" height="220"></canvas>
+      {# Assets and liabilities are charted separately so a large mortgage on a
+         shared axis can't squash every asset bar (each scales on its own). #}
+      <h2 style="margin-top:0">Assets</h2>
+      {% if assets_chart.labels %}
+        <canvas id="assetsChart" height="200"></canvas>
       {% else %}
-        <p class="muted">Nothing to chart yet.</p>
+        <p class="muted">No assets to chart.</p>
+      {% endif %}
+      <h2>Liabilities</h2>
+      {% if liabilities_chart.labels %}
+        <canvas id="liabilitiesChart" height="160"></canvas>
+      {% else %}
+        <p class="muted">No liabilities — debt-free.</p>
       {% endif %}
     </div>
   </div>
-  {% if balances %}
+  {% if assets_chart.labels or liabilities_chart.labels %}
     <script src="/static/chart.min.js"></script>
+    <script src="/static/chart-theme.js"></script>
     <script>
-  const breakdown = {{ breakdown_chart | tojson }};
   // Integer minor units (1/100 PLN); fmt divides by 100 in one place.
   const fmt = (minor) => (minor / 100).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' });
-  new Chart(document.getElementById('breakdownChart'), {
-    type: 'bar',
-    data: {
-      labels: breakdown.labels,
-      datasets: [{
-        label: 'Balance',
-        data: breakdown.data,
-        backgroundColor: breakdown.data.map((v) => (v < 0 ? '#f0686b' : '#3fb950')),
-      }],
-    },
-    options: {
-      indexAxis: 'y',
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => fmt(c.parsed.x) } } },
-      scales: { x: { ticks: { callback: fmt } } },
-    },
-  });
+  // Shared horizontal-bar config; only the colour differs between the two.
+  const barChart = (id, chart, colour) =>
+    new Chart(document.getElementById(id), {
+      type: 'bar',
+      data: { labels: chart.labels, datasets: [{ data: chart.data, backgroundColor: colour }] },
+      options: {
+        indexAxis: 'y',
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => fmt(c.parsed.x) } } },
+        scales: { x: { ticks: { callback: fmt } } },
+      },
+    });
+
+  const assets = {{ assets_chart | tojson }};
+  if (assets.labels.length) barChart('assetsChart', assets, '#3fb950');
+
+  const liabilities = {{ liabilities_chart | tojson }};
+  if (liabilities.labels.length) barChart('liabilitiesChart', liabilities, '#f0686b');
     </script>
   {% endif %}
 {% endblock %}
