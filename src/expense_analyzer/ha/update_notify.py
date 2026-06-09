@@ -16,11 +16,16 @@ With MQTT unconfigured this is a no-op (logs and exits 0). Versions are simple
 """
 
 import argparse
+import json
 import logging
+import os
 import re
 import sys
 from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 
+from expense_analyzer.clock import utc_now
 from expense_analyzer.config import get_settings
 from expense_analyzer.logging_config import configure_logging
 
@@ -67,6 +72,50 @@ def select_update(current: str | None, tags: list[str]) -> UpdateStatus:
     update_available = current_version is None or latest_version > current_version
 
     return UpdateStatus(current=current, latest=latest_tag, update_available=update_available)
+
+
+@dataclass(frozen=True)
+class StoredStatus:
+    """A persisted verdict (the in-app Updates view reads this), with the time the
+    check ran. Mirrors :class:`UpdateStatus` plus ``checked_at``."""
+
+    current: str | None
+    latest: str | None
+    update_available: bool
+    checked_at: datetime
+
+
+def save_status(status: UpdateStatus, *, path: Path, checked_at: datetime) -> None:
+    """Persist the verdict to ``path`` as JSON so the web app can show it without
+    any network of its own. Written by the cron check inside the app container (the
+    host did the git fetch); the web app only ever reads it (keep-pi-fully-local)."""
+    payload = {
+        "current": status.current,
+        "latest": status.latest,
+        "update_available": status.update_available,
+        "checked_at": checked_at.isoformat(),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Atomic write: a reader (the web app) never sees a half-written file. Write to
+    # a temp sibling on the same filesystem, then os.replace() it into place.
+    tmp = path.with_name(f"{path.name}.tmp")
+    tmp.write_text(json.dumps(payload, indent=2))
+    os.replace(tmp, path)
+
+
+def load_status(path: Path) -> StoredStatus | None:
+    """Read a persisted verdict, or ``None`` if it's missing or unreadable (no check
+    has run yet, or a corrupt file — the view then shows a neutral "not checked")."""
+    try:
+        data = json.loads(path.read_text())
+        return StoredStatus(
+            current=data.get("current"),
+            latest=data.get("latest"),
+            update_available=bool(data.get("update_available")),
+            checked_at=datetime.fromisoformat(data["checked_at"]),
+        )
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
 
 
 def _publish(status: UpdateStatus) -> None:
@@ -125,6 +174,9 @@ def main() -> None:
     else:
         log.info("up to date: running %s, latest %s", status.current, status.latest)
 
+    # Record the verdict locally so the in-app Updates view can show it (read-only,
+    # no network of its own) — then notify HA. Persist regardless of MQTT config.
+    save_status(status, path=get_settings().update_status_path, checked_at=utc_now())
     _publish(status)
 
 

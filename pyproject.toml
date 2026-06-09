@@ -1,6 +1,6 @@
 [project]
 name = "expense-analyzer"
-version = "0.0.0"
+version = "1.0.0"
 description = "Locally hosted household finance analyzer (Raspberry Pi + Home Assistant)"
 readme = "README.md"
 requires-python = ">=3.11"

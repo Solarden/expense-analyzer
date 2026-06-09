@@ -17,8 +17,8 @@ from sqlmodel import Session
 from expense_analyzer import attachments
 from expense_analyzer.config import get_settings
 from expense_analyzer.models import Account, AccountType, Loan
-from expense_analyzer.queries import loan_documents as dq
-from expense_analyzer.queries import loans as lq
+from expense_analyzer.queries.planning import loan_documents as dq
+from expense_analyzer.queries.planning import loans as lq
 
 PDF = b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n" + b"x" * 64
 PNG = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + b"y" * 64

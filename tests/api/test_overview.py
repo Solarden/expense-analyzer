@@ -71,7 +71,7 @@ def test_stats_page_empty_db(auth_client: TestClient, db_session: Session):
 
 
 def test_bar_color_prefers_explicit_then_palette():
-    from expense_analyzer.api.endpoints.overview import (
+    from expense_analyzer.api.endpoints.money.overview import (
         AUTO_PALETTE,
         DEFAULT_CATEGORY_COLOR,
         _bar_color,
@@ -87,7 +87,7 @@ def test_bar_color_prefers_explicit_then_palette():
 
 
 def test_drilldown_link_builds_filtered_url():
-    from expense_analyzer.api.endpoints.overview import _drilldown_link
+    from expense_analyzer.api.endpoints.money.overview import _drilldown_link
 
     assert _drilldown_link(7, "2026-05") == "/dashboard/transactions?category=7&month=2026-05"
     # Uncategorized maps to the "none" filter the transactions list understands.

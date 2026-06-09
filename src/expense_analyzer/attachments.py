@@ -6,7 +6,7 @@ plain files in a directory on the same ``data/`` volume as the SQLite database
 nothing leaves the LAN, no OCR (keep-pi-fully-local). This module is the only
 place that touches that directory; the DB-side metadata lives in
 :class:`~expense_analyzer.models.LoanDocument` (queried via
-:mod:`expense_analyzer.queries.loan_documents`).
+:mod:`expense_analyzer.queries.planning.loan_documents`).
 
 Two safety rules baked in here:
 

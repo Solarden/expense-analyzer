@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2 style="margin-top:0">Updates</h2>
+  <div class="panel">
+    {% if status is none %}
+      <p class="muted" style="margin-top:0">
+        No update check has run yet. The Pi checks for a newer release on a schedule
+        (<code>make check-update</code>, wired into cron — see the README). This page
+        shows the result of that check; it never contacts the internet itself.
+      </p>
+    {% elif status.update_available %}
+      <p style="margin-top:0">
+        <strong class="pos">A new version is available.</strong>
+      </p>
+      <table class="table-cards">
+        <tbody>
+          <tr>
+            <td data-label="Running">
+              <span class="muted">Running</span>
+            </td>
+            <td>{{ status.current or "an untagged build" }}</td>
+          </tr>
+          <tr>
+            <td data-label="Latest">
+              <span class="muted">Latest release</span>
+            </td>
+            <td>
+              <strong>{{ status.latest }}</strong>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="muted">Review the changes, then update on the Pi when you're ready:</p>
+      <p>
+        <code>make deploy a="--pull"</code>
+      </p>
+      {% if release_url %}
+        <p>
+          <a class="btn"
+             href="{{ release_url }}"
+             target="_blank"
+             rel="noopener noreferrer">View release &amp; changelog →</a>
+        </p>
+      {% endif %}
+    {% else %}
+      <p style="margin-top:0">
+        <strong class="pos">You're on the latest release.</strong>
+        {% if status.latest %}<span class="muted">({{ status.latest }})</span>{% endif %}
+      </p>
+    {% endif %}
+    {% if status is not none %}
+      <p class="muted text-[12px]" style="margin-bottom:0">
+        Last checked {{ status.checked_at.strftime("%d.%m.%Y %H:%M") }} UTC.
+        Updates are notify-only — nothing deploys automatically.
+      </p>
+    {% endif %}
+  </div>
+{% endblock %}

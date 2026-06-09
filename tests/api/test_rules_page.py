@@ -22,7 +22,7 @@ from expense_analyzer.models import (
     Transaction,
     TxSource,
 )
-from expense_analyzer.queries import rules as rq
+from expense_analyzer.queries.categorize import rules as rq
 
 # --- query layer ----------------------------------------------------------
 

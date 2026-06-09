@@ -1,12 +1,21 @@
 """Update notifier (Phase 18) — pure version logic + the HA publish path."""
 
 import json
+from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from _fakes import FakeMqttClient, _publisher
 
 from expense_analyzer.config import Settings
-from expense_analyzer.ha.update_notify import parse_version, select_update
+from expense_analyzer.ha.update_notify import (
+    StoredStatus,
+    UpdateStatus,
+    load_status,
+    parse_version,
+    save_status,
+    select_update,
+)
 
 
 class TestParseVersion:
@@ -107,3 +116,24 @@ class TestPublishUpdate:
     def test_from_settings_refuses_when_not_configured(self):
         # The CLI guards on this before publishing; confirm the guard exists.
         assert Settings(mqtt_host="").mqtt_configured is False
+
+
+class TestPersistStatus:
+    """The local status file the in-app Updates view reads (no network of its own)."""
+
+    def test_save_then_load_round_trips(self, tmp_path: Path):
+        status = UpdateStatus(current="v1.2.0", latest="v1.3.0", update_available=True)
+        when = datetime(2026, 6, 9, 7, 30, tzinfo=UTC)
+        path = tmp_path / "nested" / "update_status.json"  # parent created on save
+
+        save_status(status, path=path, checked_at=when)
+
+        assert load_status(path) == StoredStatus("v1.2.0", "v1.3.0", True, when)
+
+    def test_missing_file_loads_as_none(self, tmp_path: Path):
+        assert load_status(tmp_path / "absent.json") is None
+
+    def test_corrupt_file_loads_as_none(self, tmp_path: Path):
+        path = tmp_path / "bad.json"
+        path.write_text("{ not valid json")
+        assert load_status(path) is None

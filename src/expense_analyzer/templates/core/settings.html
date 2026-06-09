@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block content %}
+  <div class="cols">
+    <div class="panel">
+      <h2 style="margin-top:0">Accounts</h2>
+      {% if accounts %}
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Currency</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in accounts %}
+              <tr>
+                <td>{{ a.name }}</td>
+                <td class="muted">{{ a.type.value }}</td>
+                <td class="muted">{{ a.currency }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">No accounts yet. Add one to import a CSV.</p>
+      {% endif %}
+      <h2>Add account</h2>
+      <form class="hstack" method="post" action="/dashboard/accounts">
+        <input name="name"
+               placeholder="PKO checking"
+               aria-label="Account name"
+               required>
+        <select name="type" aria-label="Account type">
+          {% for t in account_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+        </select>
+        <button type="submit">Add account</button>
+      </form>
+    </div>
+    <div class="panel">
+      <h2 style="margin-top:0">Categories</h2>
+      {% if categories %}
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Edit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in categories %}
+              <tr>
+                <td>{{ ui.swatch(c.color) }}{{ c.name }}</td>
+                <td>
+                  {# Inline edit per category (Phase 20b): rename, change kind, and
+                     set the colour in one Save. Clear (only when set) drops the
+                     colour back to none. Changing kind reclassifies it for stats. #}
+                  <form class="hstack"
+                        method="post"
+                        action="/dashboard/categories/{{ c.id }}/edit">
+                    <input name="name"
+                           value="{{ c.name }}"
+                           aria-label="Name for {{ c.name }}"
+                           required>
+                    <select name="kind" aria-label="Kind for {{ c.name }}">
+                      {% for k in category_kinds %}
+                        <option value="{{ k }}" {% if k == c.kind.value %}selected{% endif %}>{{ k }}</option>
+                      {% endfor %}
+                    </select>
+                    <input type="color"
+                           name="color"
+                           value="{{ c.color or '#4f8cff' }}"
+                           aria-label="Colour for {{ c.name }}">
+                    <button class="ghost" type="submit">Save</button>
+                    {% if c.color %}<button class="ghost" type="submit" name="clear" value="1">Clear</button>{% endif %}
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">No categories yet. Add some to categorize transactions manually.</p>
+      {% endif %}
+      <h2>Add category</h2>
+      <form class="hstack" method="post" action="/dashboard/categories">
+        <input name="name" placeholder="Food" aria-label="Category name" required>
+        <select name="kind" aria-label="Category kind">
+          {% for k in category_kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}
+        </select>
+        <input name="color"
+               type="color"
+               value="#4f8cff"
+               aria-label="Category colour">
+        <button type="submit">Add category</button>
+      </form>
+    </div>
+  </div>
+  <h2>Recent imports</h2>
+  <div class="panel">
+    {% if batches %}
+      <table class="table-cards">
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Source</th>
+            <th>When</th>
+            <th class="num">Records</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in batches %}
+            <tr>
+              <td data-label="File">{{ b.filename }}</td>
+              <td class="muted" data-label="Source">{{ b.source }}</td>
+              <td class="muted" data-label="When">{{ b.imported_at.strftime("%d.%m.%Y %H:%M") }}</td>
+              <td class="num" data-label="Records">{{ b.record_count }}</td>
+              <td data-label="Status">
+                {% if b.status.value == "active" %}
+                  {{ b.status.value }}
+                {% else %}
+                  <span class="muted">{{ b.status.value }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {# The Manual batch holds hand-entered rows (deleted one at a time
+                   from the transactions list), so it offers no bulk rollback. #}
+                {% if b.status.value == "active" and b.source != "Manual" %}
+                  <form class="hstack"
+                        method="post"
+                        action="/dashboard/batches/{{ b.id }}/rollback"
+                        onsubmit="return confirm('Roll back this import? Its transactions will be marked deleted.');">
+                    <button class="ghost" type="submit">Roll back</button>
+                  </form>
+                {% elif b.source == "Manual" %}
+                  <span class="muted text-[12px]">edit on Transactions</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">
+        Nothing imported yet. <a href="/dashboard/upload">Import a CSV →</a>
+      </p>
+    {% endif %}
+  </div>
+{% endblock %}

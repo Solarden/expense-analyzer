@@ -9,31 +9,25 @@ adding a domain is one line here rather than another ``include_router`` in the
 app factory.
 """
 
-from expense_analyzer.api.endpoints import (
+from expense_analyzer.api.endpoints.categorize import categorization, rules
+from expense_analyzer.api.endpoints.core import (
     auth,
-    budgets,
-    categorization,
     health,
-    home,
     home_assistant,
-    investments,
-    loans,
-    net_worth,
-    overview,
-    plan,
-    rules,
-    subscriptions,
-    transactions,
-    transfers,
+    settings,
+    updates,
     upload,
     users,
 )
+from expense_analyzer.api.endpoints.money import overview, transactions, transfers
+from expense_analyzer.api.endpoints.planning import budgets, loans, plan, subscriptions
+from expense_analyzer.api.endpoints.wealth import investments, net_worth
 
 # Order is cosmetic (paths don't overlap); health/auth first, then dashboard domains.
 routers = (
     health.router,
     auth.router,
-    home.router,
+    settings.router,
     overview.router,
     transactions.router,
     transfers.router,
@@ -48,4 +42,5 @@ routers = (
     home_assistant.router,
     upload.router,
     users.router,
+    updates.router,
 )

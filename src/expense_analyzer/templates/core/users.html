@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Users — Expense Analyzer{% endblock %}
+{% block content %}
+  <h2 style="margin-top:0">Users</h2>
+  <div class="panel">
+    <table>
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Name</th>
+          <th>Role</th>
+          <th>Active</th>
+          {% if user.is_admin %}<th>Manage</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+          <tr>
+            <td>
+              {{ u.username }}
+              {% if u.id == user.id %}<span class="muted">(you)</span>{% endif %}
+            </td>
+            <td>{{ u.name }}</td>
+            <td>
+              {% if u.is_admin %}
+                admin
+              {% else %}
+                <span class="muted">member</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if u.is_active %}
+                yes
+              {% else %}
+                <span class="muted">no</span>
+              {% endif %}
+            </td>
+            {% if user.is_admin %}
+              <td>
+                <div class="hstack">
+                  {# Admin toggle is allowed on yourself (step down) — the
+                     "last active admin" guard catches a lockout. #}
+                  <form method="post" action="/dashboard/users/{{ u.id }}/toggle-admin">
+                    <button class="btn" type="submit">
+                      {% if u.is_admin %}
+                        Revoke admin
+                      {% else %}
+                        Make admin
+                      {% endif %}
+                    </button>
+                  </form>
+                  {# Deactivate / Delete never act on your own account. #}
+                  {% if u.id != user.id %}
+                    <form method="post" action="/dashboard/users/{{ u.id }}/toggle-active">
+                      <button class="btn" type="submit">
+                        {% if u.is_active %}
+                          Deactivate
+                        {% else %}
+                          Activate
+                        {% endif %}
+                      </button>
+                    </form>
+                    <form method="post"
+                          action="/dashboard/users/{{ u.id }}/delete"
+                          onsubmit="return confirm('Delete this user? Their imported data stays.');">
+                      <button class="ghost" type="submit">Delete</button>
+                    </form>
+                  {% endif %}
+                  {# Reset password — safe on yourself too (also the only in-app
+                     way to change your own password). #}
+                  <form method="post"
+                        action="/dashboard/users/{{ u.id }}/reset-password"
+                        class="hstack"
+                        onsubmit="return confirm('Set a new password for this user?');">
+                    <input name="password"
+                           type="password"
+                           placeholder="New password"
+                           autocomplete="new-password"
+                           required>
+                    <button class="btn" type="submit">Set password</button>
+                  </form>
+                </div>
+              </td>
+            {% endif %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <h2>Add user</h2>
+  <div class="panel">
+    <form class="hstack" method="post" action="/dashboard/users">
+      <input name="username" placeholder="Username" aria-label="Username" required>
+      <input name="name"
+             placeholder="Display name"
+             aria-label="Display name"
+             required>
+      <input name="password"
+             type="password"
+             placeholder="Password"
+             aria-label="Password"
+             required>
+      <button type="submit">Add user</button>
+    </form>
+    <p class="muted">
+      New users get the same shared household view — no roles for the data,
+      no private data. Only admins can manage (delete/deactivate) users.
+    </p>
+  </div>
+{% endblock %}

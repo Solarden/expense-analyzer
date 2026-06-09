@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install dev test lint format check migrate revision user up down logs deploy backup check-update audit css css-watch tailwind-cli
+.PHONY: help install dev test lint format check migrate revision user seed up down logs deploy backup check-update audit css css-watch tailwind-cli
 
 # Tailwind standalone CLI (no Node needed). The binary is a dev tool (gitignored,
 # fetched on demand); the built CSS is committed and served offline via
@@ -39,6 +39,9 @@ revision: ## Autogenerate a migration: make revision m="add transaction"
 
 user: ## Create a login user: make user u=pawel n="Paweł"
 	uv run python -m expense_analyzer.create_user --username "$(u)" --name "$(n)"
+
+seed: ## Reset the local DB to a demo dataset to click through (login: admin / demo1234)
+	uv run python -m scripts.seed_demo
 
 up: ## Build and start the docker stack
 	docker compose up --build

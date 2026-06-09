@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from expense_analyzer.models import Account, Category, CategoryKind, Transaction
-from expense_analyzer.queries import transfers as tq
+from expense_analyzer.queries.money import transfers as tq
 
 
 def test_link_transfer_marks_both_legs_and_assigns_category(

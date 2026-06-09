@@ -23,9 +23,9 @@ from expense_analyzer.importers.fingerprint import compute_fingerprint
 from expense_analyzer.importers.merchant import normalize_merchant
 from expense_analyzer.importers.reconciliation import ReconciliationResult, reconcile
 from expense_analyzer.models import ImportBatch, ImportStatus, Transaction, TxSource
-from expense_analyzer.queries.classifier import classify
-from expense_analyzer.queries.rules import apply_rules
-from expense_analyzer.queries.transfers import detect_and_autolink
+from expense_analyzer.queries.categorize.classifier import classify
+from expense_analyzer.queries.categorize.rules import apply_rules
+from expense_analyzer.queries.money.transfers import detect_and_autolink
 
 log = logging.getLogger("expense_analyzer.import")
 

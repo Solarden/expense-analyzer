@@ -16,11 +16,11 @@ from sqlmodel import Session
 from expense_analyzer.clock import local_today
 from expense_analyzer.config import get_settings
 from expense_analyzer.money import from_minor_units
-from expense_analyzer.queries import budgets as budget_queries
-from expense_analyzer.queries import net_worth as net_worth_queries
-from expense_analyzer.queries import planned as planned_queries
-from expense_analyzer.queries import stats as stats_queries
-from expense_analyzer.queries import subscriptions as subscription_queries
+from expense_analyzer.queries.money import stats as stats_queries
+from expense_analyzer.queries.planning import budgets as budget_queries
+from expense_analyzer.queries.planning import planned as planned_queries
+from expense_analyzer.queries.planning import subscriptions as subscription_queries
+from expense_analyzer.queries.wealth import net_worth as net_worth_queries
 
 
 @dataclass(frozen=True)
@@ -51,7 +51,7 @@ def collect_metrics(session: Session) -> list[Metric]:
 
     Headline figures (net worth, this-month spending/income/net — transfers and
     loan installments excluded, as everywhere in
-    :mod:`~expense_analyzer.queries.stats`), the total fixed monthly cost of
+    :mod:`~expense_analyzer.queries.money.stats`), the total fixed monthly cost of
     detected subscriptions (Phase 9), one balance metric per account, and a
     "budget remaining" metric per budgeted category for the current month (Phase
     8). HA turns the remaining sensors into glanceable "left in food budget" cards

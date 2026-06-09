@@ -19,7 +19,7 @@ from sqlmodel import Session
 
 from expense_analyzer.config import Settings
 from expense_analyzer.models import Account, SubscriptionStatus, Transaction
-from expense_analyzer.queries import subscriptions as sq
+from expense_analyzer.queries.planning import subscriptions as sq
 
 SETTINGS = Settings(secret_key="test-secret-not-for-production")
 

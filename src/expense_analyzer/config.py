@@ -211,6 +211,14 @@ class Settings(BaseSettings):
     def database_url(self) -> str:
         return f"sqlite:///{self.database_path}"
 
+    @property
+    def update_status_path(self) -> Path:
+        """Where the cron update check (``scripts/check_update.sh`` →
+        ``ha.update_notify``) writes its verdict, for the in-app Updates view to
+        read. Lives next to the DB in the data volume; the web app only ever reads
+        it — the network egress stays on the host's cron (keep-pi-fully-local)."""
+        return self.database_path.parent / "update_status.json"
+
 
 @lru_cache
 def get_settings() -> Settings:

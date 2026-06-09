@@ -12,7 +12,7 @@ from datetime import date
 from sqlmodel import Session
 
 from expense_analyzer.models import Account, Category, CategoryKind, Transaction
-from expense_analyzer.queries import stats
+from expense_analyzer.queries.money import stats
 
 
 def _names(*cats: Category) -> dict[int, str]:

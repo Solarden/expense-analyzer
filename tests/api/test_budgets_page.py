@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from expense_analyzer.models import Account, Category, CategoryKind, Transaction
-from expense_analyzer.queries import budgets as bq
+from expense_analyzer.queries.planning import budgets as bq
 
 
 def test_budgets_page_renders(auth_client: TestClient) -> None:

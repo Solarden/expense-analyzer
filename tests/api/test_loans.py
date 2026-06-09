@@ -21,7 +21,7 @@ from expense_analyzer.models import (
     RateType,
     Transaction,
 )
-from expense_analyzer.queries import loans as lq
+from expense_analyzer.queries.planning import loans as lq
 
 # --- query layer -----------------------------------------------------------
 

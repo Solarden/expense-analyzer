@@ -16,7 +16,7 @@ from sqlmodel import Session
 
 from expense_analyzer.config import Settings
 from expense_analyzer.models import Account, Category, Transaction, TxSource
-from expense_analyzer.queries import embeddings as eq
+from expense_analyzer.queries.categorize import embeddings as eq
 
 # Permissive: a tiny fixture set clears the floor; the floor on similarity stays
 # meaningful so the "too far" case can be exercised.

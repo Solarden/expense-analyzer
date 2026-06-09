@@ -6,7 +6,7 @@ from sqlmodel import Session, select
 
 from expense_analyzer.auth import hash_password, verify_password
 from expense_analyzer.models import Owner
-from expense_analyzer.queries import users
+from expense_analyzer.queries.core import users
 
 
 def test_hash_verify_roundtrip():

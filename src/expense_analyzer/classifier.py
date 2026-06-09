@@ -14,7 +14,7 @@ labels; there is no stored model file. Fitting TF-IDF + logistic regression over
 household's history takes well under a second, so a pickled model, a retrain
 cadence and staleness are all avoidable (recompute-live, like the subscription
 detector). The DB side — which rows train, which get classified, and the queue —
-lives in :mod:`expense_analyzer.queries.classifier`.
+lives in :mod:`expense_analyzer.queries.categorize.classifier`.
 
 scikit-learn (and its numpy/scipy stack) is imported lazily inside :func:`train`,
 not at module load, so merely importing this module — or the import pipeline that
