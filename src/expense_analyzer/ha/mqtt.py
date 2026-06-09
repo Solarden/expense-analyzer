@@ -133,6 +133,39 @@ class MqttPublisher:
 
         self._with_connection(body, will=(avail, discovery.OFFLINE))
 
+    def publish_update(
+        self, *, current: str | None, latest: str | None, update_available: bool
+    ) -> None:
+        """Publish the retained "update available" sensor (Phase 18).
+
+        Mirrors :meth:`publish_metrics` (availability + retained discovery +
+        retained state) but on its own ``<base>/update`` topic, so it never
+        clobbers the money state doc. Published every check so the sensor always
+        reflects reality (``update_available`` flips back to false once deployed).
+        """
+        avail = discovery.availability_topic(self._base_topic)
+
+        def body(client: MqttClient) -> list[object]:
+            return [
+                client.publish(avail, discovery.ONLINE, qos=_QOS, retain=True),
+                client.publish(
+                    discovery.discovery_topic(self._discovery_prefix, self._base_topic, "update"),
+                    json.dumps(discovery.update_sensor_config(base=self._base_topic)),
+                    qos=_QOS,
+                    retain=True,
+                ),
+                client.publish(
+                    discovery.update_topic(self._base_topic),
+                    discovery.update_payload(
+                        current=current, latest=latest, update_available=update_available
+                    ),
+                    qos=_QOS,
+                    retain=True,
+                ),
+            ]
+
+        self._with_connection(body, will=(avail, discovery.OFFLINE))
+
     def publish_alert(self, title: str, message: str, *, severity: str = "warning") -> None:
         """Publish a one-off alert event (not retained) for an HA automation.
 
