@@ -41,6 +41,26 @@ def allowed_types_label() -> str:
     return ", ".join(sorted(ext.lstrip(".").upper() for ext in ALLOWED_ATTACHMENT_TYPES.values()))
 
 
+# Cap on the display name kept in the DB — generous for a real filename, but a
+# bound so a pathological upload name can't bloat the row or the rendered page.
+MAX_DISPLAY_NAME_LEN = 255
+
+
+def safe_display_name(raw: str, fallback: str) -> str:
+    """Clean an upload's own filename into safe display/download metadata.
+
+    Defence-in-depth on top of the generated on-disk name: drop any path
+    components (keep the basename only), strip non-printable characters (control
+    chars, CR/LF) and surrounding whitespace, and bound the length. Returns
+    ``fallback`` (the generated ``stored_name``) when nothing usable is left, so
+    the row never carries an empty or hostile name.
+    """
+    name = Path(raw).name
+    name = "".join(ch for ch in name if ch.isprintable()).strip()
+
+    return name[:MAX_DISPLAY_NAME_LEN] or fallback
+
+
 def sniff_content_type(data: bytes) -> str | None:
     """Return the MIME type of ``data`` by its magic bytes, or None if unsupported.
 

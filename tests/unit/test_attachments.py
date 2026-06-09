@@ -63,6 +63,27 @@ def test_delete_document_file_is_idempotent(tmp_path: Path):
     attachments.delete_document_file(tmp_path, 3, stored)
 
 
+def test_safe_display_name_strips_path_and_control_chars():
+    # Path components are dropped (basename only).
+    assert attachments.safe_display_name("../../etc/passwd", "fb.pdf") == "passwd"
+    assert attachments.safe_display_name("a/b/c/contract.pdf", "fb.pdf") == "contract.pdf"
+    # Control characters (incl. CR/LF that could fray a header) are removed.
+    assert attachments.safe_display_name("c\r\nontract\t.pdf", "fb.pdf") == "contract.pdf"
+
+
+def test_safe_display_name_falls_back_when_empty():
+    assert attachments.safe_display_name("", "generated.pdf") == "generated.pdf"
+    assert attachments.safe_display_name("   ", "generated.pdf") == "generated.pdf"
+    # A name that is only path + control chars collapses to the fallback.
+    assert attachments.safe_display_name("/\r\n", "generated.pdf") == "generated.pdf"
+
+
+def test_safe_display_name_bounds_length():
+    long = "x" * 1000 + ".pdf"
+    out = attachments.safe_display_name(long, "fb.pdf")
+    assert len(out) == attachments.MAX_DISPLAY_NAME_LEN
+
+
 def test_delete_loan_dir_removes_all_files(tmp_path: Path):
     attachments.store_loan_document(tmp_path, 5, PDF, "application/pdf")
     attachments.store_loan_document(tmp_path, 5, PNG, "image/png")

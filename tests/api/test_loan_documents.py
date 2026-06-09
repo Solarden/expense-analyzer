@@ -186,6 +186,55 @@ def test_upload_rejects_oversize_file(
     assert dq.list_documents(db_session, loan.id) == []
 
 
+def test_upload_sanitizes_stored_filename(
+    auth_client: TestClient,
+    db_session: Session,
+    make_account: Callable[..., Account],
+    make_loan: Callable[..., Loan],
+):
+    acc = make_account(name="Mortgage", type=AccountType.loan)
+    loan = make_loan(account_id=acc.id)
+
+    # A filename carrying path components is reduced to a clean basename (control
+    # chars are stripped too — covered directly in tests/unit/test_attachments.py,
+    # since an HTTP client percent-encodes them in the multipart header in transit).
+    auth_client.post(
+        f"/dashboard/loans/{loan.id}/documents",
+        files={"file": ("../../etc/contract.pdf", PDF, "application/pdf")},
+    )
+    doc = dq.list_documents(db_session, loan.id)[0]
+    assert doc.filename == "contract.pdf"
+
+
+def test_upload_rejects_when_loan_at_document_cap(
+    auth_client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    make_account: Callable[..., Account],
+    make_loan: Callable[..., Loan],
+):
+    monkeypatch.setattr(get_settings(), "attachment_max_per_loan", 1)
+    acc = make_account(name="Mortgage", type=AccountType.loan)
+    loan = make_loan(account_id=acc.id)
+
+    first = auth_client.post(
+        f"/dashboard/loans/{loan.id}/documents",
+        files={"file": ("a.pdf", PDF, "application/pdf")},
+        follow_redirects=False,
+    )
+    assert first.status_code == status.HTTP_303_SEE_OTHER
+
+    second = auth_client.post(
+        f"/dashboard/loans/{loan.id}/documents",
+        files={"file": ("b.pdf", PDF, "application/pdf")},
+        follow_redirects=False,
+    )
+    assert second.status_code == status.HTTP_303_SEE_OTHER
+    assert "error=" in second.headers["location"]
+    # The second upload was rejected — still exactly one document.
+    assert len(dq.list_documents(db_session, loan.id)) == 1
+
+
 def test_upload_404_for_missing_loan(auth_client: TestClient):
     resp = auth_client.post(
         "/dashboard/loans/9999/documents",

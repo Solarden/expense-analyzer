@@ -6,7 +6,6 @@ all DB access goes through :mod:`expense_analyzer.queries.loans`. Bad form input
 (wrong numbers/date, missing base rate) becomes a red flash, not a 500.
 """
 
-from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlencode
 
@@ -344,6 +343,15 @@ async def upload_loan_document(
         )
 
     settings = get_settings()
+    # Cap documents per loan — checked before reading the body so a rejected
+    # upload does no work.
+    if len(doc_queries.list_documents(session, loan_id)) >= settings.attachment_max_per_loan:
+        return _redirect_detail(
+            loan_id,
+            error=f"This loan already has the maximum of {settings.attachment_max_per_loan} "
+            "documents. Delete one first.",
+        )
+
     max_bytes = settings.attachment_max_bytes
     max_mb = max_bytes // (1024 * 1024)
     # Cheap pre-read guard on the declared part size, so a huge body isn't read
@@ -367,9 +375,9 @@ async def upload_loan_document(
     stored_name = attachments.store_loan_document(
         settings.attachments_path, loan_id, data, content_type
     )
-    # Keep only the basename of the upload's own filename as display metadata
-    # (the on-disk name is the generated stored_name); fall back if it's blank.
-    display_name = Path(file.filename or "").name or stored_name
+    # Clean the upload's own filename into display metadata (basename only, no
+    # control chars, bounded); the on-disk name is the generated stored_name.
+    display_name = attachments.safe_display_name(file.filename or "", stored_name)
     doc_queries.create_document(
         session,
         loan_id=loan_id,

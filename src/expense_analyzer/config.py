@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     # is the realistic worst case; 10 MiB covers it comfortably. The allowed file
     # *types* are a security boundary kept in code (attachments.py), not env.
     attachment_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1)
+    # Cap on how many documents one loan may hold — a contract, schedule and a
+    # handful of payment proofs over the loan's life fit well under this. A sane
+    # guard against an accidental mass upload filling the volume; raise it if a
+    # loan legitimately needs more.
+    attachment_max_per_loan: int = Field(default=50, ge=1)
 
     # Display / bucketing timezone. The app stores and computes everything in
     # UTC internally; this only governs how instants are presented and how they
