@@ -145,14 +145,21 @@ taken from inside the app image so the client always matches the deploy; on a
 SQLite dev database it's the online backup API (a consistent single `.db` file
 even while the app is writing). Wire `make backup` into cron on the Pi for
 periodic copies (design §10); `EA_BACKUP_KEEP` caps how many are retained.
-Restore with:
+Restore (stop the stack first — the restore resets the schema under whatever
+is connected):
 
 ```bash
+docker compose down
 docker compose run --rm --no-deps -T app \
   python -m expense_analyzer.backup --restore /data/backups/<file>
+docker compose up -d
 ```
 
-(`pg_restore --clean` under the hood — the deploy's rollback uses the same path.)
+Under the hood it validates the archive, resets the `public` schema, then runs
+`pg_restore` — the deploy's rollback uses the same path. The image pins
+`postgresql-client-18`; keep that major in lockstep with your server's (a newer
+client dumps older servers fine, but restoring across majors can report
+spurious failures).
 
 ### Update notifications
 

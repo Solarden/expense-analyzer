@@ -3,9 +3,11 @@
 Dialect-aware, driven by ``EA_DATABASE_URL``:
 
 * **PostgreSQL** (production — the shared /opt/stack server): ``pg_dump
-  --format=custom`` to a timestamped ``.dump``; restore is ``pg_restore
-  --clean`` back into the same database. The client binaries come from the
-  Docker image (see the Dockerfile's pinned ``postgresql-client``).
+  --format=custom`` to a timestamped ``.dump``; restore validates the archive,
+  resets the ``public`` schema, then runs ``pg_restore`` into the same
+  database. The client binaries come from the Docker image (see the
+  Dockerfile's pinned ``postgresql-client`` — keep its major in lockstep with
+  the server's).
 * **SQLite** (local dev): SQLite's online backup API, safe to run while the
   app is live (WAL writers included) — always a single consistent ``.db`` file.
 
@@ -34,6 +36,7 @@ from pathlib import Path
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL, make_url
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.pool import NullPool
 
 from expense_analyzer.config import get_settings
@@ -137,6 +140,14 @@ def restore_backup(url: URL, backup_file: Path) -> None:
 
         return
 
+    # Everything that can fail without the server's help is checked BEFORE the
+    # schema drop — dropping first and then discovering a bad argument (e.g. a
+    # legacy .db file tab-completed from the same backups dir) or a missing
+    # binary would leave the database empty with nothing restored.
+    if shutil.which("pg_restore") is None:
+        raise BackupError("pg_restore not found — install postgresql-client (see Dockerfile)")
+    _validate_pg_archive(backup_file)
+
     _reset_pg_schema(url)
     conn_args, env = _pg_conn_args(url)
     result = subprocess.run(  # nosec B603 B607 — same rationale as the pg_dump call
@@ -156,17 +167,32 @@ def restore_backup(url: URL, backup_file: Path) -> None:
         raise BackupError(result.stderr.strip() or "pg_restore failed")
 
 
+def _validate_pg_archive(backup_file: Path) -> None:
+    """Refuse anything that isn't a pg_restore archive — before any drop."""
+    result = subprocess.run(  # nosec B603 B607 — same rationale as the pg_dump call
+        ["pg_restore", "--list", str(backup_file)],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise BackupError(f"not a pg_restore archive: {backup_file} ({result.stderr.strip()})")
+
+
 def _reset_pg_schema(url: URL) -> None:
     """Drop and recreate the ``public`` schema — a clean slate for pg_restore.
 
     Works without superuser: since PG 15 ``public`` is owned by the database
     owner, which is the app's role (see the README's one-time bootstrap).
+    IF EXISTS on the drop: if an earlier restore attempt died between DROP and
+    CREATE, a re-run must heal the state, not trip over the missing schema.
     """
     engine = create_engine(url, isolation_level="AUTOCOMMIT", poolclass=NullPool)
     try:
         with engine.connect() as conn:
-            conn.execute(text("DROP SCHEMA public CASCADE"))
+            conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
             conn.execute(text("CREATE SCHEMA public"))
+    except SQLAlchemyError as exc:
+        raise BackupError(f"schema reset failed: {exc}") from exc
     finally:
         engine.dispose()
 
@@ -303,6 +329,9 @@ def main() -> None:
             # "does not exist" would also match e.g. a mistyped role
             # (FATAL: role "..." does not exist) and silently skip the one
             # safety backup of a database that very much exists.
+            # The FATAL text comes from the SERVER, so a non-English
+            # lc_messages would break the match — failing SAFE (deploy aborts
+            # instead of proceeding backup-less).
             if args.if_exists and f'database "{url.database}" does not exist' in str(exc):
                 print(f"no database on the server yet — nothing to back up: {exc}", file=sys.stderr)
                 return

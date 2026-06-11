@@ -203,20 +203,29 @@ def test_pg_backup_prunes_dumps(tmp_path: Path, monkeypatch):
     assert len(list(dest.glob(f"{BACKUP_PREFIX}*.dump"))) == 2
 
 
-def test_pg_restore_resets_schema_then_runs_pg_restore(tmp_path: Path, monkeypatch):
+def test_pg_restore_validates_resets_then_restores_in_order(tmp_path: Path, monkeypatch):
+    # The order IS the safety property: a bad archive or missing binary must be
+    # caught BEFORE the schema drop, and the reset must precede pg_restore
+    # (it replaces --clean, which would leave behind objects a
+    # committed-then-rolled-back migration created).
+    events: list = []
     fake = FakeRun()
-    monkeypatch.setattr(backup_mod.subprocess, "run", fake)
-    resets: list = []
-    monkeypatch.setattr(backup_mod, "_reset_pg_schema", resets.append)
+
+    def run_and_log(argv, **kwargs):
+        events.append("validate" if "--list" in argv else argv[0])
+
+        return fake(argv, **kwargs)
+
+    monkeypatch.setattr(backup_mod.subprocess, "run", run_and_log)
+    monkeypatch.setattr(backup_mod.shutil, "which", lambda _: "/usr/bin/pg_restore")
+    monkeypatch.setattr(backup_mod, "_reset_pg_schema", lambda url: events.append("reset"))
     dump = tmp_path / "x.dump"
     dump.touch()
 
     restore_backup(PG_URL, dump)
 
-    # Schema reset must come first — it replaces --clean (which would leave
-    # behind objects a committed-then-rolled-back migration created).
-    assert resets == [PG_URL]
-    argv, kwargs = fake.calls[0]
+    assert events == ["validate", "reset", "pg_restore"]
+    argv, kwargs = fake.calls[1]  # calls[0] is the --list validation
     assert argv == [
         "pg_restore",
         "--host",
@@ -232,6 +241,36 @@ def test_pg_restore_resets_schema_then_runs_pg_restore(tmp_path: Path, monkeypat
         str(dump),
     ]
     assert kwargs["env"]["PGPASSWORD"] == "s3cret"
+
+
+def test_pg_restore_rejects_invalid_archive_before_touching_schema(tmp_path: Path, monkeypatch):
+    # A legacy .db tab-completed from the same backups dir must NOT cost the
+    # production schema: validation fails first, the database stays intact.
+    fake = FakeRun(returncode=1, stderr="input file does not appear to be a valid archive")
+    monkeypatch.setattr(backup_mod.subprocess, "run", fake)
+    monkeypatch.setattr(backup_mod.shutil, "which", lambda _: "/usr/bin/pg_restore")
+    resets: list = []
+    monkeypatch.setattr(backup_mod, "_reset_pg_schema", resets.append)
+    not_a_dump = tmp_path / "expense_analyzer-20260101_000000Z.db"
+    not_a_dump.touch()
+
+    with pytest.raises(BackupError, match="not a pg_restore archive"):
+        restore_backup(PG_URL, not_a_dump)
+
+    assert resets == []  # the schema was never dropped
+
+
+def test_pg_restore_requires_the_binary_before_touching_schema(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(backup_mod.shutil, "which", lambda _: None)
+    resets: list = []
+    monkeypatch.setattr(backup_mod, "_reset_pg_schema", resets.append)
+    dump = tmp_path / "x.dump"
+    dump.touch()
+
+    with pytest.raises(BackupError, match="pg_restore not found"):
+        restore_backup(PG_URL, dump)
+
+    assert resets == []
 
 
 def test_restore_missing_file_raises(tmp_path: Path):
