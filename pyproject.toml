@@ -19,7 +19,7 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "pydantic-settings>=2.6",
     "jinja2>=3.1",
-    "python-multipart>=0.0.18",
+    "python-multipart>=0.0.32",
     "bcrypt>=4.2",
     "itsdangerous>=2.2",
     # Outbound HTTP client for the opt-in myFund.pl investment pull (Phase 6).
@@ -44,11 +44,11 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3",
-    "ruff>=0.8",
+    "ruff>=0.15.16",
     "pre-commit>=4.0",
     # Jinja template formatter (used as a *formatter*, like ruff-format — not as a
     # linter: djlint's lint rules are mostly inapplicable here, see PROGRESS.md).
-    "djlint>=1.36",
+    "djlint>=1.39.2",
 ]
 
 [build-system]
