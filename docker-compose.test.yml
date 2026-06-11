@@ -1,0 +1,36 @@
+# Throwaway PostgreSQL for the test suite — prod runs on Postgres (the shared
+# /opt/stack server), so tests exercise the same dialect. NOT part of the app
+# stack: data lives on tmpfs and dies with the container.
+#
+#   make test-db-up    # start (make test does this for you)
+#   make test-db-down  # stop and discard
+#
+# Quick docker-less runs remain possible: EA_TEST_DATABASE_URL=sqlite:///... pytest
+
+# Own project name — without it this file shares the default project with the
+# app compose, and the deploy's `compose down --remove-orphans` would kill the
+# test database as an "orphan".
+name: expense-analyzer-test
+
+services:
+  test-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ea_test
+      POSTGRES_USER: ea_test
+      POSTGRES_PASSWORD: ea_test
+    ports:
+      # Loopback only — a throwaway DB with dummy credentials must not be
+      # reachable from the LAN. 55432 to never collide with a real Postgres.
+      - "127.0.0.1:55432:5432"
+    tmpfs:
+      # RAM-backed data dir: fast, and guarantees a clean slate every start.
+      - /var/lib/postgresql/data
+    healthcheck:
+      # -h 127.0.0.1 probes TCP, not the unix socket — the socket also answers
+      # during the entrypoint's TEMPORARY init server, which would let
+      # `up --wait` return before the real server listens on the port.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ea_test -d ea_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 15

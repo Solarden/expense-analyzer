@@ -1,7 +1,7 @@
 """Local file storage for loan attachments (Phase 21).
 
 Loan documents (contracts, repayment schedules, payment proofs) are stored as
-plain files in a directory on the same ``data/`` volume as the SQLite database
+plain files in a directory on the app's ``data/`` volume
 (see :data:`~expense_analyzer.config.Settings.attachments_path`). Local-only —
 nothing leaves the LAN, no OCR (keep-pi-fully-local). This module is the only
 place that touches that directory; the DB-side metadata lives in

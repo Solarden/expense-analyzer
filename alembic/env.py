@@ -13,8 +13,11 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Inject the runtime database URL from app settings.
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# Inject the runtime database URL from app settings. `%` must be doubled:
+# set_main_option feeds the value through ConfigParser interpolation, and a
+# percent-encoded password (URL-special chars like @ or / REQUIRE encoding in
+# a SQLAlchemy URL) would otherwise crash alembic on boot.
+config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
 
 target_metadata = SQLModel.metadata
 

@@ -5,7 +5,20 @@ services:
     build: .
     restart: unless-stopped
     environment:
-      EA_DATABASE_PATH: /data/expense_analyzer.db
+      # The shared /opt/stack PostgreSQL on the Pi (NOT a service of this
+      # compose). Full URL incl. credentials, e.g.
+      #   postgresql+psycopg://expense_analyzer:...@192.168.1.206:5432/expense_analyzer
+      # Must be set (no silent dev fallback for a finance app).
+      EA_DATABASE_URL: ${EA_DATABASE_URL:?set EA_DATABASE_URL in your environment or .env}
+      EA_DATA_PATH: /data
+      # Pinned explicitly: the in-code default is the relative data/attachments,
+      # which inside the container would be /app/data — ephemeral, lost on
+      # rebuild. Uploaded loan documents must live on the mounted volume.
+      EA_ATTACHMENTS_PATH: /data/attachments
+      # Backup retention for `make backup` / the §10 cron (deploy.sh reads the
+      # same variable from .env itself). Interpolated here because the host
+      # .env never reaches the container (it's dockerignored).
+      EA_BACKUP_KEEP: ${EA_BACKUP_KEEP:-14}
       # Must be set (no silent dev fallback for a finance app). Generate with:
       #   python -c "import secrets; print(secrets.token_urlsafe(48))"
       EA_SECRET_KEY: ${EA_SECRET_KEY:?set EA_SECRET_KEY in your environment or .env}
@@ -42,7 +55,10 @@ services:
     build: .
     restart: unless-stopped
     environment:
-      EA_DATABASE_PATH: /data/expense_analyzer.db
+      # Same shared /opt/stack PostgreSQL as the app (see above).
+      EA_DATABASE_URL: ${EA_DATABASE_URL:?set EA_DATABASE_URL in your environment or .env}
+      EA_DATA_PATH: /data
+      EA_ATTACHMENTS_PATH: /data/attachments
       # Home Assistant MQTT push (Phase 7). The worker publishes household metrics
       # every EA_MQTT_PUBLISH_INTERVAL_MINUTES. OFF unless both the host and a
       # positive interval are set; the broker is your HA broker on the LAN.

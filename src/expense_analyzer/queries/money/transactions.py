@@ -101,9 +101,9 @@ def _apply_filters(
         query = query.where(Transaction.scope == filters.scope)
     if filters.search and filters.search.strip():
         # Escape LIKE wildcards so a literal % or _ in the search box doesn't
-        # silently widen the match. NOTE: SQLite's ilike lowercases ASCII only,
-        # so Polish diacritics (Ł, Ą…) match case-sensitively — acceptable for a
-        # household search box.
+        # silently widen the match. NOTE: case-insensitivity is dialect-bound —
+        # PostgreSQL ILIKE case-folds Unicode (Polish Ł/Ą… match), while SQLite
+        # (dev) lowercases ASCII only. Prod gets the better behavior.
         term = filters.search.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         like = f"%{term}%"
         query = query.where(

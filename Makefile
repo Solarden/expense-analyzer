@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install dev test lint format check migrate revision user seed up down logs deploy backup check-update audit css css-watch tailwind-cli
+.PHONY: help install dev test test-db-up test-db-down lint format check migrate revision user seed up down logs deploy backup check-update audit css css-watch tailwind-cli
 
 # Tailwind standalone CLI (no Node needed). The binary is a dev tool (gitignored,
 # fetched on demand); the built CSS is committed and served offline via
@@ -19,8 +19,14 @@ install: ## Create the venv and install all deps (incl. dev)
 dev: ## Run the app locally with autoreload (debug mode allows the default secret)
 	EA_DEBUG=true uv run uvicorn expense_analyzer.main:app --reload
 
-test: ## Run the test suite
+test: test-db-up ## Run the test suite (against the throwaway Postgres)
 	uv run pytest
+
+test-db-up: ## Start the throwaway Postgres the tests run against
+	docker compose -f docker-compose.test.yml up -d --wait
+
+test-db-down: ## Stop the test Postgres and discard its data
+	docker compose -f docker-compose.test.yml down -v
 
 lint: ## Lint with ruff
 	uv run ruff check .
@@ -55,7 +61,7 @@ logs: ## Tail docker logs
 deploy: ## Deploy on the Pi: backup DB -> build -> migrate -> restart, with rollback. Pass a="--pull"
 	scripts/deploy.sh $(a)
 
-backup: ## Back up the SQLite database to data/backups (also the design §10 cron target)
+backup: ## Back up the database to data/backups (also the design §10 cron target)
 	docker compose run --rm --no-deps -T app python -m expense_analyzer.backup
 
 check-update: ## Check our repo for a newer release tag and notify HA (notify-only, never deploys)

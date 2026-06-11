@@ -1,6 +1,8 @@
-"""Seed the local SQLite database with a realistic demo dataset to click through.
+"""Seed a local SQLite database with a realistic demo dataset to click through.
 
-Dev tool only (the data/ dir is gitignored). Idempotent: it wipes every data
+Dev tool only — it REFUSES to run against a server database (production is the
+shared Postgres; with its URL in .env a bare `make seed` would otherwise wipe
+real finance data over the LAN). Idempotent: it wipes every data
 table (keeping login users) and rebuilds a fresh household: a few accounts, a
 category tree, ~4 months of transactions, a variable-rate mortgage with a rate
 change, an investment snapshot, budgets, planned cashflow items, rules, and an
@@ -96,6 +98,13 @@ def ensure_login(session: Session) -> Owner:
 
 def main() -> None:
     engine = get_engine()
+    if engine.dialect.name != "sqlite":
+        raise SystemExit(
+            f"refusing to seed a non-sqlite database ({engine.dialect.name}) — "
+            "this wipes every data table. Point EA_DATABASE_URL at a local "
+            "sqlite file to use the demo seed."
+        )
+
     with Session(engine) as session:
         wipe(session)
         owner = ensure_login(session)

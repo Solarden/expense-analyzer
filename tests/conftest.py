@@ -1,9 +1,12 @@
 """Shared test fixtures.
 
-The database path is redirected to a throwaway temp file so tests never touch
-the real ``data/`` database. This is safe to do after imports because the
-engine is built lazily (see expense_analyzer.db.get_engine) — nothing opens a
-connection at import time.
+The suite runs against a real PostgreSQL by default (prod parity — production
+is the shared /opt/stack server): the throwaway container from
+``docker-compose.test.yml``, started by ``make test-db-up``. Set
+``EA_TEST_DATABASE_URL`` (e.g. a sqlite URL) for a quick docker-less run.
+
+Redirecting the URL here is safe because the engine is built lazily (see
+expense_analyzer.db.get_engine) — nothing opens a connection at import time.
 """
 
 import itertools
@@ -17,6 +20,9 @@ from pathlib import Path
 import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
+from sqlalchemy import text
+from sqlalchemy.engine import Engine
+from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, SQLModel
 
 from expense_analyzer.clock import utc_now
@@ -42,7 +48,10 @@ from expense_analyzer.models import (
 )
 
 _TEST_DATA_DIR = Path(tempfile.mkdtemp(prefix="ea-test-"))
-os.environ["EA_DATABASE_PATH"] = str(_TEST_DATA_DIR / "test.db")
+os.environ["EA_DATABASE_URL"] = os.environ.get(
+    "EA_TEST_DATABASE_URL",
+    "postgresql+psycopg://ea_test:ea_test@localhost:55432/ea_test",
+)
 # Loan attachments (Phase 21) land in a throwaway temp dir, never the real data/.
 os.environ["EA_ATTACHMENTS_PATH"] = str(_TEST_DATA_DIR / "attachments")
 os.environ.setdefault("EA_SECRET_KEY", "test-secret-not-for-production")  # app refuses default
@@ -52,6 +61,59 @@ os.environ.setdefault("EA_SECRET_KEY", "test-secret-not-for-production")  # app 
 # Endpoint tests then exercise the fail-safe render (no suggestions, page still OK).
 os.environ.setdefault("EA_EMBEDDINGS_ENABLED", "false")
 get_settings.cache_clear()  # drop any settings cached before the override
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _database() -> Iterator[Engine]:
+    """Connectivity gate + one schema for the whole run.
+
+    Creating and dropping every table per test is cheap on SQLite but expensive
+    on PostgreSQL (17 tables + native enum types, hundreds of times over), so
+    the schema is built once per session; per-test isolation is the wipe in
+    ``db_session``'s teardown instead.
+    """
+    from expense_analyzer.db import get_engine
+
+    engine = get_engine()
+    try:
+        with engine.connect():
+            pass
+    except OperationalError as exc:
+        pytest.exit(
+            f"test database unreachable ({engine.url.render_as_string()}) — "
+            f"run `make test-db-up`, or set EA_TEST_DATABASE_URL: {exc}",
+            returncode=4,
+        )
+
+    SQLModel.metadata.drop_all(engine)  # leftovers from an aborted earlier run
+    SQLModel.metadata.create_all(engine)
+    try:
+        yield engine
+    finally:
+        SQLModel.metadata.drop_all(engine)
+
+
+def _reset_all_tables(engine: Engine) -> None:
+    """Wipe every table (and restart id sequences) between tests.
+
+    On PostgreSQL a single TRUNCATE handles FK ordering and identity reset in
+    one statement. On SQLite (the EA_TEST_DATABASE_URL quick path) there is no
+    TRUNCATE; deleting in reverse dependency order respects FKs, and rowid
+    numbering restarts by itself once a table is empty.
+    """
+    tables = SQLModel.metadata.sorted_tables
+    with engine.begin() as conn:
+        if engine.dialect.name == "postgresql":
+            names = ", ".join(f'"{t.name}"' for t in tables)
+            conn.execute(text(f"TRUNCATE {names} RESTART IDENTITY CASCADE"))
+        else:
+            # Deferred FK checks: reverse dependency order handles FKs *between*
+            # tables, but not the self-referential category.parent_id — deleting
+            # parents before children inside one table would trip foreign_keys=ON.
+            # Deferring validates at commit, when everything is already gone.
+            conn.execute(text("PRAGMA defer_foreign_keys=ON"))
+            for table in reversed(tables):
+                conn.execute(table.delete())
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -106,20 +168,17 @@ def auth_client(client: TestClient, db_session: Session) -> TestClient:
 
 
 @pytest.fixture
-def db_session() -> Iterator[Session]:
-    """A session against a fresh schema. Tables are created before and dropped
-    after each test, so model tests start from a clean slate.
+def db_session(_database: Engine) -> Iterator[Session]:
+    """A session against the shared session-scoped schema.
 
-    In Phase 0 there are no models yet, so this just exercises the engine."""
-    from expense_analyzer.db import get_engine
-
-    engine = get_engine()
-    SQLModel.metadata.create_all(engine)
+    Every table is wiped after each test (see ``_reset_all_tables``), so tests
+    start from a clean slate — same semantics as the old per-test
+    create_all/drop_all, at a fraction of the PostgreSQL cost."""
     try:
-        with Session(engine) as session:
+        with Session(_database) as session:
             yield session
     finally:
-        SQLModel.metadata.drop_all(engine)
+        _reset_all_tables(_database)
 
 
 # --- Model & importer builders --------------------------------------------
