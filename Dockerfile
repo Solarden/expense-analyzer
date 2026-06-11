@@ -8,6 +8,27 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 WORKDIR /app
 
+# pg_dump/pg_restore for backup.py against the shared /opt/stack PostgreSQL
+# (backups run inside this image — the Pi host needs only docker). From PGDG:
+# bookworm ships only v15, and pg_dump refuses a server NEWER than itself, so
+# pin the newest stable major — it dumps any server up to its own version.
+# Bump the pin if the /opt/stack server ever moves past it. (DL3008 ignored:
+# the major IS pinned; exact deb revisions would rot on every PGDG point release.)
+# hadolint ignore=DL3008
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+         https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc]" \
+         "https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+         > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-18 \
+    && apt-get purge -y curl \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies first (cached layer), then the project.
 COPY pyproject.toml ./
 COPY README.md LICENSE ./

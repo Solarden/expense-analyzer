@@ -27,14 +27,28 @@ class Settings(BaseSettings):
     # production (behind Caddy TLS); left False for local http dev and tests.
     secure_cookies: bool = False
 
-    # Path to the SQLite database file. Mounted as a volume in docker.
-    database_path: Path = Path("data/expense_analyzer.db")
+    # Full SQLAlchemy database URL. Production points at the shared PostgreSQL
+    # server (postgresql+psycopg://...; see docker-compose.yml); the SQLite
+    # default keeps quick local dev zero-setup. Engine behavior is dialect-aware
+    # (see db.py).
+    database_url: str = "sqlite:///data/expense_analyzer.db"
+
+    # The app's file-data directory (update_status.json; attachments default
+    # below also lives here). Independent of the database now that the DB can be
+    # a server rather than a file on this volume.
+    data_path: Path = Path("data")
+
+    # How many newest backups `python -m expense_analyzer.backup` keeps when
+    # pruning (the design §10 cron path / `make backup`); 0 keeps all, an
+    # explicit --keep on the CLI overrides. deploy.sh reads the same
+    # EA_BACKUP_KEEP from .env on its own (shell scripts don't see pydantic).
+    backup_keep: int = Field(default=14, ge=0)
 
     # --- Loan attachments (Phase 21) -----------------------------------------
     # Where uploaded loan documents (contracts, schedules, payment proofs) are
-    # stored — a directory on the same ./data volume as the database, so they
-    # survive container rebuilds and are part of the same backup unit (the whole
-    # data/ volume). Files are local-only (keep-pi-fully-local): nothing leaves
+    # stored. The default is relative (local dev); in docker the compose file
+    # pins it to the mounted /data volume so files survive container rebuilds.
+    # Files are local-only (keep-pi-fully-local): nothing leaves
     # the LAN, no OCR. On-disk names are generated (UUID), never user input, so a
     # crafted filename can't escape this directory (no path traversal). See
     # attachments.py.
@@ -208,16 +222,12 @@ class Settings(BaseSettings):
         return value
 
     @property
-    def database_url(self) -> str:
-        return f"sqlite:///{self.database_path}"
-
-    @property
     def update_status_path(self) -> Path:
         """Where the cron update check (``scripts/check_update.sh`` →
         ``ha.update_notify``) writes its verdict, for the in-app Updates view to
-        read. Lives next to the DB in the data volume; the web app only ever reads
-        it — the network egress stays on the host's cron (keep-pi-fully-local)."""
-        return self.database_path.parent / "update_status.json"
+        read. Lives in the data volume; the web app only ever reads it — the
+        network egress stays on the host's cron (keep-pi-fully-local)."""
+        return self.data_path / "update_status.json"
 
 
 @lru_cache

@@ -22,7 +22,8 @@ All financial data stays on your own hardware — nothing leaves for the cloud.
 ## Stack
 
 - Python 3.11+ / FastAPI
-- SQLite (WAL mode), SQLModel, Alembic
+- PostgreSQL (production; any existing server on your LAN — not part of this
+  compose) or SQLite (zero-setup local dev), SQLModel, Alembic
 - HTMX + Jinja2 + Chart.js (dashboard)
 - docker compose: `app`, `worker`, `caddy`
 - Dependencies managed with [uv](https://docs.astral.sh/uv/)
@@ -56,13 +57,21 @@ make dev
 ```
 
 Then sign in as **`admin` / `demo1234`**. `make seed` wipes the data tables and
-rebuilds from scratch each run, so it's safe to re-run; it only touches the local
-gitignored `data/` database. (Don't run it against real data.)
+rebuilds from scratch each run, so it's safe to re-run. It refuses to run
+against anything but a local SQLite file, so a production `EA_DATABASE_URL`
+sitting in `.env` can't be wiped by accident.
 
-Run the tests:
+Run the tests (against a throwaway Postgres container — prod parity):
 
 ```bash
-uv run pytest
+make test        # starts the test DB (docker) and runs pytest
+make test-db-down  # stop the test DB and discard its data
+```
+
+For a quick docker-less run, point the suite at SQLite instead:
+
+```bash
+EA_TEST_DATABASE_URL=sqlite:///$(mktemp -d)/test.db uv run pytest
 ```
 
 Enable the git pre-commit hooks (ruff, secret scanning, Dockerfile lint, and
@@ -75,7 +84,19 @@ uv run pre-commit run --all-files   # optional: run against the whole repo
 
 ## Running with Docker
 
+The stack expects an existing PostgreSQL server on your LAN (it is deliberately
+NOT a service of this compose — point it at whatever Postgres you already run).
+Create the app's role and database there once:
+
+```sql
+CREATE ROLE expense_analyzer LOGIN PASSWORD '...';
+CREATE DATABASE expense_analyzer OWNER expense_analyzer;
+```
+
+Then:
+
 ```bash
+export EA_DATABASE_URL="postgresql+psycopg://expense_analyzer:...@192.168.1.206:5432/expense_analyzer"
 export EA_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
 export CADDY_SITE_ADDRESS=expense.local   # hostname or LAN IP of the Pi
 docker compose up --build
@@ -85,7 +106,8 @@ The app sits behind Caddy (LAN-only) over **HTTPS** at `https://$CADDY_SITE_ADDR
 Caddy serves a self-signed cert from its own local CA (no internet contact) —
 install that root CA on your devices to avoid browser warnings (the CA lives in
 the `caddy_data` volume at `/data/caddy/pki/authorities/local/root.crt`). The
-database lives in `./data/expense_analyzer.db`, mounted into the containers.
+schema is created on first boot (`alembic upgrade head`); file data (loan
+attachments, update status, backups) lives on the `./data` bind mount.
 
 Create the first login user, then sign in:
 
@@ -118,11 +140,26 @@ docker build fetching base layers — no Watchtower, no registry auto-pull.
 make backup   # write a timestamped copy to data/backups
 ```
 
-Backups use SQLite's online backup API, so they're a consistent single file
-even while the app is writing (WAL included). Wire `make backup` into cron on
-the Pi for periodic copies (design §10); `EA_BACKUP_KEEP` caps how many are
-retained. Restore by stopping the stack and copying a backup over
-`data/expense_analyzer.db` (delete any stale `-wal`/`-shm` sidecars first).
+On PostgreSQL the backup is a `pg_dump --format=custom` archive (`.dump`),
+taken from inside the app image so the client always matches the deploy; on a
+SQLite dev database it's the online backup API (a consistent single `.db` file
+even while the app is writing). Wire `make backup` into cron on the Pi for
+periodic copies (design §10); `EA_BACKUP_KEEP` caps how many are retained.
+Restore (stop the stack first — the restore resets the schema under whatever
+is connected):
+
+```bash
+docker compose down
+docker compose run --rm --no-deps -T app \
+  python -m expense_analyzer.backup --restore /data/backups/<file>
+docker compose up -d
+```
+
+Under the hood it validates the archive, resets the `public` schema, then runs
+`pg_restore` — the deploy's rollback uses the same path. The image pins
+`postgresql-client-18`; keep that major in lockstep with your server's (a newer
+client dumps older servers fine, but restoring across majors can report
+spurious failures).
 
 ### Update notifications
 

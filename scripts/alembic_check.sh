@@ -8,7 +8,7 @@ set -euo pipefail
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-export EA_DATABASE_PATH="$tmp/alembic_check.db"
+export EA_DATABASE_URL="sqlite:///$tmp/alembic_check.db"
 
 uv run alembic upgrade head >/dev/null
 uv run alembic check

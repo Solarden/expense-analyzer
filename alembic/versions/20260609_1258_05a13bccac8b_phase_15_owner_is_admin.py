@@ -29,7 +29,9 @@ def upgrade() -> None:
     # Promote the earliest existing user to admin so an already-running household
     # keeps a working admin (no lockout). On a fresh DB there are no rows, so this
     # is a no-op and the first user created later bootstraps as admin instead.
-    op.execute("UPDATE owner SET is_admin = 1 WHERE id = (SELECT MIN(id) FROM owner)")
+    # TRUE (not 1): PostgreSQL rejects an integer assigned to a boolean column at
+    # plan time, even with zero rows; the literal works on both dialects.
+    op.execute("UPDATE owner SET is_admin = TRUE WHERE id = (SELECT MIN(id) FROM owner)")
 
 
 def downgrade() -> None:

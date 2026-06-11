@@ -90,7 +90,8 @@ def delete_user(session: Session, user: Owner) -> None:
 
     ``owner_id`` on accounts/transactions is just a "who imported" tag, so it is
     nulled out (one bulk UPDATE each) rather than cascade-deleting real financial
-    rows — and to satisfy the foreign key under SQLite's ``foreign_keys=ON``."""
+    rows — and to satisfy the foreign key (enforced on both dialects; SQLite
+    needs the per-connection ``foreign_keys=ON`` from db.py)."""
     session.exec(update(Account).where(col(Account.owner_id) == user.id).values(owner_id=None))
     session.exec(
         update(Transaction).where(col(Transaction.owner_id) == user.id).values(owner_id=None)

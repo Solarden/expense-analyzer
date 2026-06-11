@@ -3,10 +3,10 @@
 #
 #   1. (optional) git pull --ff-only from OUR OWN repo            [--pull]
 #   2. build the new images
-#   3. back up the SQLite database  ── BEFORE any migration ──    (design §10)
+#   3. back up the database  ── BEFORE any migration ──           (design §10)
 #   4. docker compose up -d  → the app runs `alembic upgrade head` on boot
 #   5. wait for the app to report healthy
-#   6. on failure: ROLL BACK — restore the DB copy and re-tag the previous image
+#   6. on failure: ROLL BACK — restore the DB backup and re-tag the previous image
 #
 # Idempotent and safe to re-run. The only network egress is the optional git
 # pull from our own repo and the docker build fetching base layers — no
@@ -99,16 +99,13 @@ log "building images"
 $COMPOSE build
 
 # --- 3. backup the DB (before the new app container migrates it) ------------
-# One run inside the freshly built image (the host needs only docker); the DB
-# lives on the ./data bind mount, so the backup file appears on the host too. We
+# One run inside the freshly built image (the host needs only docker — pg_dump
+# is in the image and the DB server is the shared /opt/stack Postgres). Backups
+# land in /data/backups, i.e. ./data/backups on the host via the bind mount. We
 # invoke the backup module directly, so this does NOT trigger a migration.
-# --if-exists turns a first deploy with no DB into a clean skip (empty stdout)
-# rather than an error; a genuine backup failure exits non-zero and aborts the
-# deploy here, before anything is migrated (set -e + pipefail).
-#
-# The DB path is fixed by docker-compose.yml (EA_DATABASE_PATH=/data/...,
-# ./data:/data), so its host path is deterministic — no need to ask the container.
-DB_FILE_HOST="data/expense_analyzer.db"
+# --if-exists turns a first deploy with no database into a clean skip (empty
+# stdout) rather than an error; a genuine backup failure exits non-zero and
+# aborts the deploy here, before anything is migrated (set -e + pipefail).
 BACKUP=""
 log "backing up database (keep $KEEP)"
 CONTAINER_BACKUP="$($COMPOSE run --rm --no-deps -T "$APP_SERVICE" \
@@ -133,9 +130,11 @@ rollback() {
 
   if [ -n "$BACKUP" ] && [ -f "$BACKUP" ]; then
     warn "restoring database from $BACKUP"
-    cp "$BACKUP" "$DB_FILE_HOST"
-    # Drop stale WAL/SHM sidecars so the restored file is read as-is.
-    rm -f "${DB_FILE_HOST}-wal" "${DB_FILE_HOST}-shm"
+    # The module is dialect-aware (on Postgres: schema reset + pg_restore). Map
+    # the host path back to its container equivalent under the ./data bind mount.
+    $COMPOSE run --rm --no-deps -T "$APP_SERVICE" \
+      python -m expense_analyzer.backup --restore "/$BACKUP" \
+      || warn "database restore failed — restore manually from $BACKUP"
   else
     warn "no backup to restore (the database is unchanged from before the deploy)"
   fi

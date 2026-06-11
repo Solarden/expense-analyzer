@@ -281,8 +281,9 @@ class Budget(SQLModel, table=True):
     machinery.
 
     The ``(category_id, month)`` unique constraint guards against duplicate
-    overrides for the same month. SQLite treats ``NULL`` months as *distinct*, so
-    it does **not** stop a second recurring row on its own — the single-writer
+    overrides for the same month. ``NULL`` months count as *distinct* (both
+    SQLite and PostgreSQL default to NULLS DISTINCT), so the constraint does
+    **not** stop a second recurring row on its own — the single-writer
     query layer enforces "one recurring per category" by upserting (find-or-update
     by category + month) in :func:`expense_analyzer.queries.planning.budgets.set_budget`.
     """
@@ -373,8 +374,8 @@ class LoanDocument(SQLModel, table=True):
     """A file attached to a loan — contract, schedule, payment proof (Phase 21).
 
     Local-only document storage (design's keep-everything-on-the-LAN principle,
-    no OCR): the bytes live in a directory on the ``data/`` volume next to the
-    SQLite file (see :mod:`expense_analyzer.attachments`); this row is the
+    no OCR): the bytes live in a directory on the ``data/`` volume
+    (see :mod:`expense_analyzer.attachments`); this row is the
     metadata. ``filename`` is the original name, shown in the UI and used as the
     download name. ``stored_name`` is the **generated** on-disk name (a UUID plus
     the validated extension) — never derived from user input, so a crafted upload
