@@ -15,8 +15,6 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from expense_analyzer.config import Settings
-from expense_analyzer.importers import NormalizedTransaction
-from expense_analyzer.importers.pipeline import run_import
 from expense_analyzer.models import Account, Category, Scope, Transaction, TxSource
 from expense_analyzer.queries.categorize import classifier as cq
 
@@ -230,45 +228,11 @@ def test_review_queue_excludes_non_candidates(
     assert [r.transaction.id for r in queue.rows] == [keep.id]
 
 
-# --- import-time hook -----------------------------------------------------
-
-
-def test_import_hook_is_a_noop_on_cold_start(
-    db_session: Session,
-    account: Account,
-    make_importer: Callable[..., object],
-) -> None:
-    # Far fewer than the default 25-label floor -> classifier stays cold, and the
-    # import still succeeds reporting auto_classified == 0 (non-fatal contract).
-    importer = make_importer([NormalizedTransaction(date(2026, 5, 1), -5000, "BIEDRONKA 99")])
-    summary = run_import(
-        db_session, account_id=account.id, importer=importer, filename="x.csv", data=b""
-    )
-
-    assert summary.new == 1
-    assert summary.auto_classified == 0
-
-
-def test_import_auto_classifies_with_enough_labels(
-    db_session: Session,
-    account: Account,
-    make_category: Callable[..., Category],
-    make_transaction: Callable[..., Transaction],
-    make_importer: Callable[..., object],
-) -> None:
-    # 13 + 13 = 26 confirmed labels clears the default floor (25); a new BIEDRONKA
-    # row is confidently classified by the import hook at the real default threshold.
-    food = make_category(name="Food")
-    fun = make_category(name="Fun")
-    _seed_labels(make_transaction, account_id=account.id, food_id=food.id, fun_id=fun.id, n_each=13)
-
-    importer = make_importer([NormalizedTransaction(date(2026, 5, 1), -5000, "BIEDRONKA 99")])
-    summary = run_import(
-        db_session, account_id=account.id, importer=importer, filename="x.csv", data=b""
-    )
-
-    assert summary.new == 1
-    assert summary.auto_classified == 1
+# --- import-time hook (removed) -------------------------------------------
+# Import no longer runs probabilistic categorization (PR 2): the LLM (primary)
+# and the classifier (fallback) run only on demand from the review queue — see
+# tests/api/test_queue_llm.py. Import is rules-only now (covered in
+# tests/api/test_rules_page.py).
 
 
 # --- endpoints ------------------------------------------------------------

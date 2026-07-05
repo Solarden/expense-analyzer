@@ -3,7 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Sentinel default for secret_key. The app refuses to start with this value
@@ -234,6 +234,46 @@ class Settings(BaseSettings):
     # Don't build the index until at least this many confirmed labels exist (same
     # cold-start rationale as the classifier); also needs >= 2 distinct categories.
     embeddings_min_training_samples: int = Field(default=25, ge=2)
+
+    # --- LLM categorization (piec Ollama; primary, local pipeline is fallback) ---
+    # The owner runs Ollama on *piec* (a capable LAN box), so the heavy
+    # categorization doesn't tax the Pi. When enabled, the LLM is the *primary*
+    # categorizer for the review-queue "classify now" action and the local sklearn
+    # classifier (layer 2) becomes the fallback for when piec is unreachable. Like
+    # MQTT (and unlike myFund) this is LAN-only — piec is on the home network, so
+    # it's not internet egress; nothing leaves the house. See ollama.py /
+    # queries/categorize/llm.py.
+    #
+    # OPT-IN and OFF by default: with the feature off (or no base URL) the client is
+    # never constructed and categorization behaves exactly as before.
+    llm_enabled: bool = False
+    # piec's Ollama base URL, e.g. "http://192.168.1.x:11434". Required when
+    # llm_enabled is True (see the validator below).
+    llm_base_url: str = ""
+    # The model tag pulled on piec. A small "utility" model is the cheap fit for
+    # classification; confirm the exact tag (overridable via EA_LLM_MODEL).
+    llm_model: str = "gemma3:12b"
+    # Read timeout in seconds for one chat call — LLM inference is slow, so this is
+    # generous. (A short connect timeout, set in ollama.py, makes a *down* piec fail
+    # fast rather than wait this long.)
+    llm_timeout: int = Field(default=30, ge=1)
+    # A verdict at or above this confidence auto-applies the category (source=llm);
+    # below it the row stays in the review queue. Same conservative default as the
+    # classifier — a probabilistic guess on financial data errs toward the queue.
+    llm_confidence_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _require_base_url_when_llm_enabled(self) -> "Settings":
+        # Enabling the LLM with no base URL is a silent no-op (the categorizer would
+        # fall back to the classifier forever, looking like "the LLM isn't working").
+        # Fail loud at startup instead.
+        if self.llm_enabled and not self.llm_base_url.strip():
+            raise ValueError(
+                "EA_LLM_ENABLED is set but EA_LLM_BASE_URL is empty — "
+                "set the piec Ollama URL, or disable the LLM."
+            )
+
+        return self
 
     @field_validator("timezone")
     @classmethod

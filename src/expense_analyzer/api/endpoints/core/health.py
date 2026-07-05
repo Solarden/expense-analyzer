@@ -1,20 +1,19 @@
 from fastapi import APIRouter, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import text
 from sqlmodel import Session
 
-from expense_analyzer import __version__
-from expense_analyzer.config import get_settings
 from expense_analyzer.db import get_engine
 
 router = APIRouter(tags=["meta"])
 
 
 @router.get("/")
-def root() -> dict[str, str]:
-    settings = get_settings()
-
-    return {"app": settings.app_name, "version": __version__}
+def root() -> RedirectResponse:
+    # The bare domain is for humans → send them straight to the dashboard (which
+    # bounces to /login if they're not signed in). Liveness probes use /health.
+    # Temporary redirect so browsers never cache the bare domain as permanent.
+    return RedirectResponse("/dashboard", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
 
 @router.get("/health")

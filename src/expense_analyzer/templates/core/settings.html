@@ -48,7 +48,8 @@
                     <input name="number"
                            value="{{ rf.number if rf else (a.number or '') }}"
                            placeholder="Account no. / IBAN"
-                           aria-label="Number for {{ a.name }}">
+                           aria-label="Number for {{ a.name }}"
+                           class="flex-1 min-w-[260px]">
                     <button class="ghost" type="submit">Save</button>
                   </form>
                 </td>
@@ -76,7 +77,8 @@
         <input name="number"
                value="{{ af.number if af else '' }}"
                placeholder="Account no. / IBAN (optional)"
-               aria-label="Account number">
+               aria-label="Account number"
+               class="flex-1 min-w-[260px]">
         <button type="submit">Add account</button>
       </form>
     </div>
