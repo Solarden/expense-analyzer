@@ -33,8 +33,7 @@ from expense_analyzer.queries.categorize.classifier import (
 
 log = logging.getLogger("expense_analyzer.categorize")
 
-# Expense/income categories are the only candidate labels — transfers are handled
-# by transfer linking, not categorization (same exclusion the classifier makes).
+# Expense/income only — transfers are handled by transfer linking (same as the classifier).
 _LEARNABLE_KINDS = (CategoryKind.expense, CategoryKind.income)
 
 

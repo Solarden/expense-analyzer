@@ -20,10 +20,8 @@ import httpx
 from expense_analyzer.config import Settings
 
 _ENDPOINT = "/api/chat"
-# A down piec should fail *fast* (connection refused is immediate); only a piec
-# that accepts the socket but is slow to infer should ride the longer read budget.
-# So split the timeout: short connect, tunable read.
-# ponytail: connect timeout hard-coded; read timeout is the tunable knob (llm_timeout).
+# Short connect timeout so a down piec fails fast (connection refused is
+# immediate); the longer read budget (llm_timeout) covers slow inference.
 _CONNECT_TIMEOUT = 3.0
 
 # Structured-output contract: Ollama constrains the model to this JSON shape
@@ -143,9 +141,8 @@ def _system_prompt(categories: Sequence[tuple[int, str]]) -> str:
 
 
 def _transaction_prompt(merchant: str | None, description: str, amount: int) -> str:
-    # Amount is signed minor units (negative = expense); present it as a decimal
-    # with direction so the model has the sign as a hint.
-    # ponytail: assumes 2-decimal minor units (PLN/EUR/USD); fine for this app.
+    # Amount is signed minor units (negative = expense); show it as a decimal with
+    # direction. Assumes 2-decimal minor units (PLN/EUR/USD), which this app uses.
     direction = "expense" if amount < 0 else "income"
     value = f"{abs(amount) / 100:.2f}"
     label = merchant or description
