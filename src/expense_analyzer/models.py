@@ -78,6 +78,7 @@ class TxSource(StrEnum):
     manual = "manual"
     rule = "rule"
     classifier = "classifier"
+    llm = "llm"  # categorized by the LLM on piec (Ollama); confidence = model's score
 
 
 class Owner(SQLModel, table=True):

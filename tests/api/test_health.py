@@ -2,12 +2,10 @@ from fastapi import status
 from fastapi.testclient import TestClient
 
 
-def test_root(client: TestClient):
-    resp = client.get("/")
-    assert resp.status_code == status.HTTP_200_OK
-    body = resp.json()
-    assert body["app"]
-    assert "version" in body
+def test_root_redirects_to_dashboard(client: TestClient):
+    resp = client.get("/", follow_redirects=False)
+    assert resp.status_code == status.HTTP_307_TEMPORARY_REDIRECT
+    assert resp.headers["location"] == "/dashboard"
 
 
 def test_health_reports_ok_and_dialect(client: TestClient):

@@ -61,12 +61,6 @@
             <td class="num pos">{{ summary.auto_categorized }}</td>
           </tr>
         {% endif %}
-        {% if summary.auto_classified %}
-          <tr>
-            <td>Categorized by classifier</td>
-            <td class="num pos">{{ summary.auto_classified }}</td>
-          </tr>
-        {% endif %}
       </table>
       {% if summary.reconciliation.details %}
         <ul class="muted" style="margin-top:8px">

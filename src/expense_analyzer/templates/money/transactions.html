@@ -157,6 +157,7 @@
                 {% endif %}
                 <span class="muted">{{ tx.raw_description }}</span>
                 {% if tx.transfer_group_id %}<span class="muted" title="Internal transfer">⇄ transfer</span>{% endif %}
+                {{ ui.source_badge(tx.source.value) }}
               </td>
               <td class="num {{ 'neg' if tx.amount < 0 else 'pos' }}"
                   data-label="Amount">{{ tx.amount | pln }}</td>

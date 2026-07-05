@@ -25,6 +25,7 @@ from expense_analyzer.models import Scope
 from expense_analyzer.queries.categorize import categories as category_queries
 from expense_analyzer.queries.categorize import classifier as classifier_queries
 from expense_analyzer.queries.categorize import embeddings as embeddings_queries
+from expense_analyzer.queries.categorize import llm as llm_queries
 from expense_analyzer.templating import templates
 
 router = APIRouter(
@@ -90,7 +91,7 @@ def queue_page(
 
 @router.post("/classify")
 def classify(session: DbSession) -> RedirectResponse:
-    result = classifier_queries.classify(session)
+    result = llm_queries.categorize_uncategorized(session)
 
     return RedirectResponse(
         f"/dashboard/queue?categorized={result.categorized}&queued={result.queued}"

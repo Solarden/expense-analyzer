@@ -7,3 +7,13 @@
   {%- if color %}<span class="swatch" style="background:{{ color }}" aria-hidden="true"></span>
 {% endif -%}
 {%- endmacro %}
+{# How a transaction got its category (llm / rule / classifier / manual). Nothing
+   is shown for still-uncategorized (import_csv) rows. The LLM badge is tinted with
+   the accent colour so auto-tagged rows are easy to spot-check; the others are
+   muted. Plain palette utilities (run `make css` after touching this). #}
+{% macro source_badge(source) -%}
+  {%- if source and source != "import_csv" -%}
+    <span class="rounded border px-1.5 py-0.5 text-[11px] align-middle {{ "border-accent text-accent" if source == "llm" else "border-line text-muted" }}"
+          title="Categorized by: {{ source }}">{{ source }}</span>
+  {%- endif -%}
+{%- endmacro %}

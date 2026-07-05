@@ -25,6 +25,25 @@ def test_optional_int_blank_becomes_none(field, raw, expected):
     assert getattr(Settings(**{field: raw}), field) == expected
 
 
+@pytest.mark.parametrize("base_url", ["", "   "])
+def test_llm_enabled_requires_a_base_url(base_url):
+    """Enabling the LLM with no base URL is a silent no-op (it would fall back to the
+    classifier forever) — reject it loudly at startup instead."""
+    with pytest.raises(ValidationError):
+        Settings(llm_enabled=True, llm_base_url=base_url)
+
+
+def test_llm_enabled_with_base_url_is_accepted():
+    s = Settings(llm_enabled=True, llm_base_url="http://piec:11434")
+    assert s.llm_enabled is True
+    assert s.llm_base_url == "http://piec:11434"
+
+
+def test_llm_disabled_needs_no_base_url():
+    """The default (off) must construct fine with no URL."""
+    assert Settings(llm_enabled=False).llm_enabled is False
+
+
 def test_create_app_refuses_insecure_default_secret(monkeypatch):
     """Outside debug, the app must not boot with the public default secret."""
     monkeypatch.setenv("EA_SECRET_KEY", INSECURE_DEFAULT_SECRET)
