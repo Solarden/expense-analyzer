@@ -60,6 +60,13 @@ os.environ.setdefault("EA_SECRET_KEY", "test-secret-not-for-production")  # app 
 # sentence-transformers model (slow, and would reach the network for the weights).
 # Endpoint tests then exercise the fail-safe render (no suggestions, page still OK).
 os.environ.setdefault("EA_EMBEDDINGS_ENABLED", "false")
+# Tests must be hermetic: skip any developer/production dotenv at the repo root
+# (honoured in-process and by the alembic/backup subprocesses, which inherit env).
+# A real one sets EA_SECURE_COOKIES=true (the Secure flag makes the test client drop
+# the auth cookie over plain http -> every logged-in request 302s to /login) and may
+# leave optional typed fields blank (empty string -> validation error). Config comes
+# from the os.environ overrides above only.
+os.environ["EA_NO_DOTENV"] = "1"
 get_settings.cache_clear()  # drop any settings cached before the override
 
 

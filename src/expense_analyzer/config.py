@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -15,6 +16,16 @@ class Settings(BaseSettings):
     """Application settings, overridable via environment or a .env file."""
 
     model_config = SettingsConfigDict(env_prefix="EA_", env_file=".env", extra="ignore")
+
+    def __init__(self, **kwargs: object) -> None:
+        # EA_NO_DOTENV=1 skips the local .env so the test suite stays hermetic: it
+        # must never inherit a developer's real config (which could force Secure
+        # cookies and break the plain-http test client, or leave typed fields blank).
+        # Read at construction time, so it covers every Settings() — direct or via
+        # get_settings — and the alembic/backup subprocesses, which inherit the var.
+        if os.getenv("EA_NO_DOTENV") and "_env_file" not in kwargs:
+            kwargs["_env_file"] = None
+        super().__init__(**kwargs)
 
     app_name: str = "Expense Analyzer"
     debug: bool = False
@@ -114,6 +125,18 @@ class Settings(BaseSettings):
     # Portfolio Account the worker imports myFund positions into. Required for the
     # *worker* path only (the UI picks the account per request). None = worker idle.
     myfund_account_id: int | None = Field(default=None)
+
+    @field_validator("myfund_fetch_interval_hours", "myfund_account_id", mode="before")
+    @classmethod
+    def _blank_str_to_none(cls, value: object) -> object:
+        # A blank env value (e.g. EA_MYFUND_ACCOUNT_ID=) is the natural way to "leave
+        # it unset" — treat it as None instead of crashing on int parsing. Scoped to
+        # these optional ints: a blank *required* int stays an error, and "" is a
+        # legitimate value for the str/SecretStr fields.
+        if isinstance(value, str) and not value.strip():
+            return None
+
+        return value
 
     @property
     def myfund_configured(self) -> bool:

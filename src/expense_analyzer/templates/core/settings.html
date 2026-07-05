@@ -9,16 +9,49 @@
           <thead>
             <tr>
               <th>Name</th>
-              <th>Type</th>
-              <th>Currency</th>
+              <th>Edit</th>
             </tr>
           </thead>
           <tbody>
             {% for a in accounts %}
               <tr>
-                <td>{{ a.name }}</td>
-                <td class="muted">{{ a.type.value }}</td>
-                <td class="muted">{{ a.currency }}</td>
+                <td>
+                  {{ a.name }}
+                  <br>
+                  <span class="muted" style="font-size:12px">{{ a.type.value }} · {{ a.currency }}</span>
+                  {% if a.number %}
+                    <br>
+                    <span class="muted" style="font-size:12px">{{ a.number }}</span>
+                    <button type="button" class="ghost" data-copy="{{ a.number }}">Copy</button>
+                  {% endif %}
+                </td>
+                <td>
+                  {# Inline edit per account: rename, change type, and set the account
+                     number / IBAN in one Save. On a validation error rf holds what the
+                     user just typed for this row, so their edit survives the re-render. #}
+                  {% set rf = account_form if edit_id == a.id else none %}
+                  <form class="hstack"
+                        method="post"
+                        action="/dashboard/accounts/{{ a.id }}/edit">
+                    <input name="name"
+                           value="{{ rf.name if rf else a.name }}"
+                           aria-label="Name for {{ a.name }}"
+                           required>
+                    <select name="type" aria-label="Type for {{ a.name }}">
+                      {% for t in account_types %}
+                        <option value="{{ t }}"
+                                {% if t == (rf.type.value if rf else a.type.value) %}selected{% endif %}>
+                          {{ t }}
+                        </option>
+                      {% endfor %}
+                    </select>
+                    <input name="number"
+                           value="{{ rf.number if rf else (a.number or '') }}"
+                           placeholder="Account no. / IBAN"
+                           aria-label="Number for {{ a.name }}">
+                    <button class="ghost" type="submit">Save</button>
+                  </form>
+                </td>
               </tr>
             {% endfor %}
           </tbody>
@@ -27,14 +60,23 @@
         <p class="muted">No accounts yet. Add one to import a CSV.</p>
       {% endif %}
       <h2>Add account</h2>
+      {# On a create error, af carries the just-typed values back so the form keeps them. #}
+      {% set af = account_form if not edit_id else none %}
       <form class="hstack" method="post" action="/dashboard/accounts">
         <input name="name"
+               value="{{ af.name if af else '' }}"
                placeholder="PKO checking"
                aria-label="Account name"
                required>
         <select name="type" aria-label="Account type">
-          {% for t in account_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+          {% for t in account_types %}
+            <option value="{{ t }}" {% if af and t == af.type.value %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
         </select>
+        <input name="number"
+               value="{{ af.number if af else '' }}"
+               placeholder="Account no. / IBAN (optional)"
+               aria-label="Account number">
         <button type="submit">Add account</button>
       </form>
     </div>
@@ -149,4 +191,6 @@
       </p>
     {% endif %}
   </div>
+  {# Delegated [data-copy] click handler — copies an account number to the clipboard. #}
+  <script src="/static/plan-copy.js"></script>
 {% endblock %}

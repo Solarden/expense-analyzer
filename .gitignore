@@ -218,8 +218,9 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Other
-internal_docs/
+internal_docs
 .claude/
+.DS_STORE
 
 # Expense Analyzer
 data/
