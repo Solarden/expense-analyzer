@@ -12,6 +12,19 @@ def test_page_size_must_be_positive():
         Settings(page_size=0)
 
 
+@pytest.mark.parametrize("field", ["myfund_account_id", "myfund_fetch_interval_hours"])
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("", None),  # blank env value ("leave it unset") -> None, not a crash
+        ("   ", None),  # whitespace-only -> None
+        ("7", 7),  # a real integer string (how env vars arrive) still coerces
+    ],
+)
+def test_optional_int_blank_becomes_none(field, raw, expected):
+    assert getattr(Settings(**{field: raw}), field) == expected
+
+
 def test_create_app_refuses_insecure_default_secret(monkeypatch):
     """Outside debug, the app must not boot with the public default secret."""
     monkeypatch.setenv("EA_SECRET_KEY", INSECURE_DEFAULT_SECRET)

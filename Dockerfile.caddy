@@ -1,0 +1,10 @@
+# Caddy with the GoDaddy DNS plugin, for a trusted Let's Encrypt cert via the
+# ACME DNS-01 challenge (no inbound needed). The official caddy image ships no
+# DNS providers, so we build one in with xcaddy. Fetching Go modules here is a
+# build-time outbound, like uv pulling Python deps in the app image — nothing
+# reaches out at runtime beyond ACME renewal + GoDaddy's TXT API.
+FROM caddy:2-builder-alpine AS builder
+RUN xcaddy build --with github.com/caddy-dns/godaddy
+
+FROM caddy:2-alpine
+COPY --from=builder /usr/bin/caddy /usr/bin/caddy

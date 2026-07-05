@@ -107,7 +107,8 @@ class Account(SQLModel, table=True):
     __tablename__ = "account"
 
     id: int | None = Field(default=None, primary_key=True)
-    name: str  # "PKO checking", "IKE XTB", "Cash", "Mortgage"
+    name: str  # friendly label shown in every picker: "PKO checking", "IKE XTB", "Cash"
+    number: str | None = Field(default=None)  # bank account number / IBAN, reference only
     type: AccountType
     owner_id: int | None = Field(default=None, foreign_key="owner.id")
     currency: str = Field(default="PLN")

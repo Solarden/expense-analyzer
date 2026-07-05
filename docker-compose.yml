@@ -78,12 +78,20 @@ services:
         condition: service_healthy
 
   caddy:
-    image: caddy:2-alpine
+    # Custom Caddy with the GoDaddy DNS plugin (Dockerfile.caddy) — needed for the
+    # trusted Let's Encrypt cert via the ACME DNS-01 challenge.
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy
     restart: unless-stopped
     environment:
-      # How you reach the Pi (hostname or LAN IP); Caddy issues a self-signed
-      # cert for this name via `tls internal`. Must resolve on your LAN.
+      # The domain you reach the app at (e.g. expense.domain.com); Caddy issues a
+      # trusted Let's Encrypt cert for it via DNS-01. Must resolve to the Pi's LAN
+      # IP on your network (router DNS / Pi-hole / hosts).
       CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:-expense.local}
+      # GoDaddy API credentials ("<KEY>:<SECRET>", a Production key) for the
+      # DNS-01 challenge. Required — without it Caddy can't obtain the cert.
+      GODADDY_API_TOKEN: ${GODADDY_API_TOKEN:?set GODADDY_API_TOKEN in your environment or .env}
     ports:
       # HTTPS (LAN only). :80 only issues a 301 redirect to HTTPS — no app data.
       - "443:443"

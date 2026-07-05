@@ -33,8 +33,11 @@ class LoginForm(BaseModel):
 
 
 class AccountForm(BaseModel):
+    # Used for both create and edit — the friendly ``name`` is what every picker
+    # shows; ``number`` is the bank account number / IBAN (reference data, "" for none).
     name: str
     type: AccountType
+    number: str = ""
 
 
 class CategoryForm(BaseModel):

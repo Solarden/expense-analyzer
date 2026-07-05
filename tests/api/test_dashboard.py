@@ -8,6 +8,7 @@ the schema on the same (temp) engine the app uses. Model builders and the shared
 
 from collections.abc import Callable
 
+import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
@@ -44,6 +45,113 @@ def test_create_account_then_listed(auth_client: TestClient, db_session: Session
     )
     assert resp.status_code == status.HTTP_303_SEE_OTHER
     assert auth_client.get("/dashboard/settings").text.count("PKO checking") >= 1
+
+
+# --- Account number / IBAN (friendly name stays; number is reference data) ---
+
+# A well-known valid Polish IBAN test value (passes the mod-97 checksum).
+VALID_IBAN = "PL61109010140000071219812874"
+
+
+@pytest.mark.parametrize(
+    "typed, stored",
+    [
+        ("pl61 1090 1014 0000 0712 1981 2874", VALID_IBAN),  # IBAN -> canonical
+        ("  ", None),  # blank -> no number
+        ("  xtb-Acc-123  ", "xtb-Acc-123"),  # non-IBAN kept as typed (only trimmed)
+    ],
+)
+def test_create_account_number_normalization(
+    auth_client: TestClient, db_session: Session, typed: str, stored: str | None
+):
+    auth_client.post("/dashboard/accounts", data={"name": "Acc", "type": "bank", "number": typed})
+    assert db_session.exec(select(Account)).one().number == stored
+
+
+def test_create_account_number_shown_on_settings(auth_client: TestClient, db_session: Session):
+    # A stored IBAN is displayed (canonicalised) on the settings page.
+    typed = "pl61 1090 1014 0000 0712 1981 2874"
+    auth_client.post("/dashboard/accounts", data={"name": "PKO", "type": "bank", "number": typed})
+    assert VALID_IBAN in auth_client.get("/dashboard/settings").text
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"name": "Acc", "type": "bank", "number": "PL00109010140000071219812874"},  # bad checksum
+        {"name": "   ", "type": "bank"},  # blank name (was silently accepted before)
+    ],
+)
+def test_create_account_rejected_writes_nothing(
+    auth_client: TestClient, db_session: Session, data: dict
+):
+    resp = auth_client.post("/dashboard/accounts", data=data)
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    assert db_session.exec(select(Account)).all() == []  # nothing written
+
+
+def test_edit_account_renames_and_sets_number(
+    auth_client: TestClient, db_session: Session, make_account: Callable[..., Account]
+):
+    acc = make_account(name="61 1090 1014")  # named by number before the rename
+    auth_client.post(
+        f"/dashboard/accounts/{acc.id}/edit",
+        data={"name": "  PKO checking  ", "type": "bank", "number": VALID_IBAN},
+        follow_redirects=False,
+    )
+    db_session.refresh(acc)
+    assert acc.name == "PKO checking"  # whitespace trimmed
+    assert acc.number == VALID_IBAN
+
+
+def test_edit_account_unknown_404(auth_client: TestClient, db_session: Session):
+    resp = auth_client.post(
+        "/dashboard/accounts/9999/edit",
+        data={"name": "PKO checking", "type": "bank"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_edit_account_empty_name_rejected(
+    auth_client: TestClient, db_session: Session, make_account: Callable[..., Account]
+):
+    acc = make_account(name="PKO checking")
+    resp = auth_client.post(
+        f"/dashboard/accounts/{acc.id}/edit",
+        data={"name": "   ", "type": "bank"},
+    )
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    db_session.refresh(acc)
+    assert acc.name == "PKO checking"  # unchanged
+
+
+def test_create_account_error_preserves_input(auth_client: TestClient, db_session: Session):
+    # A bad IBAN is rejected; the name/number the user typed survive the re-render.
+    resp = auth_client.post(
+        "/dashboard/accounts",
+        data={"name": "My Bank", "type": "bank", "number": "PL00109010140000071219812874"},
+    )
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    assert 'value="My Bank"' in resp.text
+    assert 'value="PL00109010140000071219812874"' in resp.text
+    assert db_session.exec(select(Account)).all() == []  # nothing written
+
+
+def test_edit_account_error_preserves_input(
+    auth_client: TestClient, db_session: Session, make_account: Callable[..., Account]
+):
+    # A bad IBAN on the inline edit form re-renders that row with the attempted edit.
+    acc = make_account(name="Orig")
+    resp = auth_client.post(
+        f"/dashboard/accounts/{acc.id}/edit",
+        data={"name": "Edited", "type": "bank", "number": "PL00109010140000071219812874"},
+    )
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    assert 'value="Edited"' in resp.text  # the attempted name is kept, not reset to "Orig"
+    assert 'value="PL00109010140000071219812874"' in resp.text
+    db_session.refresh(acc)
+    assert acc.name == "Orig"  # DB unchanged
 
 
 def test_create_category(auth_client: TestClient, db_session: Session):

@@ -1,17 +1,25 @@
-# Reverse proxy in front of the FastAPI app. LAN only, HTTPS via Caddy's
-# internal (self-signed) CA — no internet contact, no public exposure.
+# Reverse proxy in front of the FastAPI app. LAN only, but now with a trusted
+# public cert (Let's Encrypt via the ACME DNS-01 challenge over the GoDaddy API)
+# instead of a self-signed CA — no more per-device root-CA install, no browser
+# warnings. Still zero inbound: DNS-01 proves domain control with a TXT record,
+# it does NOT require the Pi to be reachable from the internet.
 #
-# Set CADDY_SITE_ADDRESS to how you reach the Pi (a hostname or its LAN IP),
-# e.g. expense.local or 192.168.1.50, and make sure it resolves on your LAN
-# (router DNS / Pi-hole / hosts / mDNS). Install Caddy's root CA on your devices
-# to avoid browser warnings — see internal_docs/PROGRESS.md.
-#
-# A trusted public cert via Let's Encrypt DNS-01 (szawel.com) is a deferred
-# nice-to-have; see internal_docs/expense-analyzer-design.md §10.
+# Set CADDY_SITE_ADDRESS to the domain (e.g. expense.szawel.com) and make it
+# resolve to the Pi's LAN IP on your network (router DNS / Pi-hole / hosts).
+# GODADDY_API_TOKEN ("<KEY>:<SECRET>", a GoDaddy *Production* key) is needed only
+# to issue/renew the cert. The @notlan filter stays as defense-in-depth.
 {$CADDY_SITE_ADDRESS:expense.local} {
-	# Self-signed cert from Caddy's local CA. Stays fully offline — no ACME,
-	# no internet. The CA persists in the caddy_data volume across restarts.
-	tls internal
+	# Trusted cert via Let's Encrypt, DNS-01 over GoDaddy. Caddy creates a TXT
+	# record through the GoDaddy API to prove control, then deletes it. The cert
+	# and ACME account persist in the caddy_data volume across restarts.
+	#
+	# First issuance / debugging: uncomment the staging CA to avoid Let's
+	# Encrypt's tight production rate limits, then re-comment once it works
+	# (staging certs are untrusted, so you'll see a warning until you switch back).
+	tls {
+		dns godaddy {env.GODADDY_API_TOKEN}
+		# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+	}
 
 	# Restrict to private LAN ranges and Tailscale's CGNAT range.
 	@notlan not remote_ip 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12 100.64.0.0/10 127.0.0.1/8
