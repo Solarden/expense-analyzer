@@ -8,6 +8,7 @@ the schema on the same (temp) engine the app uses. Model builders and the shared
 
 from collections.abc import Callable
 
+import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
@@ -52,47 +53,41 @@ def test_create_account_then_listed(auth_client: TestClient, db_session: Session
 VALID_IBAN = "PL61109010140000071219812874"
 
 
-def test_create_account_with_number(auth_client: TestClient, db_session: Session):
-    # Typed with spaces and lower case — stored normalised, and shown on settings.
+@pytest.mark.parametrize(
+    "typed, stored",
+    [
+        ("pl61 1090 1014 0000 0712 1981 2874", VALID_IBAN),  # IBAN -> canonical
+        ("  ", None),  # blank -> no number
+        ("  xtb-Acc-123  ", "xtb-Acc-123"),  # non-IBAN kept as typed (only trimmed)
+    ],
+)
+def test_create_account_number_normalization(
+    auth_client: TestClient, db_session: Session, typed: str, stored: str | None
+):
+    auth_client.post("/dashboard/accounts", data={"name": "Acc", "type": "bank", "number": typed})
+    assert db_session.exec(select(Account)).one().number == stored
+
+
+def test_create_account_number_shown_on_settings(auth_client: TestClient, db_session: Session):
+    # A stored IBAN is displayed (canonicalised) on the settings page.
     typed = "pl61 1090 1014 0000 0712 1981 2874"
-    auth_client.post(
-        "/dashboard/accounts",
-        data={"name": "PKO checking", "type": "bank", "number": typed},
-    )
-    acc = db_session.exec(select(Account)).one()
-    assert acc.number == VALID_IBAN
+    auth_client.post("/dashboard/accounts", data={"name": "PKO", "type": "bank", "number": typed})
     assert VALID_IBAN in auth_client.get("/dashboard/settings").text
 
 
-def test_create_account_blank_number_is_none(auth_client: TestClient, db_session: Session):
-    auth_client.post("/dashboard/accounts", data={"name": "Cash", "type": "cash", "number": "  "})
-    assert db_session.exec(select(Account)).one().number is None
-
-
-def test_create_account_non_iban_number_kept_as_typed(auth_client: TestClient, db_session: Session):
-    # A brokerage/cash id isn't an IBAN — kept exactly as typed (case + separators),
-    # only trimmed. We must not uppercase it or strip its internal characters.
-    auth_client.post(
-        "/dashboard/accounts",
-        data={"name": "IKE XTB", "type": "portfolio", "number": "  xtb-Acc-123  "},
-    )
-    assert db_session.exec(select(Account)).one().number == "xtb-Acc-123"
-
-
-def test_create_account_invalid_iban_rejected(auth_client: TestClient, db_session: Session):
-    resp = auth_client.post(
-        "/dashboard/accounts",
-        data={"name": "PKO checking", "type": "bank", "number": "PL00109010140000071219812874"},
-    )
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"name": "Acc", "type": "bank", "number": "PL00109010140000071219812874"},  # bad checksum
+        {"name": "   ", "type": "bank"},  # blank name (was silently accepted before)
+    ],
+)
+def test_create_account_rejected_writes_nothing(
+    auth_client: TestClient, db_session: Session, data: dict
+):
+    resp = auth_client.post("/dashboard/accounts", data=data)
     assert resp.status_code == status.HTTP_400_BAD_REQUEST
     assert db_session.exec(select(Account)).all() == []  # nothing written
-
-
-def test_create_account_blank_name_rejected(auth_client: TestClient, db_session: Session):
-    # Boy-scout: create used to accept an all-whitespace name silently.
-    resp = auth_client.post("/dashboard/accounts", data={"name": "   ", "type": "bank"})
-    assert resp.status_code == status.HTTP_400_BAD_REQUEST
-    assert db_session.exec(select(Account)).all() == []
 
 
 def test_edit_account_renames_and_sets_number(

@@ -12,18 +12,17 @@ def test_page_size_must_be_positive():
         Settings(page_size=0)
 
 
-def test_blank_optional_int_env_becomes_none():
-    """A blank EA_MYFUND_ACCOUNT_ID= (meant as "unset") must be None, not a crash."""
-    s = Settings(myfund_account_id="", myfund_fetch_interval_hours="   ")
-    assert s.myfund_account_id is None
-    assert s.myfund_fetch_interval_hours is None
-
-
-def test_optional_int_still_parses_real_value():
-    """A real integer string (as env vars always arrive) still coerces."""
-    s = Settings(myfund_account_id="7", myfund_fetch_interval_hours="24")
-    assert s.myfund_account_id == 7
-    assert s.myfund_fetch_interval_hours == 24
+@pytest.mark.parametrize("field", ["myfund_account_id", "myfund_fetch_interval_hours"])
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("", None),  # blank env value ("leave it unset") -> None, not a crash
+        ("   ", None),  # whitespace-only -> None
+        ("7", 7),  # a real integer string (how env vars arrive) still coerces
+    ],
+)
+def test_optional_int_blank_becomes_none(field, raw, expected):
+    assert getattr(Settings(**{field: raw}), field) == expected
 
 
 def test_create_app_refuses_insecure_default_secret(monkeypatch):

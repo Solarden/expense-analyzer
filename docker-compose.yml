@@ -85,7 +85,7 @@ services:
       dockerfile: Dockerfile.caddy
     restart: unless-stopped
     environment:
-      # The domain you reach the app at (e.g. expense.szawel.com); Caddy issues a
+      # The domain you reach the app at (e.g. expense.domain.com); Caddy issues a
       # trusted Let's Encrypt cert for it via DNS-01. Must resolve to the Pi's LAN
       # IP on your network (router DNS / Pi-hole / hosts).
       CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:-expense.local}
