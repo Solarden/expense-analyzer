@@ -30,6 +30,10 @@
       <path d="M17 20l4-4-4-4" />
       <path d="M21 16H8" />
       </symbol>
+      <symbol id="i-ask" viewBox="0 0 24 24">
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.3-4.3" />
+      </symbol>
       <symbol id="i-loans" viewBox="0 0 24 24">
       <path d="M3 21h18" />
       <path d="M5 21V10M9 21V10M15 21V10M19 21V10" />
@@ -121,7 +125,7 @@
           </svg>
         </button>
         {# Home stays a standalone link; the rest collapse into labelled dropdowns. #}
-        {% set nav_groups = [('Money', [('/dashboard/stats', 'Overview', 'i-overview'), ('/dashboard/transactions', 'Transactions', 'i-transactions'), ('/dashboard/transfers', 'Transfers', 'i-transfers')]), ('Planning', [('/dashboard/plan', 'Plan', 'i-plan'), ('/dashboard/budgets', 'Budgets', 'i-budgets'), ('/dashboard/subscriptions', 'Subscriptions', 'i-subscriptions'), ('/dashboard/loans', 'Loans', 'i-loans')]), ('Categorize', [('/dashboard/rules', 'Rules', 'i-rules'), ('/dashboard/queue', 'Review queue', 'i-queue')]), ('Wealth', [('/dashboard/investments', 'Investments', 'i-investments'), ('/dashboard/net-worth', 'Net worth', 'i-networth')]), ('System', [('/dashboard/settings', 'Accounts & categories', 'i-settings'), ('/dashboard/upload', 'Import CSV', 'i-import'), ('/dashboard/home-assistant', 'Home Assistant', 'i-ha'), ('/dashboard/users', 'Users', 'i-users'), ('/dashboard/updates', 'Updates', 'i-update')])] %}
+        {% set nav_groups = [('Money', [('/dashboard/stats', 'Overview', 'i-overview'), ('/dashboard/transactions', 'Transactions', 'i-transactions'), ('/dashboard/transfers', 'Transfers', 'i-transfers'), ('/dashboard/ask', 'Ask', 'i-ask')]), ('Planning', [('/dashboard/plan', 'Plan', 'i-plan'), ('/dashboard/budgets', 'Budgets', 'i-budgets'), ('/dashboard/subscriptions', 'Subscriptions', 'i-subscriptions'), ('/dashboard/loans', 'Loans', 'i-loans')]), ('Categorize', [('/dashboard/rules', 'Rules', 'i-rules'), ('/dashboard/queue', 'Review queue', 'i-queue')]), ('Wealth', [('/dashboard/investments', 'Investments', 'i-investments'), ('/dashboard/net-worth', 'Net worth', 'i-networth')]), ('System', [('/dashboard/settings', 'Accounts & categories', 'i-settings'), ('/dashboard/upload', 'Import CSV', 'i-import'), ('/dashboard/home-assistant', 'Home Assistant', 'i-ha'), ('/dashboard/users', 'Users', 'i-users'), ('/dashboard/updates', 'Updates', 'i-update')])] %}
         <nav id="primary-nav">
           <a href="/dashboard">
             <svg class="nav-ico" aria-hidden="true">
