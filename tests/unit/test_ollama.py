@@ -16,7 +16,7 @@ Handler = Callable[[httpx.Request], httpx.Response]
 
 def _client(handler: Handler) -> OllamaClient:
     return OllamaClient(
-        base_url="http://piec:11434",
+        base_url="http://ollama:11434",
         model="gemma3:12b",
         timeout=5.0,
         transport=httpx.MockTransport(handler),
@@ -81,7 +81,7 @@ def test_missing_fields_raise_ollama_error() -> None:
 
 def test_timeout_raises_ollama_error() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectTimeout("piec is slow")
+        raise httpx.ConnectTimeout("Ollama host is slow")
 
     with pytest.raises(OllamaError):
         _categorize(_client(handler))

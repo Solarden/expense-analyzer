@@ -220,7 +220,7 @@ def answer(
     client: OllamaClient | None = None,
 ) -> QueryResult:
     """Orchestrate: gate on ``llm_enabled``, parse → validate → run. Never raises —
-    a down piec or an uninterpretable question returns an ``ok=False`` result."""
+    a down Ollama host or an uninterpretable question returns an ``ok=False`` result."""
     settings = settings or get_settings()
     if not settings.llm_enabled:
         return _failed("Natural-language queries are disabled.")

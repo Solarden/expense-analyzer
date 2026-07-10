@@ -1,14 +1,14 @@
-"""Ollama chat client (piec) — the primary transaction categorizer, plus two
+"""Ollama chat client — the primary transaction categorizer, plus two
 human-in-the-loop helpers (merchant normalization + rule suggestions).
 
-The owner runs Ollama on *piec*, a capable LAN box, so heavy LLM work doesn't tax
+The owner runs Ollama on a capable LAN box, so heavy LLM work doesn't tax
 the Pi. This is a thin, sync client over Ollama's ``/api/chat`` with JSON-schema
-structured output; the local sklearn classifier stays the fallback for when piec
-is unreachable (see :mod:`expense_analyzer.queries.categorize.llm`).
+structured output; the local sklearn classifier stays the fallback for when that
+host is unreachable (see :mod:`expense_analyzer.queries.categorize.llm`).
 
 OPT-IN and OFF by default (``EA_LLM_ENABLED`` + ``EA_LLM_BASE_URL``): with the
-feature off the client is never constructed. piec is on the LAN, so this is *not*
-internet egress (same footing as the MQTT broker) — nothing leaves the house.
+feature off the client is never constructed. The Ollama host is on the LAN, so this
+is *not* internet egress (same footing as the MQTT broker) — nothing leaves the house.
 """
 
 import json
@@ -21,7 +21,7 @@ import httpx
 from expense_analyzer.config import Settings
 
 _ENDPOINT = "/api/chat"
-# Short connect timeout so a down piec fails fast (connection refused is
+# Short connect timeout so a down Ollama host fails fast (connection refused is
 # immediate); the longer read budget (llm_timeout) covers slow inference.
 _CONNECT_TIMEOUT = 3.0
 
@@ -67,7 +67,7 @@ _QUERY_SCHEMA = {
 
 
 class OllamaError(Exception):
-    """A call to piec's Ollama failed (unreachable, timeout, or unusable output).
+    """A call to the Ollama host failed (unreachable, timeout, or unusable output).
 
     For categorization this is the signal to fall back to the local classifier;
     for the (optional) merchant/rule helpers it just aborts that batch.
@@ -81,10 +81,10 @@ class LlmVerdict:
 
 
 class OllamaClient:
-    """Talks to piec's Ollama chat API for the LLM features.
+    """Talks to the Ollama host's chat API for the LLM features.
 
     ``transport`` is injectable so tests can drive it with an
-    :class:`httpx.MockTransport` instead of hitting piec.
+    :class:`httpx.MockTransport` instead of hitting the Ollama host.
     """
 
     def __init__(
@@ -160,7 +160,7 @@ class OllamaClient:
         amount: int,
         categories: Sequence[tuple[int, str]],
     ) -> LlmVerdict:
-        """Ask piec for the best category id + confidence for one transaction.
+        """Ask the Ollama host for the best category id + confidence for one transaction.
 
         Raises :class:`OllamaError` on transport/decode failure — the signal to
         fall back to the local classifier. A well-formed response with an
@@ -181,7 +181,7 @@ class OllamaClient:
             raise OllamaError(f"Ollama returned unusable output: {type(exc).__name__}") from exc
 
     def normalize_merchant(self, *, raw_description: str, current: str | None) -> str | None:
-        """Ask piec for a short, clean merchant name for one transaction.
+        """Ask the Ollama host for a short, clean merchant name for one transaction.
 
         Returns the cleaned name, or ``None`` when the model has nothing better (an
         empty reply). Raises :class:`OllamaError` on transport/decode failure.
@@ -198,7 +198,7 @@ class OllamaClient:
         return merchant.strip() or None
 
     def suggest_rule_patterns(self, *, category_name: str, examples: Sequence[str]) -> list[str]:
-        """Ask piec for substring rule patterns that would match these examples.
+        """Ask the Ollama host for substring rule patterns that would match these examples.
 
         Returns a (possibly empty) list of trimmed, non-blank patterns. Raises
         :class:`OllamaError` on transport/decode failure.

@@ -16,12 +16,12 @@ from expense_analyzer.models import Account, Category, CategoryKind, Loan, Trans
 from expense_analyzer.ollama import OllamaError
 from expense_analyzer.queries.money.nl_query import answer
 
-_LLM = Settings(llm_enabled=True, llm_base_url="http://piec:11434")
+_LLM = Settings(llm_enabled=True, llm_base_url="http://ollama:11434")
 
 
 class _FakeClient:
     """Stands in for OllamaClient: returns a canned raw dict, or raises to simulate a
-    down piec. Records call count so a test can assert the LLM path was (not) taken."""
+    down Ollama host. Records call count so a test can assert the LLM path was (not) taken."""
 
     def __init__(self, raw: dict | None = None, *, error: bool = False) -> None:
         self._raw = raw
@@ -31,7 +31,7 @@ class _FakeClient:
     def parse_query(self, question: str, **_kw: object) -> dict:
         self.calls += 1
         if self._error:
-            raise OllamaError("piec down")
+            raise OllamaError("Ollama host down")
         assert self._raw is not None
         return self._raw
 

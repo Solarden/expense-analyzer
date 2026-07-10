@@ -140,10 +140,10 @@ def run_import(
             log.exception("rule auto-categorization failed after import; rows are committed")
             session.rollback()
 
-    # Probabilistic categorization (the LLM on piec, or the local classifier as
+    # Probabilistic categorization (the Ollama host, or the local classifier as
     # fallback) is no longer run at import — it's an on-demand step from the review
     # queue ("classify now"). Import stays rules-only, so a big or first import
-    # isn't blocked waiting on piec. See queries/categorize/llm.py.
+    # isn't blocked waiting on the Ollama host. See queries/categorize/llm.py.
 
     return ImportSummary(
         batch_id=batch.id if batch else None,

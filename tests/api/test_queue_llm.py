@@ -1,7 +1,7 @@
 """LLM categorization (PR 2): query layer + the "classify now" orchestrator.
 
 The Ollama client is stubbed (no network): a fake returns a fixed verdict, or
-raises :class:`OllamaError` to simulate a down piec. The real HTTP client is
+raises :class:`OllamaError` to simulate a down Ollama host. The real HTTP client is
 covered in ``tests/unit/test_ollama.py``.
 """
 
@@ -17,7 +17,7 @@ from expense_analyzer.queries.categorize import llm as lq
 
 class _FakeClient:
     """Stands in for OllamaClient: returns a fixed verdict, or raises to simulate a
-    down piec. Records how many times it was asked, so a test can assert the LLM
+    down Ollama host. Records how many times it was asked, so a test can assert the LLM
     path was (or wasn't) taken."""
 
     def __init__(self, verdict: LlmVerdict | None = None, *, error: bool = False) -> None:
@@ -28,17 +28,17 @@ class _FakeClient:
     def categorize(self, **_kw: object) -> LlmVerdict:
         self.calls += 1
         if self._error:
-            raise OllamaError("piec down")
+            raise OllamaError("Ollama host down")
         assert self._verdict is not None
         return self._verdict
 
 
 # LLM on and configured; classifier floor/threshold low so the fallback tests can
 # train on a handful of fixture labels.
-_LLM = Settings(llm_enabled=True, llm_base_url="http://piec:11434", llm_confidence_threshold=0.7)
+_LLM = Settings(llm_enabled=True, llm_base_url="http://ollama:11434", llm_confidence_threshold=0.7)
 _LLM_LOW_FALLBACK = Settings(
     llm_enabled=True,
-    llm_base_url="http://piec:11434",
+    llm_base_url="http://ollama:11434",
     classifier_min_training_samples=4,
     classifier_confidence_threshold=0.5,
 )
@@ -136,7 +136,7 @@ def test_hallucinated_category_id_is_skipped(
 # --- categorize_uncategorized (classify now): LLM primary, classifier fallback ---
 
 
-def test_falls_back_to_classifier_when_piec_is_down(
+def test_falls_back_to_classifier_when_llm_is_down(
     db_session: Session,
     account: Account,
     make_category: Callable[..., Category],
@@ -151,7 +151,7 @@ def test_falls_back_to_classifier_when_piec_is_down(
     result = lq.categorize_uncategorized(db_session, settings=_LLM_LOW_FALLBACK, client=down)
 
     db_session.refresh(tx)
-    assert down.calls == 1  # tried piec once, then bailed to the local classifier
+    assert down.calls == 1  # tried the Ollama host once, then bailed to the local classifier
     assert result.categorized == 1
     assert tx.category_id == food.id
     assert tx.source == TxSource.classifier  # the fallback tagged it, not the LLM

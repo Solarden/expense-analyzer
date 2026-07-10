@@ -235,26 +235,26 @@ class Settings(BaseSettings):
     # cold-start rationale as the classifier); also needs >= 2 distinct categories.
     embeddings_min_training_samples: int = Field(default=25, ge=2)
 
-    # --- LLM categorization (piec Ollama; primary, local pipeline is fallback) ---
-    # The owner runs Ollama on *piec* (a capable LAN box), so the heavy
+    # --- LLM categorization (Ollama host; primary, local pipeline is fallback) ---
+    # The owner runs Ollama on a capable LAN box, so the heavy
     # categorization doesn't tax the Pi. When enabled, the LLM is the *primary*
     # categorizer for the review-queue "classify now" action and the local sklearn
-    # classifier (layer 2) becomes the fallback for when piec is unreachable. Like
-    # MQTT (and unlike myFund) this is LAN-only — piec is on the home network, so
+    # classifier (layer 2) becomes the fallback for when that host is unreachable. Like
+    # MQTT (and unlike myFund) this is LAN-only — the Ollama host is on the home network, so
     # it's not internet egress; nothing leaves the house. See ollama.py /
     # queries/categorize/llm.py.
     #
     # OPT-IN and OFF by default: with the feature off (or no base URL) the client is
     # never constructed and categorization behaves exactly as before.
     llm_enabled: bool = False
-    # piec's Ollama base URL, e.g. "http://192.168.1.x:11434". Required when
+    # The Ollama host's base URL, e.g. "http://192.168.1.x:11434". Required when
     # llm_enabled is True (see the validator below).
     llm_base_url: str = ""
-    # The model tag pulled on piec. A small "utility" model is the cheap fit for
+    # The model tag pulled on the Ollama host. A small "utility" model is the cheap fit for
     # classification; confirm the exact tag (overridable via EA_LLM_MODEL).
     llm_model: str = "gemma3:12b"
     # Read timeout in seconds for one chat call — LLM inference is slow, so this is
-    # generous. (A short connect timeout, set in ollama.py, makes a *down* piec fail
+    # generous. (A short connect timeout, set in ollama.py, makes a *down* host fail
     # fast rather than wait this long.)
     llm_timeout: int = Field(default=30, ge=1)
     # A verdict at or above this confidence auto-applies the category (source=llm);
@@ -270,7 +270,7 @@ class Settings(BaseSettings):
         if self.llm_enabled and not self.llm_base_url.strip():
             raise ValueError(
                 "EA_LLM_ENABLED is set but EA_LLM_BASE_URL is empty — "
-                "set the piec Ollama URL, or disable the LLM."
+                "set the Ollama host URL, or disable the LLM."
             )
 
         return self
