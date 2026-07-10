@@ -63,7 +63,7 @@ def queue_page(
 ) -> HTMLResponse:
     page_num = max(1, int(page)) if page and page.isdigit() else 1
     result = classifier_queries.review_queue(
-        session, page=page_num, page_size=get_settings().page_size
+        session, page=page_num, page_size=get_settings().page_size, viewer_id=user.id
     )
 
     # Layer 3 (Phase 12): the nearest already-categorized transaction for each
@@ -104,13 +104,20 @@ def classify(session: DbSession) -> RedirectResponse:
 def categorize(
     tx_id: int,
     form: Annotated[CategorizeForm, Form()],
+    user: CurrentUser,
     session: DbSession,
     page: str | None = None,
 ) -> RedirectResponse:
     """Tag a queued transaction by hand (``source = manual``) and return to the
     queue. Accepting the classifier's suggestion is just submitting it pre-selected
     — a human verdict either way, which is what feeds the next training run."""
-    apply_categorization(session, tx_id=tx_id, raw_category_id=form.category_id, scope=form.scope)
+    apply_categorization(
+        session,
+        tx_id=tx_id,
+        raw_category_id=form.category_id,
+        scope=form.scope,
+        viewer_id=user.id,
+    )
 
     page_num = max(1, int(page)) if page and page.isdigit() else 1
     dest = "/dashboard/queue" if page_num == 1 else f"/dashboard/queue?page={page_num}"

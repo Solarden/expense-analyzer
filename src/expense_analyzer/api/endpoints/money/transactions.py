@@ -87,7 +87,7 @@ def _list_context(
         search=q or None,
     )
     result = transactions.list_transactions(
-        session, filters, page=page_num, page_size=resolved_size
+        session, filters, page=page_num, page_size=resolved_size, viewer_id=user.id
     )
 
     def page_query(target_page: int) -> str:
@@ -136,7 +136,7 @@ def _list_context(
         "categories": all_categories,
         "category_colors": {c.id: c.color for c in all_categories if c.id is not None},
         "edit_meta": edit_meta,
-        "months": stats.available_months(session),
+        "months": stats.available_months(session, viewer_id=user.id),
         "scopes": [s.value for s in Scope],
         "directions": [d.value for d in TxDirection],
         "page_sizes": list(_PAGE_SIZES),
@@ -190,9 +190,16 @@ def list_transactions(
 def categorize(
     tx_id: int,
     form: Annotated[CategorizeForm, Form()],
+    user: CurrentUser,
     session: DbSession,
 ) -> RedirectResponse:
-    apply_categorization(session, tx_id=tx_id, raw_category_id=form.category_id, scope=form.scope)
+    apply_categorization(
+        session,
+        tx_id=tx_id,
+        raw_category_id=form.category_id,
+        scope=form.scope,
+        viewer_id=user.id,
+    )
 
     return RedirectResponse(_safe_return_to(form.return_to), status_code=status.HTTP_303_SEE_OTHER)
 
@@ -201,10 +208,14 @@ def categorize(
 def update_note(
     tx_id: int,
     form: Annotated[NoteForm, Form()],
+    user: CurrentUser,
     session: DbSession,
 ) -> RedirectResponse:
     """Save the note from the note modal (works on any row, imported or manual)."""
-    if transactions.set_note(session, tx_id=tx_id, note=form.note.strip() or None) is None:
+    result = transactions.set_note(
+        session, tx_id=tx_id, note=form.note.strip() or None, viewer_id=user.id
+    )
+    if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="transaction not found")
 
     return RedirectResponse(_safe_return_to(form.return_to), status_code=status.HTTP_303_SEE_OTHER)
@@ -295,7 +306,7 @@ def edit_transaction_form(
     session: DbSession,
     return_to: str = _LIST_PATH,
 ) -> HTMLResponse:
-    tx = transactions.get_transaction(session, tx_id)
+    tx = transactions.get_transaction(session, tx_id, viewer_id=user.id)
     if tx is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="transaction not found")
 
@@ -314,7 +325,7 @@ def edit_transaction(
     user: CurrentUser,
     session: DbSession,
 ) -> Response:
-    tx = transactions.get_transaction(session, tx_id)
+    tx = transactions.get_transaction(session, tx_id, viewer_id=user.id)
     if tx is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="transaction not found")
 
@@ -352,7 +363,13 @@ def edit_transaction(
             )
 
     transactions.update_transaction(
-        session, tx_id=tx_id, category_id=category_id, scope=form.scope, note=note, **money_fields
+        session,
+        tx_id=tx_id,
+        viewer_id=user.id,
+        category_id=category_id,
+        scope=form.scope,
+        note=note,
+        **money_fields,
     )
 
     return RedirectResponse(_safe_return_to(form.return_to), status_code=status.HTTP_303_SEE_OTHER)
@@ -361,12 +378,13 @@ def edit_transaction(
 @router.post("/{tx_id}/delete")
 def delete_transaction(
     tx_id: int,
+    user: CurrentUser,
     session: DbSession,
     return_to: Annotated[str, Form()] = _LIST_PATH,
 ) -> RedirectResponse:
     """Soft-delete a manual entry. Imported rows are removed by rolling back their
     import batch, not one at a time — so deletion is gated to manual entries."""
-    tx = transactions.get_transaction(session, tx_id)
+    tx = transactions.get_transaction(session, tx_id, viewer_id=user.id)
     if tx is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="transaction not found")
     if not transactions.is_manual_entry(session, tx):
@@ -374,6 +392,6 @@ def delete_transaction(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="only manual entries can be deleted; roll back the import batch instead",
         )
-    transactions.soft_delete_transaction(session, tx_id=tx_id)
+    transactions.soft_delete_transaction(session, tx_id=tx_id, viewer_id=user.id)
 
     return RedirectResponse(_safe_return_to(return_to), status_code=status.HTTP_303_SEE_OTHER)

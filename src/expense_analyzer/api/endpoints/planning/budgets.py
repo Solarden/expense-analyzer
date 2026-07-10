@@ -45,7 +45,7 @@ def _context(
         "user": user,
         "months": months,
         "month": selected_month,
-        "statuses": budget_queries.budget_overview(session, selected_month),
+        "statuses": budget_queries.budget_overview(session, selected_month, viewer_id=user.id),
         "budgets": budget_queries.list_budgets(session),
         "categories": budget_queries.budgetable_categories(session),
         "category_names": {c.id: c.name for c in all_categories if c.id is not None},
@@ -62,7 +62,7 @@ def budgets_page(
     month: str | None = None,
     edit: str | None = None,
 ) -> HTMLResponse:
-    months = stats.available_months(session)
+    months = stats.available_months(session, viewer_id=user.id)
     selected = stats.default_month(months, month)
 
     # ``?edit=<id>`` prefills the form to change one budget's limit. Category and
@@ -91,7 +91,7 @@ def set_budget(
     user: CurrentUser,
     session: DbSession,
 ) -> Response:
-    months = stats.available_months(session)
+    months = stats.available_months(session, viewer_id=user.id)
     month = form.month.strip() or None
     selected = stats.default_month(months, month)
 

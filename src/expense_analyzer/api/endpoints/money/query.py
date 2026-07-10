@@ -28,7 +28,7 @@ def ask(
     q: str | None = None,
 ) -> HTMLResponse:
     question = (q or "").strip()
-    result = answer(session, question) if question else None
+    result = answer(session, question, viewer_id=user.id) if question else None
     # Names for the read-only row list (templates read a map, not tx.category — the
     # same pattern the transactions/overview pages use, so no lazy relationship load).
     category_names = {c.id: c.name for c in categories.list_categories(session) if c.id is not None}

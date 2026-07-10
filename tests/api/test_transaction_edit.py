@@ -10,7 +10,7 @@ from datetime import date
 
 from fastapi import status
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, col, select
 
 from expense_analyzer.models import Account, Category, CategoryKind, Scope, Transaction, TxSource
 from expense_analyzer.queries.money import transactions
@@ -18,10 +18,12 @@ from expense_analyzer.queries.money.transactions import TransactionFilters
 
 
 def _only_row(db_session: Session) -> Transaction:
-    page = transactions.list_transactions(db_session, TransactionFilters(), page=1, page_size=10)
-    assert page.total == 1
+    # Persistence check, viewer-agnostic: read the DB directly (a manual entry is
+    # private and owned by the actor, so the default None-viewer list won't surface it).
+    rows = db_session.exec(select(Transaction).where(col(Transaction.deleted_at).is_(None))).all()
+    assert len(rows) == 1
 
-    return page.rows[0]
+    return rows[0]
 
 
 def test_add_manual_expense_creates_negative_row(
@@ -122,7 +124,7 @@ def test_edit_form_manual_shows_money_fields(
         amount=-2000,
         description="Coffee",
         category_id=None,
-        scope=Scope.private,
+        scope=Scope.household,
         note=None,
         owner_id=None,
     )
@@ -156,7 +158,7 @@ def test_edit_manual_updates_money_fields(
         amount=-2000,
         description="Coffe",
         category_id=None,
-        scope=Scope.private,
+        scope=Scope.household,
         note=None,
         owner_id=None,
     )
@@ -176,7 +178,7 @@ def test_edit_manual_updates_money_fields(
     assert resp.status_code == status.HTTP_303_SEE_OTHER
 
     db_session.expire_all()  # the mutation committed in the app's session
-    fresh = transactions.get_transaction(db_session, tx.id)
+    fresh = db_session.get(Transaction, tx.id)
     assert fresh.amount == -2500
     assert fresh.raw_description == "Coffee"
     assert fresh.booked_date == date(2026, 6, 1)
@@ -219,7 +221,7 @@ def test_delete_manual_soft_deletes(auth_client: TestClient, db_session: Session
         amount=-2000,
         description="Coffee",
         category_id=None,
-        scope=Scope.private,
+        scope=Scope.household,
         note=None,
         owner_id=None,
     )
@@ -322,7 +324,7 @@ def test_manual_batch_rollback_is_rejected(
         amount=-2000,
         description="Coffee",
         category_id=None,
-        scope=Scope.private,
+        scope=Scope.household,
         note=None,
         owner_id=None,
     )
@@ -344,7 +346,7 @@ def test_manual_batch_offers_no_rollback_button(
         amount=-2000,
         description="Coffee",
         category_id=None,
-        scope=Scope.private,
+        scope=Scope.household,
         note=None,
         owner_id=None,
     )

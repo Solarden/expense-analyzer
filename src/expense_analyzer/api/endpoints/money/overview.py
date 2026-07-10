@@ -67,14 +67,14 @@ def stats_page(
     session: DbSession,
     month: str | None = None,
 ) -> HTMLResponse:
-    months = stats.available_months(session)
+    months = stats.available_months(session, viewer_id=user.id)
     selected = stats.default_month(months, month)
 
     category_list = categories.list_categories(session)
     category_names = {c.id: c.name for c in category_list if c.id is not None}
     category_colors = {c.id: c.color for c in category_list if c.id is not None}
     # One transfer-excluded scan feeds both the month summary and the trend.
-    spendable = stats.spendable_transactions(session)
+    spendable = stats.spendable_transactions(session, viewer_id=user.id)
     summary = stats.month_summary(spendable, selected, category_names)
     trend = stats.spending_trend(spendable, months=TREND_MONTHS)
 

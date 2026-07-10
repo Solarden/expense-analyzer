@@ -17,7 +17,8 @@ from sqlmodel.sql.expression import SelectOfScalar
 
 from expense_analyzer.clock import utc_now
 from expense_analyzer.importers.merchant import normalize_merchant
-from expense_analyzer.models import ImportBatch, ImportStatus, Scope, Transaction, TxSource
+from expense_analyzer.models import ImportBatch, ImportStatus, Lens, Scope, Transaction, TxSource
+from expense_analyzer.queries.visibility import visible_to
 
 # Sentinel for the category filter: match rows with no category at all.
 UNCATEGORIZED = "none"
@@ -83,9 +84,16 @@ def _month_bounds(month: str) -> tuple[date, date] | None:
 
 
 def _apply_filters(
-    query: SelectOfScalar[Transaction], filters: TransactionFilters
+    query: SelectOfScalar[Transaction],
+    filters: TransactionFilters,
+    *,
+    viewer_id: int | None,
+    lens: Lens = Lens.all,
 ) -> SelectOfScalar[Transaction]:
     query = query.where(col(Transaction.deleted_at).is_(None))
+    # Per-viewer visibility — applied here (not in list_transactions) so the page
+    # query and its COUNT share the exact clause and can never drift.
+    query = visible_to(query, viewer_id=viewer_id, lens=lens)
     if filters.account_id is not None:
         query = query.where(Transaction.account_id == filters.account_id)
     if filters.month is not None:
@@ -120,15 +128,23 @@ def list_transactions(
     *,
     page: int,
     page_size: int,
+    viewer_id: int | None = None,
+    lens: Lens = Lens.all,
 ) -> TransactionPage:
-    """One page of non-deleted transactions (newest first) matching ``filters``."""
+    """One page of non-deleted transactions the viewer may see (newest first)
+    matching ``filters``."""
     page = max(1, page)
 
     total = session.exec(
-        _apply_filters(select(func.count()).select_from(Transaction), filters)  # type: ignore[arg-type]
+        _apply_filters(
+            select(func.count()).select_from(Transaction),  # type: ignore[arg-type]
+            filters,
+            viewer_id=viewer_id,
+            lens=lens,
+        )
     ).one()
 
-    rows_query = _apply_filters(select(Transaction), filters)
+    rows_query = _apply_filters(select(Transaction), filters, viewer_id=viewer_id, lens=lens)
     rows_query = (
         rows_query.order_by(col(Transaction.booked_date).desc(), col(Transaction.id).desc())
         .offset((page - 1) * page_size)
@@ -143,22 +159,44 @@ def list_transactions(
     )
 
 
+def _get_visible(session: Session, tx_id: int, *, viewer_id: int | None) -> Transaction | None:
+    """Load a live transaction only if ``viewer_id`` may see it — else None.
+
+    Mirrors :func:`expense_analyzer.queries.visibility.visible_to` for a single row,
+    so a crafted ``/transactions/{id}/...`` request cannot read or write another
+    member's private row (IDOR).
+    """
+    tx = session.get(Transaction, tx_id)
+    if tx is None or tx.deleted_at is not None:
+        return None
+    if tx.scope == Scope.private and tx.owner_id != viewer_id:
+        return None
+
+    return tx
+
+
 def set_category(
     session: Session,
     *,
     tx_id: int,
     category_id: int | None,
     scope: Scope,
+    viewer_id: int | None = None,
 ) -> Transaction | None:
-    """Manually (re)categorize a transaction. Returns the row, or None if absent.
+    """Manually (re)categorize a transaction the viewer may see. Returns the row, or
+    None if absent / not visible to ``viewer_id`` (IDOR guard).
 
-    Marks ``source = manual`` since a human touched it.
+    Marks ``source = manual`` since a human touched it. Marking a row ``private``
+    stamps ``owner_id`` to the viewer, so it can never become owner-less (which
+    would hide it from everyone).
     """
-    tx = session.get(Transaction, tx_id)
+    tx = _get_visible(session, tx_id, viewer_id=viewer_id)
     if tx is None:
         return None
     tx.category_id = category_id
     tx.scope = scope
+    if scope == Scope.private:
+        tx.owner_id = viewer_id
     tx.source = TxSource.manual
     session.add(tx)
     session.commit()
@@ -166,13 +204,11 @@ def set_category(
     return tx
 
 
-def get_transaction(session: Session, tx_id: int) -> Transaction | None:
-    """Load a single non-deleted transaction (the edit form's subject)."""
-    tx = session.get(Transaction, tx_id)
-    if tx is None or tx.deleted_at is not None:
-        return None
-
-    return tx
+def get_transaction(
+    session: Session, tx_id: int, *, viewer_id: int | None = None
+) -> Transaction | None:
+    """Load a single transaction the viewer may see (the edit form's subject)."""
+    return _get_visible(session, tx_id, viewer_id=viewer_id)
 
 
 def ensure_manual_batch(session: Session) -> ImportBatch:
@@ -264,6 +300,7 @@ def update_transaction(
     session: Session,
     *,
     tx_id: int,
+    viewer_id: int | None = None,
     category_id: int | None,
     scope: Scope,
     note: str | None,
@@ -280,8 +317,8 @@ def update_transaction(
     row's amount/date/description are the bank's source of truth and feed its
     import fingerprint. A human touched it, so ``source = manual``.
     """
-    tx = session.get(Transaction, tx_id)
-    if tx is None or tx.deleted_at is not None:
+    tx = _get_visible(session, tx_id, viewer_id=viewer_id)
+    if tx is None:
         return None
     # Flag a human (re)categorization only when the category or scope actually
     # changed — editing just the note must not flip ``source`` to manual, which
@@ -290,6 +327,8 @@ def update_transaction(
         tx.source = TxSource.manual
     tx.category_id = category_id
     tx.scope = scope
+    if scope == Scope.private:
+        tx.owner_id = viewer_id
     tx.note = note
     if account_id is not None:
         tx.account_id = account_id
@@ -307,7 +346,9 @@ def update_transaction(
     return tx
 
 
-def set_note(session: Session, *, tx_id: int, note: str | None) -> Transaction | None:
+def set_note(
+    session: Session, *, tx_id: int, note: str | None, viewer_id: int | None = None
+) -> Transaction | None:
     """Set (or clear) a transaction's free-text note. Returns the row, or None if
     absent / deleted.
 
@@ -315,8 +356,8 @@ def set_note(session: Session, *, tx_id: int, note: str | None) -> Transaction |
     touch ``source`` (unlike :func:`set_category` / :func:`update_transaction`). It
     works on any row, imported or manual.
     """
-    tx = session.get(Transaction, tx_id)
-    if tx is None or tx.deleted_at is not None:
+    tx = _get_visible(session, tx_id, viewer_id=viewer_id)
+    if tx is None:
         return None
     tx.note = note
     session.add(tx)
@@ -326,12 +367,14 @@ def set_note(session: Session, *, tx_id: int, note: str | None) -> Transaction |
     return tx
 
 
-def soft_delete_transaction(session: Session, *, tx_id: int) -> Transaction | None:
+def soft_delete_transaction(
+    session: Session, *, tx_id: int, viewer_id: int | None = None
+) -> Transaction | None:
     """Soft-delete a transaction (set ``deleted_at``). Returns the row, or None if
     absent / already deleted. Caller gates this to manual entries — imported rows
     are removed by rolling back their import batch, not one at a time."""
-    tx = session.get(Transaction, tx_id)
-    if tx is None or tx.deleted_at is not None:
+    tx = _get_visible(session, tx_id, viewer_id=viewer_id)
+    if tx is None:
         return None
     tx.deleted_at = utc_now()
     session.add(tx)

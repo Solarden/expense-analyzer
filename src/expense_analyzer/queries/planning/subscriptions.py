@@ -44,16 +44,19 @@ def detect(
     settings: Settings,
     *,
     today: date,
+    viewer_id: int | None = None,
     spendable: list[Transaction] | None = None,
 ) -> list[DetectedSubscription]:
-    """Run live detection over the spendable (transfer/loan-excluded) outflows.
+    """Run live detection over the spendable (transfer/loan-excluded) outflows the
+    viewer may see.
 
     Pass ``spendable`` (a preloaded :func:`stats.spendable_transactions`) to reuse
     a scan the caller already did — e.g. the HA metrics collector, which needs the
-    month figures off the same list. Omit it for a self-contained single scan.
+    month figures off the same list. Omit it for a self-contained single scan;
+    ``viewer_id=None`` then scopes it household-only (the safe default).
     """
     if spendable is None:
-        spendable = stats.spendable_transactions(session)
+        spendable = stats.spendable_transactions(session, viewer_id=viewer_id)
 
     return find_subscriptions(
         spendable,
@@ -75,18 +78,19 @@ def subscription_overview(
     settings: Settings,
     *,
     today: date,
+    viewer_id: int | None = None,
     spendable: list[Transaction] | None = None,
 ) -> list[SubscriptionView]:
     """Every detected subscription paired with its stored verdict, largest
     monthly cost first (inherited from detection order).
 
-    ``spendable`` is threaded through to :func:`detect` so a caller that already
-    loaded the spendable scan (the HA collector) need not repeat it."""
+    ``viewer_id`` / ``spendable`` are threaded through to :func:`detect` so a caller
+    that already loaded the spendable scan (the HA collector) need not repeat it."""
     verdicts = list_verdicts(session)
 
     return [
         SubscriptionView(d, verdicts.get(d.merchant))
-        for d in detect(session, settings, today=today, spendable=spendable)
+        for d in detect(session, settings, today=today, viewer_id=viewer_id, spendable=spendable)
     ]
 
 

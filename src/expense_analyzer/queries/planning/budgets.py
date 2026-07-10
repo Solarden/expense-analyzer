@@ -147,7 +147,11 @@ class BudgetStatus:
 
 
 def budget_overview(
-    session: Session, month: str, *, spendable: list[Transaction] | None = None
+    session: Session,
+    month: str,
+    *,
+    viewer_id: int | None = None,
+    spendable: list[Transaction] | None = None,
 ) -> list[BudgetStatus]:
     """Every budgeted category's limit vs its actual spending in ``month``.
 
@@ -173,7 +177,7 @@ def budget_overview(
         c.id: c.name for c in session.exec(select(Category)).all() if c.id is not None
     }
     if spendable is None:
-        spendable = stats.spendable_transactions(session)
+        spendable = stats.spendable_transactions(session, viewer_id=viewer_id)
     # Transfer/loan-excluded month spend per category (the pure summary is cheap;
     # the DB scan it walks is what `spendable` lets the caller share).
     summary = stats.month_summary(spendable, month, category_names)

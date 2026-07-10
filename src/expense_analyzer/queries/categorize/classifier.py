@@ -29,6 +29,7 @@ from sqlmodel import Session, col, select
 from expense_analyzer.classifier import Classifier, Prediction, TrainingSample, build_text, train
 from expense_analyzer.config import Settings, get_settings
 from expense_analyzer.models import Category, CategoryKind, Transaction, TxSource
+from expense_analyzer.queries.visibility import visible_to
 
 # Categories the classifier learns and predicts. Transfers are handled by transfer
 # linking, not categorization, so a transfer-kind category is neither a label nor a
@@ -184,19 +185,28 @@ def classify(session: Session, *, settings: Settings | None = None) -> ClassifyR
 
 
 def review_queue(
-    session: Session, *, page: int, page_size: int, settings: Settings | None = None
+    session: Session,
+    *,
+    page: int,
+    page_size: int,
+    viewer_id: int | None = None,
+    settings: Settings | None = None,
 ) -> QueuePage:
-    """One page of uncategorized transactions (newest first) with the classifier's
-    suggestion attached to each. The model is trained once for the whole page;
-    ``trained`` is ``False`` on a cold start, in which case suggestions are ``None``.
+    """One page of uncategorized transactions the viewer may see (newest first) with
+    the classifier's suggestion attached to each. The model is trained once for the
+    whole page; ``trained`` is ``False`` on a cold start, so suggestions are ``None``.
     """
     settings = settings or get_settings()
     page = max(1, page)
 
-    total = session.exec(_candidate_filter(select(func.count()).select_from(Transaction))).one()
+    total = session.exec(
+        visible_to(
+            _candidate_filter(select(func.count()).select_from(Transaction)), viewer_id=viewer_id
+        )
+    ).one()
 
     rows = session.exec(
-        _candidate_filter(select(Transaction))
+        visible_to(_candidate_filter(select(Transaction)), viewer_id=viewer_id)
         .order_by(col(Transaction.booked_date).desc(), col(Transaction.id).desc())
         .offset((page - 1) * page_size)
         .limit(page_size)

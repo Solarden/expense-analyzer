@@ -2,7 +2,8 @@
 
 from sqlmodel import Session, col, func, select, update
 
-from expense_analyzer.models import Account, Owner, Transaction
+from expense_analyzer.clock import utc_now
+from expense_analyzer.models import Account, Owner, Scope, Transaction
 
 
 def get(session: Session, user_id: int) -> Owner | None:
@@ -86,15 +87,26 @@ def set_password(session: Session, user: Owner, *, password: str) -> Owner:
 
 
 def delete_user(session: Session, user: Owner) -> None:
-    """Delete a login identity, keeping the household data they imported.
+    """Delete a login identity, keeping the shared household data they imported.
 
-    ``owner_id`` on accounts/transactions is just a "who imported" tag, so it is
-    nulled out (one bulk UPDATE each) rather than cascade-deleting real financial
-    rows — and to satisfy the foreign key (enforced on both dialects; SQLite
-    needs the per-connection ``foreign_keys=ON`` from db.py)."""
-    session.exec(update(Account).where(col(Account.owner_id) == user.id).values(owner_id=None))
+    Split by scope so no row is left broken (``owner_id`` is a real FK, enforced
+    on both dialects — SQLite via the per-connection ``foreign_keys=ON`` in db.py):
+
+    - **Household** transactions and accounts are shared, so they stay; only the
+      "who imported" ``owner_id`` tag is nulled.
+    - **Private** transactions belong to this user alone — left owner-less they
+      would be invisible to everyone and desync balances, so they are soft-deleted
+      (``deleted_at``) and their ``owner_id`` cleared: they leave with the user."""
     session.exec(
-        update(Transaction).where(col(Transaction.owner_id) == user.id).values(owner_id=None)
+        update(Transaction)
+        .where(col(Transaction.owner_id) == user.id, col(Transaction.scope) == Scope.private)
+        .values(deleted_at=utc_now(), owner_id=None)
     )
+    session.exec(
+        update(Transaction)
+        .where(col(Transaction.owner_id) == user.id, col(Transaction.scope) == Scope.household)
+        .values(owner_id=None)
+    )
+    session.exec(update(Account).where(col(Account.owner_id) == user.id).values(owner_id=None))
     session.delete(user)
     session.commit()

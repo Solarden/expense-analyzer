@@ -7,9 +7,11 @@ See internal_docs/expense-analyzer-design.md §5. Decisions baked in here:
 - Every transaction carries a ``fingerprint`` (unique) for import idempotency
   and belongs to an :class:`ImportBatch` so a bad import rolls back in one move.
 - Soft delete via ``deleted_at`` — nothing is ever truly destroyed.
-- ``scope`` is an analytical tag (private vs household), **not** a permission.
-- ``owner_id``, ``confidence`` and ``source`` exist from v1 so the later
-  multi-user and auto-categorization work needs no migration.
+- ``scope`` (private vs household) and ``owner_id`` are the per-user segregation
+  axis: enforced as a permission by
+  :func:`expense_analyzer.queries.visibility.visible_to` — a member's private rows
+  are hidden from everyone else.
+- ``confidence`` and ``source`` exist from v1 so auto-categorization needs no migration.
 
 Importing this module registers all tables on ``SQLModel.metadata``, which is
 what Alembic autogenerate targets.
@@ -58,10 +60,22 @@ class InstallmentType(StrEnum):
 
 
 class Scope(StrEnum):
-    """Analytical tag on a transaction. Not a permission (see design §1)."""
+    """Whether a transaction is a member's **private** row or part of the shared
+    **household** budget. Enforced as a real permission via the per-viewer
+    :func:`expense_analyzer.queries.visibility.visible_to` boundary."""
 
     private = "private"
     household = "household"
+
+
+class Lens(StrEnum):
+    """A viewer's chosen slice of what they may see: everything they're allowed to
+    (``all``), only their own ``private`` rows, or only the shared ``home`` budget.
+    Narrows *within* the ``visible_to`` boundary, never past it."""
+
+    all = "all"
+    private = "private"
+    home = "home"
 
 
 class SubscriptionStatus(StrEnum):
@@ -82,15 +96,14 @@ class TxSource(StrEnum):
 
 
 class Owner(SQLModel, table=True):
-    """A login identity. Originally the multi-user hook for ``owner_id``; now
-    also the authenticatable user (username + password).
+    """A login identity (username + password) that also owns transactions.
 
-    Data stays a single shared household view — every active user sees the same
-    transactions (design's "scope is a tag, not a permission" still holds, and
-    ``owner_id`` stays an analytical "who imported" tag, not a filter). The one
-    distinction is ``is_admin``: a *soft* role gating user management (add/delete
-    users, toggle active), not data isolation. The first user created (CLI
-    bootstrap, while the table is empty) becomes admin; everyone after does not.
+    Each member sees their own ``private`` rows plus every ``household`` row, and
+    never another member's private rows — enforced by
+    :func:`expense_analyzer.queries.visibility.visible_to`. ``is_admin`` is a
+    *soft* role gating user management (add/delete users, toggle active), separate
+    from that per-row visibility. The first user created (CLI bootstrap, while the
+    table is empty) becomes admin; everyone after does not.
     """
 
     __tablename__ = "owner"
@@ -111,7 +124,7 @@ class Account(SQLModel, table=True):
     name: str  # friendly label shown in every picker: "PKO checking", "IKE XTB", "Cash"
     number: str | None = Field(default=None)  # bank account number / IBAN, reference only
     type: AccountType
-    owner_id: int | None = Field(default=None, foreign_key="owner.id")
+    owner_id: int | None = Field(default=None, foreign_key="owner.id", index=True)
     currency: str = Field(default="PLN")
     created_at: datetime = Field(default_factory=utc_now)
 
@@ -163,7 +176,7 @@ class Transaction(SQLModel, table=True):
 
     category_id: int | None = Field(default=None, foreign_key="category.id", index=True)
     scope: Scope = Field(default=Scope.private)
-    owner_id: int | None = Field(default=None, foreign_key="owner.id")
+    owner_id: int | None = Field(default=None, foreign_key="owner.id", index=True)
 
     confidence: float | None = Field(default=None)  # categorization confidence (auto-tagging)
     source: TxSource = Field(default=TxSource.import_csv)
@@ -282,21 +295,26 @@ class Budget(SQLModel, table=True):
     overlay on spending — they touch no transaction and need no transfer/loan
     machinery.
 
-    The ``(category_id, month)`` unique constraint guards against duplicate
-    overrides for the same month. ``NULL`` months count as *distinct* (both
-    SQLite and PostgreSQL default to NULLS DISTINCT), so the constraint does
-    **not** stop a second recurring row on its own — the single-writer
-    query layer enforces "one recurring per category" by upserting (find-or-update
-    by category + month) in :func:`expense_analyzer.queries.planning.budgets.set_budget`.
+    The ``(category_id, month, scope)`` unique constraint guards against duplicate
+    overrides for the same month within a scope; ``scope`` keeps a member's
+    **private** category limits separate from the shared **household** ones.
+    ``NULL`` months count as *distinct* (both SQLite and PostgreSQL default to
+    NULLS DISTINCT), so the constraint does **not** stop a second recurring row on
+    its own — the single-writer query layer enforces "one recurring per category"
+    by upserting (find-or-update by category + month + scope) in
+    :func:`expense_analyzer.queries.planning.budgets.set_budget`.
     """
 
     __tablename__ = "budget"
-    __table_args__ = (UniqueConstraint("category_id", "month", name="uq_budget_category_month"),)
+    __table_args__ = (
+        UniqueConstraint("category_id", "month", "scope", name="uq_budget_category_month_scope"),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     category_id: int = Field(foreign_key="category.id", index=True)
     month: str | None = Field(default=None)  # None = recurring default; "YYYY-MM" = override
     limit_amount: int  # minor units, positive
+    scope: Scope = Field(default=Scope.household)  # private vs shared household limits
 
 
 class Subscription(SQLModel, table=True):
