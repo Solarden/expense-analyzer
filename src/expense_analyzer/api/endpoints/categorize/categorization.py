@@ -70,7 +70,7 @@ def queue_page(
     # queued row, keyed by tx id. A suggestion only — fail-safe to {} (cold start,
     # disabled, or model unavailable), so the queue renders either way.
     neighbors = embeddings_queries.neighbor_suggestions(
-        session, [r.transaction for r in result.rows]
+        session, [r.transaction for r in result.rows], viewer_id=user.id
     )
 
     categories = category_queries.list_categories(session)

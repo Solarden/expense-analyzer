@@ -37,15 +37,6 @@
                   {% if f_category == c.id|string %}selected{% endif %}>{{ c.name }}</option>
         {% endfor %}
       </select>
-      <select name="scope"
-              aria-label="Filter by scope"
-              onchange="this.form.submit()"
-              class="flex-1 min-w-[150px]">
-        <option value="">— any scope —</option>
-        {% for s in scopes %}
-          <option value="{{ s }}" {% if s == f_scope %}selected{% endif %}>{{ s }}</option>
-        {% endfor %}
-      </select>
       <input type="search"
              name="q"
              value="{{ f_q }}"
@@ -115,9 +106,7 @@
         <option value="">— none —</option>
         {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
       </select>
-      <select name="scope" aria-label="Scope" class="flex-1 min-w-[120px]">
-        {% for s in scopes %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
-      </select>
+      <select name="scope" aria-label="Scope" class="flex-1 min-w-[120px]">{{ ui.scope_options(scopes, "") }}</select>
       <input type="text"
              name="note"
              placeholder="Note (optional)"
@@ -158,6 +147,7 @@
                 <span class="muted">{{ tx.raw_description }}</span>
                 {% if tx.transfer_group_id %}<span class="muted" title="Internal transfer">⇄ transfer</span>{% endif %}
                 {{ ui.source_badge(tx.source.value) }}
+                {{ ui.household_badge(tx.scope.value) }}
               </td>
               <td class="num {{ 'neg' if tx.amount < 0 else 'pos' }}"
                   data-label="Amount">{{ tx.amount | pln }}</td>
@@ -191,9 +181,7 @@
                         form="cat-{{ tx.id }}"
                         aria-label="Scope"
                         class="w-full md:w-auto md:min-w-[110px]">
-                  {% for s in scopes %}
-                    <option value="{{ s }}" {% if s == tx.scope.value %}selected{% endif %}>{{ s }}</option>
-                  {% endfor %}
+                  {{ ui.scope_options(scopes, tx.scope.value) }}
                 </select>
               </td>
               <td>
@@ -310,11 +298,7 @@
                         {% endfor %}
                       </select>
                       <label for="edit-scope-{{ tx.id }}">Scope</label>
-                      <select id="edit-scope-{{ tx.id }}" name="scope">
-                        {% for s in scopes %}
-                          <option value="{{ s }}" {% if s == tx.scope.value %}selected{% endif %}>{{ s }}</option>
-                        {% endfor %}
-                      </select>
+                      <select id="edit-scope-{{ tx.id }}" name="scope">{{ ui.scope_options(scopes, tx.scope.value) }}</select>
                       <label for="edit-note-{{ tx.id }}">Note</label>
                       <textarea id="edit-note-{{ tx.id }}"
                                 name="note"
@@ -352,7 +336,13 @@
       </div>
     {% else %}
       <p class="muted">
-        No transactions match. <a href="/dashboard/transactions">Clear filters</a> or <a href="/dashboard/upload">import a CSV →</a>
+        {% if lens.value == 'private' %}
+          Nothing private yet — set a transaction's scope to <strong>Private</strong> to keep it off the shared home budget.
+        {% elif lens.value == 'home' %}
+          Nothing in the home budget yet — mark a transaction <strong>Household (shared)</strong> to add it.
+        {% else %}
+          No transactions match. <a href="/dashboard/transactions">Clear filters</a> or <a href="/dashboard/upload">import a CSV →</a>
+        {% endif %}
       </p>
     {% endif %}
   </div>

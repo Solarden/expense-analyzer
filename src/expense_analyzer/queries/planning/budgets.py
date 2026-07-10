@@ -19,17 +19,18 @@ from dataclasses import dataclass
 
 from sqlmodel import Session, col, select
 
-from expense_analyzer.models import Budget, Category, CategoryKind, Transaction
+from expense_analyzer.models import Budget, Category, CategoryKind, Lens, Scope, Transaction
 from expense_analyzer.queries.money import stats
 
 
-def list_budgets(session: Session) -> list[Budget]:
-    """All budgets, recurring defaults first then overrides, by category id."""
-    return list(
-        session.exec(
-            select(Budget).order_by(col(Budget.category_id), col(Budget.month).nulls_first())
-        ).all()
-    )
+def list_budgets(session: Session, *, scope: Scope | None = None) -> list[Budget]:
+    """All budgets (optionally just one ``scope``), recurring defaults first then
+    overrides, by category id."""
+    stmt = select(Budget).order_by(col(Budget.category_id), col(Budget.month).nulls_first())
+    if scope is not None:
+        stmt = stmt.where(Budget.scope == scope)
+
+    return list(session.exec(stmt).all())
 
 
 def get_budget(session: Session, budget_id: int) -> Budget | None:
@@ -37,15 +38,21 @@ def get_budget(session: Session, budget_id: int) -> Budget | None:
 
 
 def set_budget(
-    session: Session, *, category_id: int, month: str | None, limit_amount: int
+    session: Session,
+    *,
+    category_id: int,
+    month: str | None,
+    limit_amount: int,
+    scope: Scope = Scope.household,
 ) -> Budget:
-    """Create or update the budget for ``(category_id, month)``.
+    """Create or update the budget for ``(category_id, month, scope)``.
 
-    ``month`` is ``None`` for the recurring default or a ``"YYYY-MM"`` override.
+    ``month`` is ``None`` for the recurring default or a ``"YYYY-MM"`` override;
+    ``scope`` separates a member's private limits from the shared household ones.
     Re-setting an existing slot updates its limit rather than inserting a second
     row (the single-writer guard against duplicates — see module docstring).
     """
-    stmt = select(Budget).where(Budget.category_id == category_id)
+    stmt = select(Budget).where(Budget.category_id == category_id, Budget.scope == scope)
     stmt = (
         stmt.where(col(Budget.month).is_(None))
         if month is None
@@ -54,7 +61,9 @@ def set_budget(
     budget = session.exec(stmt).first()
 
     if budget is None:
-        budget = Budget(category_id=category_id, month=month, limit_amount=limit_amount)
+        budget = Budget(
+            category_id=category_id, month=month, limit_amount=limit_amount, scope=scope
+        )
     else:
         budget.limit_amount = limit_amount
     session.add(budget)
@@ -150,6 +159,7 @@ def budget_overview(
     session: Session,
     month: str,
     *,
+    scope: Scope = Scope.household,
     viewer_id: int | None = None,
     spendable: list[Transaction] | None = None,
 ) -> list[BudgetStatus]:
@@ -169,7 +179,7 @@ def budget_overview(
     a scan the caller already did — e.g. the HA metrics collector, which needs the
     month figures anyway. Omit it for a self-contained single scan.
     """
-    limits = effective_limits(list_budgets(session), month)
+    limits = effective_limits(list_budgets(session, scope=scope), month)
     if not limits:
         return []
 
@@ -177,7 +187,10 @@ def budget_overview(
         c.id: c.name for c in session.exec(select(Category)).all() if c.id is not None
     }
     if spendable is None:
-        spendable = stats.spendable_transactions(session, viewer_id=viewer_id)
+        # Spend must match the limits' scope: household budgets track household
+        # spend; private budgets track the viewer's own private spend.
+        spend_lens = Lens.home if scope is Scope.household else Lens.private
+        spendable = stats.spendable_transactions(session, viewer_id=viewer_id, lens=spend_lens)
     # Transfer/loan-excluded month spend per category (the pure summary is cheap;
     # the DB scan it walks is what `spendable` lets the caller share).
     summary = stats.month_summary(spendable, month, category_names)

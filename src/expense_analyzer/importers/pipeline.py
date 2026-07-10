@@ -126,7 +126,7 @@ def run_import(
     if new:
         try:
             auto_linked, _ = detect_and_autolink(
-                session, window_days=get_settings().transfer_window_days
+                session, window_days=get_settings().transfer_window_days, viewer_id=owner_id
             )
         except Exception:  # noqa: BLE001 — convenience step, never fail the import
             log.exception("transfer auto-link failed after import; rows are committed")

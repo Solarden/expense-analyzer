@@ -17,3 +17,20 @@
           title="Categorized by: {{ source }}">{{ source }}</span>
   {%- endif -%}
 {%- endmacro %}
+{# A "shared" pill on household-scoped rows so it's clear at a glance which
+   transactions count toward the shared home budget (vs a member's private ones).
+   Nothing is shown for private rows. Plain palette utilities (run `make css`). #}
+{% macro household_badge(scope) -%}
+  {%- if scope == "household" -%}
+    <span class="rounded border px-1.5 py-0.5 text-[11px] align-middle border-accent text-accent"
+          title="Shared with the household — counts toward the home budget">shared</span>
+  {%- endif -%}
+{%- endmacro %}
+{# Scope <option>s with friendly labels (submitted values stay private/household).
+   ``selected`` is the current value; pass "" for a new-row form (defaults to Private). #}
+{% macro scope_options(scopes, selected) -%}
+  {%- for s in scopes -%}
+    <option value="{{ s }}"{{ ' selected' if s == selected else '' }}>{{ "Household (shared)" if s == "household" else "Private" }}
+    </option>
+  {%- endfor -%}
+{%- endmacro %}

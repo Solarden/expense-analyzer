@@ -94,26 +94,35 @@ def _learnable_category_ids(session: Session) -> set[int]:
     return {c.id for c in rows if c.id is not None}
 
 
-def confirmed_label_texts(session: Session) -> list[tuple[str, int]]:
-    """``(feature text, category id)`` for every confirmed label — the shared training
-    set for the classifier (layer 2) and the embeddings neighbours (layer 3, see
+def confirmed_label_texts(
+    session: Session, *, viewer_id: int | None = None
+) -> list[tuple[str, int]]:
+    """``(feature text, category id)`` for confirmed labels — the training set for the
+    classifier (layer 2) and the embeddings neighbours (layer 3, see
     :mod:`expense_analyzer.queries.categorize.embeddings`).
 
     Confirmed = non-deleted rows with an expense/income category set by a human or a
     rule (``source in {manual, rule}``). The classifier's own guesses
     (``source = classifier``) are excluded so neither layer learns from machine
-    output — a human or a rule has to vouch for a label first."""
+    output — a human or a rule has to vouch for a label first.
+
+    With ``viewer_id`` given, the set is restricted to labels that viewer may see
+    (:func:`visible_to`) — the per-viewer embeddings neighbours use this so another
+    member's private description never surfaces as a "Similar to" hint. With
+    ``viewer_id=None`` (the classifier) the whole confirmed set is used: that model
+    only ever outputs a category id on the user's *own* row, so it needs no split."""
     learnable = _learnable_category_ids(session)
     if not learnable:
         return []
 
-    rows = session.exec(
-        select(Transaction).where(
-            col(Transaction.deleted_at).is_(None),
-            col(Transaction.category_id).in_(learnable),
-            col(Transaction.source).in_([TxSource.manual, TxSource.rule]),
-        )
-    ).all()
+    query = select(Transaction).where(
+        col(Transaction.deleted_at).is_(None),
+        col(Transaction.category_id).in_(learnable),
+        col(Transaction.source).in_([TxSource.manual, TxSource.rule]),
+    )
+    if viewer_id is not None:
+        query = visible_to(query, viewer_id=viewer_id)
+    rows = session.exec(query).all()
 
     return [
         (build_text(r.merchant_normalized, r.raw_description), r.category_id)

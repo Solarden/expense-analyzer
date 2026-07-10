@@ -230,6 +230,10 @@ def test_import_auto_links_cross_account_transfer(
     make_account: Callable[..., Account],
     make_importer: Callable[..., Importer],
 ):
+    # Imports stamp the uploader as owner and auto-link runs as that viewer, so a
+    # user's own (default-private) transfer legs still pair — mirroring production,
+    # where the upload endpoint passes owner_id=user.id.
+    alice = users.create_user(db_session, username="alice", name="Alice", password="pw")
     other = make_account(name="mBank")
 
     # Outflow lands on the first account; its equal-and-opposite counterpart
@@ -240,6 +244,7 @@ def test_import_auto_links_cross_account_transfer(
         importer=make_importer([NormalizedTransaction(date(2026, 5, 1), -200000, "Transfer out")]),
         filename="a.csv",
         data=b"",
+        owner_id=alice.id,
     )
     summary = run_import(
         db_session,
@@ -247,6 +252,7 @@ def test_import_auto_links_cross_account_transfer(
         importer=make_importer([NormalizedTransaction(date(2026, 5, 2), 200000, "Transfer in")]),
         filename="b.csv",
         data=b"",
+        owner_id=alice.id,
     )
 
     assert summary.transfers_auto_linked == 1

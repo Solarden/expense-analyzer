@@ -371,3 +371,34 @@ def test_member_cannot_see_another_members_private_transaction(
     # ...and can't reach it directly by id (IDOR closed).
     edit = client.get(f"/dashboard/transactions/{alice_private.id}/edit", follow_redirects=False)
     assert edit.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_lens_switcher_scopes_the_list_and_persists(
+    auth_client: TestClient,
+    db_session: Session,
+    account: Account,
+    make_transaction: Callable[..., Transaction],
+):
+    """The global lens re-scopes the list and sticks across requests (session-backed)."""
+    tester = users.get_by_username(db_session, "tester")
+    make_transaction(
+        account_id=account.id,
+        amount=-11,
+        owner_id=tester.id,
+        scope=Scope.private,
+        raw_description="MY-PRIVATE",
+    )
+    make_transaction(account_id=account.id, amount=-22, raw_description="THE-HOUSEHOLD")
+
+    both = auth_client.get("/dashboard/transactions?lens=all").text
+    assert "MY-PRIVATE" in both and "THE-HOUSEHOLD" in both
+
+    home = auth_client.get("/dashboard/transactions?lens=home").text
+    assert "THE-HOUSEHOLD" in home and "MY-PRIVATE" not in home
+
+    private = auth_client.get("/dashboard/transactions?lens=private").text
+    assert "MY-PRIVATE" in private and "THE-HOUSEHOLD" not in private
+
+    # No ?lens= this time: the session remembers the last choice (private).
+    persisted = auth_client.get("/dashboard/transactions").text
+    assert "MY-PRIVATE" in persisted and "THE-HOUSEHOLD" not in persisted

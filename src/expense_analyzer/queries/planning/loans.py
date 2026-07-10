@@ -34,6 +34,8 @@ from expense_analyzer.models import (
     RateType,
     Transaction,
 )
+from expense_analyzer.queries.money.transactions import _get_visible
+from expense_analyzer.queries.visibility import visible_to
 
 
 def list_loans(session: Session) -> list[Loan]:
@@ -217,12 +219,17 @@ def outstanding_principal(
 
 
 def linked_payments(session: Session, loan_id: int) -> list[Transaction]:
-    """Non-deleted transactions linked to this loan as installment payments."""
+    """Non-deleted household transactions linked to this loan as installment
+    payments. Loans are household-shared, so scoped household-only (viewer_id=None) —
+    another member's private row can never surface as a loan payment."""
     return list(
         session.exec(
-            select(Transaction).where(
-                Transaction.loan_id == loan_id,
-                col(Transaction.deleted_at).is_(None),
+            visible_to(
+                select(Transaction).where(
+                    Transaction.loan_id == loan_id,
+                    col(Transaction.deleted_at).is_(None),
+                ),
+                viewer_id=None,
             )
         ).all()
     )
@@ -247,8 +254,10 @@ def link_payment(session: Session, *, loan_id: int, tx_id: int, installment_inde
     """Pin a transaction to a loan installment. Returns False if either is missing
     or the transaction is already linked to a loan."""
     loan = session.get(Loan, loan_id)
-    tx = session.get(Transaction, tx_id)
-    if loan is None or tx is None or tx.deleted_at is not None:
+    # Household-only: a loan is shared, so only household transactions may be pinned
+    # as payments (viewer_id=None); another member's private tx is invisible here.
+    tx = _get_visible(session, tx_id, viewer_id=None)
+    if loan is None or tx is None:
         return False
     if tx.loan_id is not None:
         return False
@@ -263,7 +272,7 @@ def link_payment(session: Session, *, loan_id: int, tx_id: int, installment_inde
 
 def unlink_payment(session: Session, tx_id: int) -> bool:
     """Unpin a transaction from its loan installment."""
-    tx = session.get(Transaction, tx_id)
+    tx = _get_visible(session, tx_id, viewer_id=None)
     if tx is None or tx.loan_id is None:
         return False
 
@@ -310,11 +319,14 @@ def suggest_payments(
         if tx.loan_installment_index is not None
     }
     candidates = session.exec(
-        select(Transaction).where(
-            col(Transaction.deleted_at).is_(None),
-            col(Transaction.loan_id).is_(None),
-            Transaction.amount < 0,
-            Transaction.account_id != loan.account_id,
+        visible_to(
+            select(Transaction).where(
+                col(Transaction.deleted_at).is_(None),
+                col(Transaction.loan_id).is_(None),
+                Transaction.amount < 0,
+                Transaction.account_id != loan.account_id,
+            ),
+            viewer_id=None,
         )
     ).all()
 

@@ -23,7 +23,7 @@ from sqlmodel import Session
 
 from expense_analyzer.clock import local_today
 from expense_analyzer.config import Settings, get_settings
-from expense_analyzer.models import Account, Category, Transaction
+from expense_analyzer.models import Account, Category, Lens, Transaction
 from expense_analyzer.ollama import OllamaClient, OllamaError
 from expense_analyzer.queries.categorize.categories import list_categories
 from expense_analyzer.queries.core.accounts import list_accounts
@@ -181,11 +181,13 @@ def _breakdown(
     return []
 
 
-def run_query(session: Session, spec: QuerySpec, *, viewer_id: int | None = None) -> QueryResult:
+def run_query(
+    session: Session, spec: QuerySpec, *, viewer_id: int | None = None, lens: Lens = Lens.all
+) -> QueryResult:
     """Filter :func:`spendable_transactions` (transfers/loans already excluded) by
     ``spec`` in pure Python, then total + bucket. Scoped to what ``viewer_id`` may
-    see. ``interpretation`` is filled by :func:`answer`."""
-    spendable = spendable_transactions(session, viewer_id=viewer_id)
+    see under ``lens``. ``interpretation`` is filled by :func:`answer`."""
+    spendable = spendable_transactions(session, viewer_id=viewer_id, lens=lens)
     matches = [tx for tx in spendable if _matches(tx, spec)]
     total = sum(abs(tx.amount) for tx in matches)
     rows = sorted(matches, key=lambda t: t.booked_date, reverse=True)[:_MAX_ROWS]
@@ -218,6 +220,7 @@ def answer(
     question: str,
     *,
     viewer_id: int | None = None,
+    lens: Lens = Lens.all,
     settings: Settings | None = None,
     client: OllamaClient | None = None,
 ) -> QueryResult:
@@ -245,6 +248,8 @@ def answer(
         return _failed(_COULDNT_INTERPRET)
 
     # A no-filter spec is a valid broad total — only a real parse failure is not-ok.
-    result = run_query(session, build_spec(raw, categories, accounts), viewer_id=viewer_id)
+    result = run_query(
+        session, build_spec(raw, categories, accounts), viewer_id=viewer_id, lens=lens
+    )
 
     return replace(result, interpretation=interpretation.strip())

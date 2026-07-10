@@ -7,6 +7,7 @@
       {% block title %}Expense Analyzer{% endblock %}
     </title>
     <link rel="stylesheet" href="/static/app.css">
+    <link rel="icon" href="/static/favicon.svg">
   </head>
   <body>
     {# Icon sprite: stroke-only paths (no fill/stroke attrs) so they inherit
@@ -148,6 +149,29 @@
           {% endfor %}
         </nav>
         <div class="userbox">
+          {# Global analytical lens (All / Private / Home budget). JS-free auto-submit
+             (same idiom as the filter bar); persisted in the session so it sticks
+             across pages. Hidden inputs carry the current query so switching the lens
+             keeps the page's other filters. #}
+          <form class="hstack" method="get">
+            {% for key, value in request.query_params.multi_items() if key != 'lens' %}
+              <input type="hidden" name="{{ key }}" value="{{ value }}">
+            {% endfor %}
+            <select name="lens"
+                    aria-label="Budget view"
+                    onchange="this.form.submit()"
+                    class="min-w-[120px]">
+              <option value="all"{{ ' selected' if lens.value == 'all' else '' }}>All
+              </option>
+              <option value="private"{{ ' selected' if lens.value == 'private' else '' }}>Private
+              </option>
+              <option value="home"{{ ' selected' if lens.value == 'home' else '' }}>Home budget
+              </option>
+            </select>
+            <noscript>
+              <button class="linkbtn" type="submit">View</button>
+            </noscript>
+          </form>
           <span>{{ user.name }}</span>
           <form class="hstack" method="post" action="/logout">
             <button class="linkbtn" type="submit">Log out</button>

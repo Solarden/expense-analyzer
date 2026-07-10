@@ -33,7 +33,7 @@ def transfers_page(
     # Suggestions are recomputed live (read-only) so a GET never mutates state;
     # auto-linking happens only on import or an explicit rescan.
     result = find_transfer_pairs(
-        transfer_queries.unmatched_candidates(session),
+        transfer_queries.unmatched_candidates(session, viewer_id=user.id),
         window_days=get_settings().transfer_window_days,
     )
 
@@ -43,7 +43,7 @@ def transfers_page(
         {
             "user": user,
             "suggestions": result.ambiguous,
-            "groups": transfer_queries.list_transfer_groups(session),
+            "groups": transfer_queries.list_transfer_groups(session, viewer_id=user.id),
             "accounts": {a.id: a.name for a in accounts.list_accounts(session)},
             "flash": flash,
         },
@@ -53,9 +53,15 @@ def transfers_page(
 @router.post("/confirm")
 def confirm_transfer(
     form: Annotated[TransferConfirmForm, Form()],
+    user: CurrentUser,
     session: DbSession,
 ) -> RedirectResponse:
-    if transfer_queries.link_transfer(session, tx_a_id=form.tx_a_id, tx_b_id=form.tx_b_id) is None:
+    if (
+        transfer_queries.link_transfer(
+            session, tx_a_id=form.tx_a_id, tx_b_id=form.tx_b_id, viewer_id=user.id
+        )
+        is None
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="not a valid transfer pair"
         )
@@ -64,9 +70,9 @@ def confirm_transfer(
 
 
 @router.post("/rescan")
-def rescan_transfers(session: DbSession) -> RedirectResponse:
+def rescan_transfers(user: CurrentUser, session: DbSession) -> RedirectResponse:
     linked, _ = transfer_queries.detect_and_autolink(
-        session, window_days=get_settings().transfer_window_days
+        session, window_days=get_settings().transfer_window_days, viewer_id=user.id
     )
 
     return RedirectResponse(
@@ -76,7 +82,7 @@ def rescan_transfers(session: DbSession) -> RedirectResponse:
 
 
 @router.post("/{group_id}/unlink")
-def unlink_transfer(group_id: str, session: DbSession) -> RedirectResponse:
-    transfer_queries.unlink_transfer(session, group_id)
+def unlink_transfer(group_id: str, user: CurrentUser, session: DbSession) -> RedirectResponse:
+    transfer_queries.unlink_transfer(session, group_id, viewer_id=user.id)
 
     return RedirectResponse("/dashboard/transfers", status_code=status.HTTP_303_SEE_OTHER)

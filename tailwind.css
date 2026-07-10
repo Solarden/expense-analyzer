@@ -71,7 +71,7 @@
    * (absolute) so it never shifts the page, and sits flush under the trigger
    * (top-full, no gap) so the mouse can cross into it without the hover dropping. */
   header nav .nav-group {
-    @apply relative;
+    @apply relative inline-flex items-center;
   }
   header nav .nav-trigger {
     @apply inline-flex cursor-pointer select-none items-center gap-1 text-[12px] leading-none text-muted;
@@ -366,7 +366,8 @@
   .modal {
     @apply hidden;
   }
-  .modal:target {
+  .modal:target,
+  .modal.is-open {
     @apply fixed inset-0 z-50 flex items-center justify-center p-4;
   }
   .modal-backdrop {
@@ -414,6 +415,7 @@
     display: flex;
   }
   header nav .nav-group {
+    display: block;
     width: 100%;
   }
   /* The trigger becomes a plain group heading; drop its dropdown caret. */

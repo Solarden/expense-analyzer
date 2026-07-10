@@ -33,7 +33,9 @@ from sqlmodel import Session, col, delete, select
 from expense_analyzer.clock import local_today, utc_now
 from expense_analyzer.loans import LoanScheduleError, Schedule, ScheduleRow
 from expense_analyzer.models import PlannedItem, PlannedItemPayment, Transaction
+from expense_analyzer.queries.money.transactions import _get_visible
 from expense_analyzer.queries.planning import loans as loan_queries
+from expense_analyzer.queries.visibility import visible_to
 
 
 def list_planned_items(session: Session, *, active_only: bool = False) -> list[PlannedItem]:
@@ -237,10 +239,12 @@ def link_transaction(session: Session, *, planned_item_id: int, month: str, tx_i
     linked to another planned item/month. Loan-backed items don't link here — their
     payment is managed in Loans (see module docstring)."""
     item = session.get(PlannedItem, planned_item_id)
-    tx = session.get(Transaction, tx_id)
+    # The plan is household-shared, so only household transactions may be linked
+    # (viewer_id=None). Another member's private tx is invisible here → not linkable.
+    tx = _get_visible(session, tx_id, viewer_id=None)
     if item is None or item.loan_id is not None:
         return False
-    if tx is None or tx.deleted_at is not None or tx.loan_id is not None:
+    if tx is None or tx.loan_id is not None:
         return False
     if _is_tx_linked(session, tx_id, exclude=(planned_item_id, month)):
         return False
@@ -304,9 +308,9 @@ def last_linked_amount(session: Session, planned_item_id: int, *, before_month: 
     if payment is None or payment.transaction_id is None:
         return None
 
-    tx = session.get(Transaction, payment.transaction_id)
+    tx = _get_visible(session, payment.transaction_id, viewer_id=None)
 
-    return abs(tx.amount) if tx is not None and tx.deleted_at is None else None
+    return abs(tx.amount) if tx is not None else None
 
 
 def _due_date(month: str, due_day: int) -> date:
@@ -429,7 +433,10 @@ def plan_overview(session: Session, month: str, *, today: date | None = None) ->
         {
             tx.id: tx
             for tx in session.exec(
-                select(Transaction).where(col(Transaction.id).in_(linked_tx_ids))
+                visible_to(
+                    select(Transaction).where(col(Transaction.id).in_(linked_tx_ids)),
+                    viewer_id=None,
+                )
             ).all()
         }
         if linked_tx_ids
@@ -599,11 +606,14 @@ def suggest_links(
     candidates = [
         tx
         for tx in session.exec(
-            select(Transaction).where(
-                col(Transaction.deleted_at).is_(None),
-                col(Transaction.loan_id).is_(None),
-                Transaction.booked_date >= lo,
-                Transaction.booked_date < hi,
+            visible_to(
+                select(Transaction).where(
+                    col(Transaction.deleted_at).is_(None),
+                    col(Transaction.loan_id).is_(None),
+                    Transaction.booked_date >= lo,
+                    Transaction.booked_date < hi,
+                ),
+                viewer_id=None,
             )
         ).all()
         if tx.id not in linked

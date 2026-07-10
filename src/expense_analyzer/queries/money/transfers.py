@@ -18,21 +18,26 @@ from uuid import uuid4
 from sqlmodel import Session, col, select
 
 from expense_analyzer.models import Category, CategoryKind, Transaction
+from expense_analyzer.queries.money.transactions import _get_visible
+from expense_analyzer.queries.visibility import visible_to
 from expense_analyzer.transfers import DetectionResult, find_transfer_pairs
 
 TRANSFER_CATEGORY_NAME = "Transfer"
 
 
-def unmatched_candidates(session: Session) -> list[Transaction]:
-    """Non-deleted transactions not yet part of a transfer group."""
-    return list(
-        session.exec(
-            select(Transaction).where(
-                col(Transaction.deleted_at).is_(None),
-                col(Transaction.transfer_group_id).is_(None),
-            )
-        ).all()
+def unmatched_candidates(session: Session, *, viewer_id: int | None = None) -> list[Transaction]:
+    """Non-deleted transactions the viewer may see that aren't yet in a transfer
+    group. Viewer-scoped so another member's private legs are never offered as a
+    transfer candidate (``viewer_id=None`` → household-only)."""
+    query = visible_to(
+        select(Transaction).where(
+            col(Transaction.deleted_at).is_(None),
+            col(Transaction.transfer_group_id).is_(None),
+        ),
+        viewer_id=viewer_id,
     )
+
+    return list(session.exec(query).all())
 
 
 def ensure_transfer_category(session: Session) -> Category:
@@ -53,7 +58,9 @@ def ensure_transfer_category(session: Session) -> Category:
     return category
 
 
-def link_transfer(session: Session, *, tx_a_id: int, tx_b_id: int) -> str | None:
+def link_transfer(
+    session: Session, *, tx_a_id: int, tx_b_id: int, viewer_id: int | None = None
+) -> str | None:
     """Link two transactions as one transfer. Returns the group id, or ``None``.
 
     Returns ``None`` (rather than raising) when the pair is missing or does not
@@ -67,11 +74,11 @@ def link_transfer(session: Session, *, tx_a_id: int, tx_b_id: int) -> str | None
     a human confirming a pair may legitimately link two legs that booked further
     apart than the window, so manual confirmation is allowed to override it.
     """
-    a = session.get(Transaction, tx_a_id)
-    b = session.get(Transaction, tx_b_id)
+    # _get_visible enforces the privacy boundary: a leg the viewer may not see
+    # (another member's private row) reads as absent, so it can't be linked (IDOR).
+    a = _get_visible(session, tx_a_id, viewer_id=viewer_id)
+    b = _get_visible(session, tx_b_id, viewer_id=viewer_id)
     if a is None or b is None:
-        return None
-    if a.deleted_at is not None or b.deleted_at is not None:
         return None
     if a.transfer_group_id is not None or b.transfer_group_id is not None:
         return None
@@ -89,10 +96,16 @@ def link_transfer(session: Session, *, tx_a_id: int, tx_b_id: int) -> str | None
     return group_id
 
 
-def unlink_transfer(session: Session, group_id: str) -> int:
+def unlink_transfer(session: Session, group_id: str, *, viewer_id: int | None = None) -> int:
     """Undo a transfer link: clear the group on both legs and drop the Transfer
-    category where it points at it. Returns the number of rows touched."""
-    rows = session.exec(select(Transaction).where(Transaction.transfer_group_id == group_id)).all()
+    category where it points at it. Returns the number of rows touched. Viewer-scoped
+    so a member can't unlink a group they can't see (another member's private legs)."""
+    rows = session.exec(
+        visible_to(
+            select(Transaction).where(Transaction.transfer_group_id == group_id),
+            viewer_id=viewer_id,
+        )
+    ).all()
     if not rows:
         return 0
 
@@ -110,15 +123,19 @@ def unlink_transfer(session: Session, group_id: str) -> int:
     return len(rows)
 
 
-def list_transfer_groups(session: Session) -> list[list[Transaction]]:
-    """Confirmed transfer groups, each a list of its legs, newest first."""
+def list_transfer_groups(
+    session: Session, *, viewer_id: int | None = None
+) -> list[list[Transaction]]:
+    """Confirmed transfer groups the viewer may see, each a list of its legs, newest
+    first (``viewer_id=None`` → household-only)."""
     rows = session.exec(
-        select(Transaction)
-        .where(
-            col(Transaction.deleted_at).is_(None),
-            col(Transaction.transfer_group_id).is_not(None),
-        )
-        .order_by(col(Transaction.transfer_group_id))
+        visible_to(
+            select(Transaction).where(
+                col(Transaction.deleted_at).is_(None),
+                col(Transaction.transfer_group_id).is_not(None),
+            ),
+            viewer_id=viewer_id,
+        ).order_by(col(Transaction.transfer_group_id))
     ).all()
 
     groups = [list(legs) for _, legs in groupby(rows, key=lambda t: t.transfer_group_id)]
@@ -127,16 +144,24 @@ def list_transfer_groups(session: Session) -> list[list[Transaction]]:
     return groups
 
 
-def detect_and_autolink(session: Session, *, window_days: int) -> tuple[int, DetectionResult]:
-    """Run detection over all unmatched candidates, auto-linking the unambiguous
-    pairs. Returns ``(auto_linked_count, result)`` so the caller can also surface
-    the ambiguous suggestions. Auto pairs are vertex-disjoint (mutual uniqueness),
-    so linking them in sequence is safe."""
-    result = find_transfer_pairs(unmatched_candidates(session), window_days=window_days)
+def detect_and_autolink(
+    session: Session, *, window_days: int, viewer_id: int | None = None
+) -> tuple[int, DetectionResult]:
+    """Run detection over the viewer's unmatched candidates, auto-linking the
+    unambiguous pairs. Returns ``(auto_linked_count, result)`` so the caller can also
+    surface the ambiguous suggestions. Auto pairs are vertex-disjoint (mutual
+    uniqueness), so linking them in sequence is safe. At import ``viewer_id`` is the
+    uploading user, so their own private transfers still auto-link."""
+    result = find_transfer_pairs(
+        unmatched_candidates(session, viewer_id=viewer_id), window_days=window_days
+    )
 
     linked = 0
     for pair in result.auto:
-        if link_transfer(session, tx_a_id=pair.outflow.id, tx_b_id=pair.inflow.id) is not None:
+        group = link_transfer(
+            session, tx_a_id=pair.outflow.id, tx_b_id=pair.inflow.id, viewer_id=viewer_id
+        )
+        if group is not None:
             linked += 1
 
     return linked, result

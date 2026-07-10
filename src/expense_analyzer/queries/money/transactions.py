@@ -195,7 +195,7 @@ def set_category(
         return None
     tx.category_id = category_id
     tx.scope = scope
-    if scope == Scope.private:
+    if scope == Scope.private and viewer_id is not None:
         tx.owner_id = viewer_id
     tx.source = TxSource.manual
     session.add(tx)
@@ -327,7 +327,7 @@ def update_transaction(
         tx.source = TxSource.manual
     tx.category_id = category_id
     tx.scope = scope
-    if scope == Scope.private:
+    if scope == Scope.private and viewer_id is not None:
         tx.owner_id = viewer_id
     tx.note = note
     if account_id is not None:
