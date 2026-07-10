@@ -24,7 +24,7 @@ All financial data stays on your own hardware — nothing leaves for the cloud.
 - Python 3.11+ / FastAPI
 - PostgreSQL (production; any existing server on your LAN — not part of this
   compose) or SQLite (zero-setup local dev), SQLModel, Alembic
-- HTMX + Jinja2 + Chart.js (dashboard)
+- Jinja2 + Chart.js (server-rendered dashboard; no HTMX/SPA)
 - docker compose: `app`, `worker`, `caddy`
 - Dependencies managed with [uv](https://docs.astral.sh/uv/)
 

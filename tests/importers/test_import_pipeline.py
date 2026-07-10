@@ -17,6 +17,7 @@ from expense_analyzer.importers import (
     run_import,
 )
 from expense_analyzer.models import Account, ImportBatch, ImportStatus, Transaction, TxSource
+from expense_analyzer.queries.core import users
 
 
 def _records() -> list[NormalizedTransaction]:
@@ -50,6 +51,24 @@ def test_import_inserts_new_transactions(
     batch = db_session.get(ImportBatch, summary.batch_id)
     assert batch.record_count == 3
     assert batch.status == ImportStatus.active
+
+
+def test_import_stamps_owner_id(
+    db_session: Session, account: Account, make_importer: Callable[..., Importer]
+):
+    """Imported rows carry the uploading user's id (provenance for per-user scoping)."""
+    alice = users.create_user(db_session, username="alice", name="Alice", password="secret123")
+    run_import(
+        db_session,
+        account_id=account.id,
+        importer=make_importer(_records()),
+        filename="may.csv",
+        data=b"",
+        owner_id=alice.id,
+    )
+
+    rows = db_session.exec(select(Transaction)).all()
+    assert rows and all(tx.owner_id == alice.id for tx in rows)
 
 
 def test_reimport_same_file_is_idempotent(
