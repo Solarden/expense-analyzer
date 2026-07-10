@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Ask — Expense Analyzer{% endblock %}
+{% block content %}
+  <h2 style="margin-top:0">Ask</h2>
+  {% if not llm_enabled %}
+    <div class="panel">
+      <p class="muted" style="margin:0">
+        Natural-language queries need the LLM enabled (<code>EA_LLM_ENABLED</code> +
+        <code>EA_LLM_BASE_URL</code>). It's currently off, so this page can't answer questions.
+      </p>
+    </div>
+  {% else %}
+    <div class="panel">
+      <form class="hstack"
+            method="get"
+            action="/dashboard/ask"
+            style="flex-wrap:wrap;
+                   gap:10px">
+        <input type="search"
+               name="q"
+               value="{{ q }}"
+               placeholder="e.g. how much did I spend on groceries last month?"
+               aria-label="Ask a question about your spending"
+               class="flex-[3] min-w-[240px]"
+               autofocus>
+        <button type="submit">Ask</button>
+      </form>
+      <p class="muted" style="margin:8px 0 0">Answered from your own data — transfers and loan payments are excluded.</p>
+    </div>
+    {% if result %}
+      {% if not result.ok %}
+        <div class="panel">
+          <p class="muted" style="margin:0">{{ result.interpretation }}</p>
+        </div>
+      {% else %}
+        {# interpretation is model free-text — rendered plain (Jinja autoescape), never |safe. #}
+        <div class="panel">
+          <p class="muted" style="margin:0">Understood as: {{ result.interpretation }}</p>
+        </div>
+        <div class="cards">
+          <div class="card">
+            <div class="k">Total</div>
+            <div class="v">{{ result.total | pln }}</div>
+          </div>
+          <div class="card">
+            <div class="k">Matching transactions</div>
+            <div class="v">{{ result.matched }}</div>
+          </div>
+        </div>
+        {% if result.breakdown %}
+          <div class="panel" style="margin-top:16px">
+            {% if result.group_by == 'category' %}
+              <h2 style="margin-top:0">By category</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th class="num">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for c in result.breakdown %}
+                    <tr>
+                      <td>{{ c.name }}</td>
+                      <td class="num">{{ c.total | pln }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% else %}
+              <h2 style="margin-top:0">By month</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th class="num">Spending</th>
+                    <th class="num">Income</th>
+                    <th class="num">Net</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for m in result.breakdown %}
+                    <tr>
+                      <td>{{ m.month }}</td>
+                      <td class="num neg">{{ m.spending | pln }}</td>
+                      <td class="num pos">{{ m.income | pln }}</td>
+                      <td class="num {{ 'pos' if m.net >= 0 else 'neg' }}">{{ m.net | pln }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% endif %}
+          </div>
+        {% endif %}
+        <div class="panel overflow-x-auto md:overflow-visible"
+             style="margin-top:16px">
+          {% if result.rows %}
+            <table class="table-cards">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th class="w-full">Description</th>
+                  <th class="num">Amount</th>
+                  <th>Category</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for tx in result.rows %}
+                  <tr>
+                    <td class="muted whitespace-nowrap" data-label="Date">{{ tx.booked_date | dpl }}</td>
+                    <td>
+                      {% if tx.merchant_normalized %}
+                        <strong>{{ tx.merchant_normalized }}</strong>
+                        <br>
+                      {% endif %}
+                      <span class="muted">{{ tx.raw_description }}</span>
+                    </td>
+                    <td class="num {{ 'neg' if tx.amount < 0 else 'pos' }}"
+                        data-label="Amount">{{ tx.amount | pln }}</td>
+                    <td data-label="Category">{{ category_names.get(tx.category_id, '—') }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            {% if result.matched > result.rows | length %}
+              <p class="muted" style="margin:12px 0 0">
+                Showing first {{ result.rows | length }} of {{ result.matched }} matching transactions.
+              </p>
+            {% endif %}
+          {% else %}
+            <p class="muted">No transactions match.</p>
+          {% endif %}
+        </div>
+      {% endif %}
+    {% endif %}
+  {% endif %}
+{% endblock %}

@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Callable
+from datetime import date
 
 import httpx
 import pytest
@@ -84,3 +85,100 @@ def test_timeout_raises_ollama_error() -> None:
 
     with pytest.raises(OllamaError):
         _categorize(_client(handler))
+
+
+def _content(obj: object) -> Handler:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"message": {"content": json.dumps(obj)}})
+
+    return handler
+
+
+# --- normalize_merchant ----------------------------------------------------
+
+
+def test_normalize_merchant_parses_cleaned_name() -> None:
+    client = _client(_content({"merchant": "Glovo"}))
+
+    assert (
+        client.normalize_merchant(raw_description="P24*GLOVO WAW", current="P24*GLOVO WAW")
+        == "Glovo"
+    )
+
+
+def test_normalize_merchant_blank_reply_is_none() -> None:
+    client = _client(_content({"merchant": "   "}))
+
+    assert client.normalize_merchant(raw_description="x", current=None) is None
+
+
+def test_normalize_merchant_wrong_type_raises() -> None:
+    client = _client(_content({"merchant": 123}))
+
+    with pytest.raises(OllamaError):
+        client.normalize_merchant(raw_description="x", current=None)
+
+
+# --- suggest_rule_patterns -------------------------------------------------
+
+
+def test_suggest_rule_patterns_parses_and_trims() -> None:
+    client = _client(_content({"patterns": ["BIEDRONKA", "  ", "LIDL "]}))
+
+    result = client.suggest_rule_patterns(category_name="Groceries", examples=["BIEDRONKA 1"])
+
+    assert result == ["BIEDRONKA", "LIDL"]  # blank dropped, whitespace trimmed
+
+
+def test_suggest_rule_patterns_non_list_raises() -> None:
+    client = _client(_content({"patterns": "nope"}))
+
+    with pytest.raises(OllamaError):
+        client.suggest_rule_patterns(category_name="X", examples=["a"])
+
+
+def test_non_object_json_reply_raises() -> None:
+    # A JSON array (not an object) must surface as OllamaError, not an AttributeError
+    # from a caller's .get() — the guard lives in _chat_structured.
+    client = _client(_content([1, 2, 3]))
+
+    with pytest.raises(OllamaError):
+        client.normalize_merchant(raw_description="x", current=None)
+
+
+# --- parse_query -----------------------------------------------------------
+
+
+def test_parse_query_returns_parsed_object() -> None:
+    payload = {
+        "category": "Groceries",
+        "start_date": "2026-05-01",
+        "end_date": "2026-05-31",
+        "group_by": "category",
+        "interpretation": "Groceries spending in May 2026",
+    }
+    client = _client(_content(payload))
+
+    result = client.parse_query(
+        "how much on groceries in may",
+        categories=["Groceries", "Fun"],
+        accounts=["PKO checking"],
+        today=date(2026, 6, 1),
+    )
+
+    assert result == payload  # returned raw; the query layer validates it
+
+
+def test_parse_query_sends_the_query_schema() -> None:
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(
+            200, json={"message": {"content": json.dumps({"interpretation": "ok"})}}
+        )
+
+    _client(handler).parse_query("x", categories=["A"], accounts=["B"], today=date(2026, 1, 1))
+
+    assert seen["body"]["format"]["required"] == ["interpretation"]
+    assert "min_amount" in seen["body"]["format"]["properties"]
