@@ -97,7 +97,12 @@ def test_budgets_are_separated_by_scope(
         db_session, category_id=food.id, month=None, limit_amount=500_00, scope=Scope.household
     )
     bq.set_budget(
-        db_session, category_id=food.id, month=None, limit_amount=200_00, scope=Scope.private
+        db_session,
+        category_id=food.id,
+        month=None,
+        limit_amount=200_00,
+        scope=Scope.private,
+        viewer_id=alice.id,
     )
     make_transaction(
         account_id=account.id, amount=-100_00, category_id=food.id, day=5, scope=Scope.household

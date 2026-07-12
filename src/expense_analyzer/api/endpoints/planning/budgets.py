@@ -63,7 +63,7 @@ def _context(
         "months": months,
         "month": selected_month,
         "sections": sections,
-        "budgets": budget_queries.list_budgets(session),
+        "budgets": budget_queries.list_budgets(session, viewer_id=user.id),
         "categories": budget_queries.budgetable_categories(session),
         "category_names": {c.id: c.name for c in all_categories if c.id is not None},
         "category_colors": {c.id: c.color for c in all_categories if c.id is not None},
@@ -91,7 +91,11 @@ def budgets_page(
     # same row. A non-numeric or stale id just falls back to the create form (taken
     # as a string so a malformed ``?edit=`` degrades gracefully, not a 422).
     edit_id = int(edit) if edit is not None and edit.isdigit() else None
-    edit_budget = budget_queries.get_budget(session, edit_id) if edit_id is not None else None
+    edit_budget = (
+        budget_queries.get_budget(session, edit_id, viewer_id=user.id)
+        if edit_id is not None
+        else None
+    )
     extra: dict = {}
     if edit_budget is not None:
         extra = {
@@ -147,6 +151,7 @@ def set_budget(
         month=month,
         limit_amount=limit_minor,
         scope=form.scope,
+        viewer_id=user.id,
     )
     target = f"/dashboard/budgets?month={selected}" if selected else "/dashboard/budgets"
 
@@ -154,7 +159,7 @@ def set_budget(
 
 
 @router.post("/{budget_id}/delete")
-def delete_budget(budget_id: int, session: DbSession) -> RedirectResponse:
-    budget_queries.delete_budget(session, budget_id)
+def delete_budget(budget_id: int, user: CurrentUser, session: DbSession) -> RedirectResponse:
+    budget_queries.delete_budget(session, budget_id, viewer_id=user.id)
 
     return RedirectResponse("/dashboard/budgets", status_code=status.HTTP_303_SEE_OTHER)

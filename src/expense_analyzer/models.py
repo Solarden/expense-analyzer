@@ -295,19 +295,30 @@ class Budget(SQLModel, table=True):
     overlay on spending — they touch no transaction and need no transfer/loan
     machinery.
 
-    The ``(category_id, month, scope)`` unique constraint guards against duplicate
-    overrides for the same month within a scope; ``scope`` keeps a member's
-    **private** category limits separate from the shared **household** ones.
-    ``NULL`` months count as *distinct* (both SQLite and PostgreSQL default to
-    NULLS DISTINCT), so the constraint does **not** stop a second recurring row on
-    its own — the single-writer query layer enforces "one recurring per category"
-    by upserting (find-or-update by category + month + scope) in
+    ``scope`` keeps a member's **private** category limits separate from the shared
+    **household** ones, and ``owner_id`` is *who* a private budget belongs to (NULL
+    for a shared household budget). Visibility mirrors :class:`Transaction`: a member
+    sees household budgets plus their own private ones — enforced in the query layer
+    (:func:`expense_analyzer.queries.planning.budgets.list_budgets`), not the DB.
+
+    The ``(category_id, month, scope, owner_id)`` unique constraint guards against
+    duplicate overrides for the same month within a scope+owner. ``NULL`` months and
+    ``NULL`` owner (household) count as *distinct* (both SQLite and PostgreSQL default
+    to NULLS DISTINCT), so the constraint does **not** stop a second recurring/household
+    row on its own — the single-writer query layer enforces "one slot per
+    category+month+scope+owner" by upserting (find-or-update) in
     :func:`expense_analyzer.queries.planning.budgets.set_budget`.
     """
 
     __tablename__ = "budget"
     __table_args__ = (
-        UniqueConstraint("category_id", "month", "scope", name="uq_budget_category_month_scope"),
+        UniqueConstraint(
+            "category_id",
+            "month",
+            "scope",
+            "owner_id",
+            name="uq_budget_category_month_scope_owner",
+        ),
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -315,6 +326,7 @@ class Budget(SQLModel, table=True):
     month: str | None = Field(default=None)  # None = recurring default; "YYYY-MM" = override
     limit_amount: int  # minor units, positive
     scope: Scope = Field(default=Scope.household)  # private vs shared household limits
+    owner_id: int | None = Field(default=None, foreign_key="owner.id", index=True)  # NULL=shared
 
 
 class Subscription(SQLModel, table=True):
