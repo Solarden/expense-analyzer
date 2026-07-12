@@ -8,7 +8,7 @@ money never round-trips as a float.
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 
-from expense_analyzer.api.deps import CurrentUser, DbSession
+from expense_analyzer.api.deps import CurrentLens, CurrentUser, DbSession
 from expense_analyzer.auth import require_user
 from expense_analyzer.queries.categorize import categories
 from expense_analyzer.queries.money import stats
@@ -64,17 +64,18 @@ def _drilldown_link(category_id: int | None, month: str) -> str:
 def stats_page(
     request: Request,
     user: CurrentUser,
+    lens: CurrentLens,
     session: DbSession,
     month: str | None = None,
 ) -> HTMLResponse:
-    months = stats.available_months(session)
+    months = stats.available_months(session, viewer_id=user.id, lens=lens)
     selected = stats.default_month(months, month)
 
     category_list = categories.list_categories(session)
     category_names = {c.id: c.name for c in category_list if c.id is not None}
     category_colors = {c.id: c.color for c in category_list if c.id is not None}
     # One transfer-excluded scan feeds both the month summary and the trend.
-    spendable = stats.spendable_transactions(session)
+    spendable = stats.spendable_transactions(session, viewer_id=user.id, lens=lens)
     summary = stats.month_summary(spendable, selected, category_names)
     trend = stats.spending_trend(spendable, months=TREND_MONTHS)
 

@@ -145,6 +145,7 @@ class BudgetForm(BaseModel):
     category_id: int
     month: str = ""  # "" -> recurring default; else "YYYY-MM" override
     limit_amount: str  # PLN, e.g. "2000"
+    scope: Scope = Scope.household  # private (per-member) vs shared household limit
 
 
 class SubscriptionVerdictForm(BaseModel):

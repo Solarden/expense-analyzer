@@ -42,6 +42,7 @@ from expense_analyzer.models import (
     PlannedItem,
     RateType,
     Rule,
+    Scope,
     Subscription,
     SubscriptionStatus,
     Transaction,
@@ -290,6 +291,10 @@ def make_transaction(
         # — keeps single-tx tests trivial; pass it explicitly to group rows in a batch.
         if import_batch_id is None:
             import_batch_id = make_batch().id
+        # Default test rows to the shared household scope so they're visible under the
+        # per-viewer boundary (viewer_id=None -> household). Tests exercising private/
+        # owner behaviour pass scope=/owner_id= explicitly.
+        kw.setdefault("scope", Scope.household)
         n = next(_fingerprint_seq)
         tx = Transaction(
             account_id=account_id,

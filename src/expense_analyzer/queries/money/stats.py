@@ -35,7 +35,8 @@ from dataclasses import dataclass
 from sqlmodel import Session, col, select
 
 from expense_analyzer.clock import local_month, utc_now
-from expense_analyzer.models import Category, CategoryKind, Transaction
+from expense_analyzer.models import Category, CategoryKind, Lens, Transaction
+from expense_analyzer.queries.visibility import visible_to
 
 UNCATEGORIZED_LABEL = "Uncategorized"
 
@@ -70,37 +71,51 @@ class MonthSummary:
         return self.income - self.spending
 
 
-def spendable_transactions(session: Session) -> list[Transaction]:
+def spendable_transactions(
+    session: Session, *, viewer_id: int | None = None, lens: Lens = Lens.all
+) -> list[Transaction]:
     """Live transactions that count toward spending/income (transfers and loan
-    installment payments excluded).
+    installment payments excluded), scoped to what ``viewer_id`` may see.
 
     ``transfer_group_id IS NULL`` drops auto/confirmed transfers and
     ``loan_id IS NULL`` drops linked loan installment payments in SQL; the rare
     manually-``Transfer``-tagged leg with no group is filtered out in Python
-    against the transfer category ids. Load once and pass the result to
-    :func:`month_summary` / :func:`spending_trend`.
+    against the transfer category ids. Per-viewer visibility is applied via
+    :func:`expense_analyzer.queries.visibility.visible_to` (``viewer_id=None`` ->
+    household-only, the safe default for background jobs). Load once and pass the
+    result to :func:`month_summary` / :func:`spending_trend`.
     """
     transfer_category_ids = {
         c.id for c in session.exec(select(Category).where(Category.kind == CategoryKind.transfer))
     }
-    rows = session.exec(
+    query = visible_to(
         select(Transaction).where(
             col(Transaction.deleted_at).is_(None),
             col(Transaction.transfer_group_id).is_(None),
             col(Transaction.loan_id).is_(None),
-        )
-    ).all()
+        ),
+        viewer_id=viewer_id,
+        lens=lens,
+    )
+    rows = session.exec(query).all()
 
     return [tx for tx in rows if tx.category_id not in transfer_category_ids]
 
 
-def available_months(session: Session) -> list[str]:
-    """Distinct ``YYYY-MM`` months with any live (non-deleted) transaction,
-    newest first — used to populate month pickers (transfers included here, so
-    the transaction list can still be filtered to a transfer-only month)."""
-    rows = session.exec(
-        select(col(Transaction.booked_date)).where(col(Transaction.deleted_at).is_(None))
-    ).all()
+def available_months(
+    session: Session, *, viewer_id: int | None = None, lens: Lens = Lens.all
+) -> list[str]:
+    """Distinct ``YYYY-MM`` months with any live transaction the viewer may see,
+    newest first — used to populate month pickers (transfers included here, so the
+    transaction list can still be filtered to a transfer-only month). Scoped
+    per-viewer so the picker never reveals a month that exists only from another
+    member's private rows."""
+    query = visible_to(
+        select(col(Transaction.booked_date)).where(col(Transaction.deleted_at).is_(None)),
+        viewer_id=viewer_id,
+        lens=lens,
+    )
+    rows = session.exec(query).all()
 
     return sorted({d.strftime("%Y-%m") for d in rows}, reverse=True)
 

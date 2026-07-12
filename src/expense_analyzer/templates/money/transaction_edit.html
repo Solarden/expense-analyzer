@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block content %}
   <h2 style="margin-top:0">Edit transaction</h2>
   <div class="panel">
@@ -54,11 +55,7 @@
         {% endfor %}
       </select>
       <label for="scope">Scope</label>
-      <select id="scope" name="scope">
-        {% for s in scopes %}
-          <option value="{{ s }}" {% if s == tx.scope.value %}selected{% endif %}>{{ s }}</option>
-        {% endfor %}
-      </select>
+      <select id="scope" name="scope">{{ ui.scope_options(scopes, tx.scope.value) }}</select>
       <label for="note">Note</label>
       <textarea id="note" name="note" rows="2" placeholder="Note (optional)">{{ tx.note or '' }}</textarea>
       <div class="hstack mt-3">

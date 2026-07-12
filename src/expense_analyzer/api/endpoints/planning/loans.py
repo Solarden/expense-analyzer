@@ -199,7 +199,9 @@ def loan_detail(
         # Compute the schedule once and feed both the reconciliation and the
         # payment suggestions (it's the expensive bit for a long-term loan).
         schedule = loan_queries.loan_schedule(session, loan_id)
-        reconciliation = loan_queries.loan_reconciliation(session, loan_id, schedule)
+        reconciliation = loan_queries.loan_reconciliation(
+            session, loan_id, schedule, viewer_id=user.id
+        )
         settings = get_settings()
         suggestions = loan_queries.suggest_payments(
             session,
@@ -207,6 +209,7 @@ def loan_detail(
             schedule,
             window_days=settings.loan_match_window_days,
             tolerance_pct=settings.loan_match_amount_tolerance_pct,
+            viewer_id=user.id,
         )
     except LoanScheduleError as exc:
         schedule_error = str(exc)
@@ -310,10 +313,15 @@ def add_rate_change(
 def link_loan_payment(
     loan_id: int,
     form: Annotated[PaymentLinkForm, Form()],
+    user: CurrentUser,
     session: DbSession,
 ) -> RedirectResponse:
     if not loan_queries.link_payment(
-        session, loan_id=loan_id, tx_id=form.tx_id, installment_index=form.installment_index
+        session,
+        loan_id=loan_id,
+        tx_id=form.tx_id,
+        installment_index=form.installment_index,
+        viewer_id=user.id,
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="could not link payment")
 
@@ -321,8 +329,10 @@ def link_loan_payment(
 
 
 @router.post("/{loan_id}/payments/{tx_id}/unlink")
-def unlink_loan_payment(loan_id: int, tx_id: int, session: DbSession) -> RedirectResponse:
-    loan_queries.unlink_payment(session, tx_id)
+def unlink_loan_payment(
+    loan_id: int, tx_id: int, user: CurrentUser, session: DbSession
+) -> RedirectResponse:
+    loan_queries.unlink_payment(session, tx_id, viewer_id=user.id)
 
     return RedirectResponse(f"/dashboard/loans/{loan_id}", status_code=status.HTTP_303_SEE_OTHER)
 

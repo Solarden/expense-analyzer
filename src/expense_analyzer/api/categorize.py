@@ -41,18 +41,21 @@ def parse_category_id(session: Session, raw_category_id: str) -> int | None:
 
 
 def apply_categorization(
-    session: Session, *, tx_id: int, raw_category_id: str, scope: Scope
+    session: Session, *, tx_id: int, raw_category_id: str, scope: Scope, viewer_id: int | None
 ) -> None:
     """Validate a categorize-form submission and apply it (``source = manual``).
 
     ``raw_category_id`` is the form's category value: a digit string selects that
     category, ``""`` clears it (uncategorized). Raises 400 on a non-numeric id, 404
-    on an unknown category or a missing transaction.
+    on an unknown category or a missing transaction (incl. one not visible to
+    ``viewer_id``).
     """
     category_id = parse_category_id(session, raw_category_id)
 
     if (
-        transaction_queries.set_category(session, tx_id=tx_id, category_id=category_id, scope=scope)
+        transaction_queries.set_category(
+            session, tx_id=tx_id, category_id=category_id, scope=scope, viewer_id=viewer_id
+        )
         is None
     ):
         raise HTTPException(

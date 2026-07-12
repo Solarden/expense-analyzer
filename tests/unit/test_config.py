@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from expense_analyzer.config import INSECURE_DEFAULT_SECRET, Settings, get_settings
+from expense_analyzer.main import create_app
 
 
 def test_page_size_must_be_positive():
@@ -34,9 +35,9 @@ def test_llm_enabled_requires_a_base_url(base_url):
 
 
 def test_llm_enabled_with_base_url_is_accepted():
-    s = Settings(llm_enabled=True, llm_base_url="http://piec:11434")
+    s = Settings(llm_enabled=True, llm_base_url="http://ollama:11434")
     assert s.llm_enabled is True
-    assert s.llm_base_url == "http://piec:11434"
+    assert s.llm_base_url == "http://ollama:11434"
 
 
 def test_llm_disabled_needs_no_base_url():
@@ -50,8 +51,6 @@ def test_create_app_refuses_insecure_default_secret(monkeypatch):
     monkeypatch.setenv("EA_DEBUG", "false")
     get_settings.cache_clear()
 
-    from expense_analyzer.main import create_app
-
     try:
         with pytest.raises(RuntimeError, match="EA_SECRET_KEY"):
             create_app()
@@ -64,8 +63,6 @@ def test_debug_mode_allows_default_secret(monkeypatch):
     monkeypatch.setenv("EA_SECRET_KEY", INSECURE_DEFAULT_SECRET)
     monkeypatch.setenv("EA_DEBUG", "true")
     get_settings.cache_clear()
-
-    from expense_analyzer.main import create_app
 
     try:
         create_app()  # must not raise

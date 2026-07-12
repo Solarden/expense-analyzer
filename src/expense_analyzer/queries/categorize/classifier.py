@@ -29,6 +29,7 @@ from sqlmodel import Session, col, select
 from expense_analyzer.classifier import Classifier, Prediction, TrainingSample, build_text, train
 from expense_analyzer.config import Settings, get_settings
 from expense_analyzer.models import Category, CategoryKind, Transaction, TxSource
+from expense_analyzer.queries.visibility import visible_to
 
 # Categories the classifier learns and predicts. Transfers are handled by transfer
 # linking, not categorization, so a transfer-kind category is neither a label nor a
@@ -93,26 +94,35 @@ def _learnable_category_ids(session: Session) -> set[int]:
     return {c.id for c in rows if c.id is not None}
 
 
-def confirmed_label_texts(session: Session) -> list[tuple[str, int]]:
-    """``(feature text, category id)`` for every confirmed label — the shared training
-    set for the classifier (layer 2) and the embeddings neighbours (layer 3, see
+def confirmed_label_texts(
+    session: Session, *, viewer_id: int | None = None
+) -> list[tuple[str, int]]:
+    """``(feature text, category id)`` for confirmed labels — the training set for the
+    classifier (layer 2) and the embeddings neighbours (layer 3, see
     :mod:`expense_analyzer.queries.categorize.embeddings`).
 
     Confirmed = non-deleted rows with an expense/income category set by a human or a
     rule (``source in {manual, rule}``). The classifier's own guesses
     (``source = classifier``) are excluded so neither layer learns from machine
-    output — a human or a rule has to vouch for a label first."""
+    output — a human or a rule has to vouch for a label first.
+
+    With ``viewer_id`` given, the set is restricted to labels that viewer may see
+    (:func:`visible_to`) — the per-viewer embeddings neighbours use this so another
+    member's private description never surfaces as a "Similar to" hint. With
+    ``viewer_id=None`` (the classifier) the whole confirmed set is used: that model
+    only ever outputs a category id on the user's *own* row, so it needs no split."""
     learnable = _learnable_category_ids(session)
     if not learnable:
         return []
 
-    rows = session.exec(
-        select(Transaction).where(
-            col(Transaction.deleted_at).is_(None),
-            col(Transaction.category_id).in_(learnable),
-            col(Transaction.source).in_([TxSource.manual, TxSource.rule]),
-        )
-    ).all()
+    query = select(Transaction).where(
+        col(Transaction.deleted_at).is_(None),
+        col(Transaction.category_id).in_(learnable),
+        col(Transaction.source).in_([TxSource.manual, TxSource.rule]),
+    )
+    if viewer_id is not None:
+        query = visible_to(query, viewer_id=viewer_id)
+    rows = session.exec(query).all()
 
     return [
         (build_text(r.merchant_normalized, r.raw_description), r.category_id)
@@ -184,19 +194,28 @@ def classify(session: Session, *, settings: Settings | None = None) -> ClassifyR
 
 
 def review_queue(
-    session: Session, *, page: int, page_size: int, settings: Settings | None = None
+    session: Session,
+    *,
+    page: int,
+    page_size: int,
+    viewer_id: int | None = None,
+    settings: Settings | None = None,
 ) -> QueuePage:
-    """One page of uncategorized transactions (newest first) with the classifier's
-    suggestion attached to each. The model is trained once for the whole page;
-    ``trained`` is ``False`` on a cold start, in which case suggestions are ``None``.
+    """One page of uncategorized transactions the viewer may see (newest first) with
+    the classifier's suggestion attached to each. The model is trained once for the
+    whole page; ``trained`` is ``False`` on a cold start, so suggestions are ``None``.
     """
     settings = settings or get_settings()
     page = max(1, page)
 
-    total = session.exec(_candidate_filter(select(func.count()).select_from(Transaction))).one()
+    total = session.exec(
+        visible_to(
+            _candidate_filter(select(func.count()).select_from(Transaction)), viewer_id=viewer_id
+        )
+    ).one()
 
     rows = session.exec(
-        _candidate_filter(select(Transaction))
+        visible_to(_candidate_filter(select(Transaction)), viewer_id=viewer_id)
         .order_by(col(Transaction.booked_date).desc(), col(Transaction.id).desc())
         .offset((page - 1) * page_size)
         .limit(page_size)

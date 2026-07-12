@@ -47,8 +47,12 @@ def run_import(
     importer: Importer,
     filename: str,
     data: bytes,
+    owner_id: int | None = None,
 ) -> ImportSummary:
     """Parse ``data`` with ``importer`` and idempotently upsert into ``account_id``.
+
+    Every new row is stamped with ``owner_id`` (the uploading user) so it can be
+    scoped per-user later; ``None`` leaves it unset (non-interactive imports).
 
     Commits the batch and its new transactions atomically. The batch is created
     lazily — only on the first new transaction — so re-importing the same file
@@ -97,6 +101,7 @@ def run_import(
                 raw_description=nt.raw_description,
                 merchant_normalized=merchant,
                 source=TxSource.import_csv,
+                owner_id=owner_id,
                 fingerprint=fingerprint,
             )
         )
@@ -121,7 +126,7 @@ def run_import(
     if new:
         try:
             auto_linked, _ = detect_and_autolink(
-                session, window_days=get_settings().transfer_window_days
+                session, window_days=get_settings().transfer_window_days, viewer_id=owner_id
             )
         except Exception:  # noqa: BLE001 — convenience step, never fail the import
             log.exception("transfer auto-link failed after import; rows are committed")
@@ -140,10 +145,10 @@ def run_import(
             log.exception("rule auto-categorization failed after import; rows are committed")
             session.rollback()
 
-    # Probabilistic categorization (the LLM on piec, or the local classifier as
+    # Probabilistic categorization (the Ollama host, or the local classifier as
     # fallback) is no longer run at import — it's an on-demand step from the review
     # queue ("classify now"). Import stays rules-only, so a big or first import
-    # isn't blocked waiting on piec. See queries/categorize/llm.py.
+    # isn't blocked waiting on the Ollama host. See queries/categorize/llm.py.
 
     return ImportSummary(
         batch_id=batch.id if batch else None,

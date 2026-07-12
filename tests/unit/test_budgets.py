@@ -19,8 +19,10 @@ from expense_analyzer.models import (
     Category,
     CategoryKind,
     Loan,
+    Scope,
     Transaction,
 )
+from expense_analyzer.queries.core import users
 from expense_analyzer.queries.planning import budgets as bq
 
 # --- pure helpers ----------------------------------------------------------
@@ -79,6 +81,48 @@ def test_budget_status_remaining_over_and_clamped_pct() -> None:
 
 
 # --- query layer -----------------------------------------------------------
+
+
+def test_budgets_are_separated_by_scope(
+    db_session: Session,
+    account: Account,
+    make_category: Callable[..., Category],
+    make_transaction: Callable[..., Transaction],
+) -> None:
+    """Household and private budgets are distinct limits, each compared against spend
+    of its own scope (household spend vs the viewer's own private spend)."""
+    alice = users.create_user(db_session, username="alice", name="Alice", password="pw")
+    food = make_category(name="Food")
+    bq.set_budget(
+        db_session, category_id=food.id, month=None, limit_amount=500_00, scope=Scope.household
+    )
+    bq.set_budget(
+        db_session,
+        category_id=food.id,
+        month=None,
+        limit_amount=200_00,
+        scope=Scope.private,
+        viewer_id=alice.id,
+    )
+    make_transaction(
+        account_id=account.id, amount=-100_00, category_id=food.id, day=5, scope=Scope.household
+    )
+    make_transaction(
+        account_id=account.id,
+        amount=-30_00,
+        category_id=food.id,
+        day=6,
+        owner_id=alice.id,
+        scope=Scope.private,
+    )
+
+    household = bq.budget_overview(db_session, "2026-05", scope=Scope.household)
+    private = bq.budget_overview(db_session, "2026-05", scope=Scope.private, viewer_id=alice.id)
+
+    assert len(household) == 1 and household[0].limit_amount == 500_00
+    assert household[0].spent == 100_00  # only the household tx
+    assert len(private) == 1 and private[0].limit_amount == 200_00
+    assert private[0].spent == 30_00  # only alice's own private tx
 
 
 def test_set_budget_upserts_recurring_slot(

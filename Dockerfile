@@ -29,11 +29,12 @@ RUN apt-get update \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies first (cached layer), then the project.
-COPY pyproject.toml ./
+# Install dependencies FIRST, WITHOUT the project itself, so a later app-source change
+# doesn't re-run this or the ~470 MB model bake below. uv.lock pins them for a cached,
+# reproducible layer (busted only when pyproject.toml / uv.lock change).
+COPY pyproject.toml uv.lock ./
 COPY README.md LICENSE ./
-COPY src ./src
-RUN uv sync --no-dev
+RUN uv sync --no-install-project --no-dev
 
 ENV PATH="/app/.venv/bin:$PATH"
 
@@ -44,8 +45,8 @@ ENV PATH="/app/.venv/bin:$PATH"
 # missing model fail fast at runtime instead of silently phoning home. Pinned to an
 # exact commit so the build is reproducible and the weights can't change under us —
 # keep the ARGs in sync with EA_EMBEDDINGS_MODEL / EA_EMBEDDINGS_MODEL_REVISION
-# (config defaults). Sits right after `uv sync` (depends only on the venv) so an
-# alembic or app-source change below doesn't invalidate this ~470 MB layer.
+# (config defaults). Sits ABOVE the app-source COPY (depends only on the synced deps)
+# so an alembic or app-source change below doesn't invalidate this ~470 MB layer.
 ARG EA_EMBEDDINGS_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 ARG EA_EMBEDDINGS_MODEL_REVISION=e8f8c211226b894fcb81acc59f3b34ba3efd5f42
 ENV EA_EMBEDDINGS_MODEL=${EA_EMBEDDINGS_MODEL} \
@@ -55,8 +56,12 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 ENV HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1
 
+# App source + migrations LAST — the only layers a normal code deploy rebuilds. Deps are
+# already synced above, so installing the project itself here is a fast, tiny layer.
+COPY src ./src
 COPY alembic.ini ./
 COPY alembic ./alembic
+RUN uv sync --no-dev
 
 EXPOSE 8000
 

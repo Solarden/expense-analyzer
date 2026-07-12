@@ -64,12 +64,13 @@ def _context(
     management list and the category options for the define/edit form."""
     all_categories = category_queries.list_categories(session)
     settings = get_settings()
-    overview = planned_queries.plan_overview(session, selected_month)
+    overview = planned_queries.plan_overview(session, selected_month, viewer_id=user.id)
     suggestions = planned_queries.suggest_links(
         session,
         overview,
         window_days=settings.loan_match_window_days,
         tolerance_pct=settings.loan_match_amount_tolerance_pct,
+        viewer_id=user.id,
     )
     return {
         "user": user,
@@ -84,14 +85,14 @@ def _context(
         "accounts": {a.id: a.name for a in account_queries.list_accounts(session)},
         "loans": loan_queries.list_loans(session),
         "directions": [d.value for d in TxDirection],
-        "for_living_chart": _for_living_chart(session),
+        "for_living_chart": _for_living_chart(session, viewer_id=user.id),
         **extra,
     }
 
 
-def _for_living_chart(session: Session) -> dict:
+def _for_living_chart(session: Session, *, viewer_id: int) -> dict:
     """Labels + FOR LIVING values (minor units) for the trend chart, last 6 months."""
-    trend = planned_queries.for_living_trend(session, months=6)
+    trend = planned_queries.for_living_trend(session, months=6, viewer_id=viewer_id)
 
     return {"labels": [m for m, _ in trend], "data": [v for _, v in trend]}
 
@@ -287,10 +288,13 @@ def mark_unpaid(item_id: int, session: DbSession, month: str = Form("")) -> Redi
 def link_transaction(
     item_id: int,
     form: Annotated[PlannedLinkForm, Form()],
+    user: CurrentUser,
     session: DbSession,
 ) -> RedirectResponse:
     safe = _safe_month(form.month)
-    planned_queries.link_transaction(session, planned_item_id=item_id, month=safe, tx_id=form.tx_id)
+    planned_queries.link_transaction(
+        session, planned_item_id=item_id, month=safe, tx_id=form.tx_id, viewer_id=user.id
+    )
 
     return _redirect(safe)
 

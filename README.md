@@ -24,7 +24,7 @@ All financial data stays on your own hardware — nothing leaves for the cloud.
 - Python 3.11+ / FastAPI
 - PostgreSQL (production; any existing server on your LAN — not part of this
   compose) or SQLite (zero-setup local dev), SQLModel, Alembic
-- HTMX + Jinja2 + Chart.js (dashboard)
+- Jinja2 + Chart.js (server-rendered dashboard; no HTMX/SPA)
 - docker compose: `app`, `worker`, `caddy`
 - Dependencies managed with [uv](https://docs.astral.sh/uv/)
 
@@ -96,7 +96,7 @@ CREATE DATABASE expense_analyzer OWNER expense_analyzer;
 Then:
 
 ```bash
-export EA_DATABASE_URL="postgresql+psycopg://expense_analyzer:...@192.168.1.206:5432/expense_analyzer"
+export EA_DATABASE_URL="postgresql+psycopg://expense_analyzer:...@192.168.1.x:5432/expense_analyzer"
 export EA_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
 export CADDY_SITE_ADDRESS=expense.local   # hostname or LAN IP of the Pi
 docker compose up --build

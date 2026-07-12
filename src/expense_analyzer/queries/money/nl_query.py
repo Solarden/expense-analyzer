@@ -23,7 +23,7 @@ from sqlmodel import Session
 
 from expense_analyzer.clock import local_today
 from expense_analyzer.config import Settings, get_settings
-from expense_analyzer.models import Account, Category, Transaction
+from expense_analyzer.models import Account, Category, Lens, Transaction
 from expense_analyzer.ollama import OllamaClient, OllamaError
 from expense_analyzer.queries.categorize.categories import list_categories
 from expense_analyzer.queries.core.accounts import list_accounts
@@ -181,11 +181,14 @@ def _breakdown(
     return []
 
 
-def run_query(session: Session, spec: QuerySpec) -> QueryResult:
+def run_query(
+    session: Session, spec: QuerySpec, *, viewer_id: int | None = None, lens: Lens = Lens.all
+) -> QueryResult:
     """Filter :func:`spendable_transactions` (transfers/loans already excluded) by
-    ``spec`` in pure Python, then total + bucket. ``interpretation`` is filled by
-    :func:`answer`."""
-    matches = [tx for tx in spendable_transactions(session) if _matches(tx, spec)]
+    ``spec`` in pure Python, then total + bucket. Scoped to what ``viewer_id`` may
+    see under ``lens``. ``interpretation`` is filled by :func:`answer`."""
+    spendable = spendable_transactions(session, viewer_id=viewer_id, lens=lens)
+    matches = [tx for tx in spendable if _matches(tx, spec)]
     total = sum(abs(tx.amount) for tx in matches)
     rows = sorted(matches, key=lambda t: t.booked_date, reverse=True)[:_MAX_ROWS]
 
@@ -216,11 +219,13 @@ def answer(
     session: Session,
     question: str,
     *,
+    viewer_id: int | None = None,
+    lens: Lens = Lens.all,
     settings: Settings | None = None,
     client: OllamaClient | None = None,
 ) -> QueryResult:
     """Orchestrate: gate on ``llm_enabled``, parse → validate → run. Never raises —
-    a down piec or an uninterpretable question returns an ``ok=False`` result."""
+    a down Ollama host or an uninterpretable question returns an ``ok=False`` result."""
     settings = settings or get_settings()
     if not settings.llm_enabled:
         return _failed("Natural-language queries are disabled.")
@@ -243,6 +248,8 @@ def answer(
         return _failed(_COULDNT_INTERPRET)
 
     # A no-filter spec is a valid broad total — only a real parse failure is not-ok.
-    result = run_query(session, build_spec(raw, categories, accounts))
+    result = run_query(
+        session, build_spec(raw, categories, accounts), viewer_id=viewer_id, lens=lens
+    )
 
     return replace(result, interpretation=interpretation.strip())

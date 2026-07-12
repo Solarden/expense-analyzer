@@ -17,10 +17,10 @@ from fastapi import APIRouter, Depends, Form, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlmodel import Session
 
-from expense_analyzer.api.deps import CurrentUser, DbSession
+from expense_analyzer.api.deps import CurrentLens, CurrentUser, DbSession
 from expense_analyzer.api.forms import BudgetForm
 from expense_analyzer.auth import require_user
-from expense_analyzer.models import CategoryKind, Owner
+from expense_analyzer.models import CategoryKind, Lens, Owner, Scope
 from expense_analyzer.money import MoneyParseError, from_minor_units, parse_pln
 from expense_analyzer.queries.categorize import categories as category_queries
 from expense_analyzer.queries.money import stats
@@ -35,21 +35,40 @@ _MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")  # YYYY-MM, month 01-12
 
 
 def _context(
-    session: Session, user: Owner, selected_month: str, months: list[str], **extra
+    session: Session, user: Owner, selected_month: str, months: list[str], *, lens: Lens, **extra
 ) -> dict:
-    """Shared context: the month's budget overview, the set form, and the defined
-    budgets list (recurring defaults + overrides). ``months`` is fetched once by
+    """Shared context: the month's budget status (per scope, chosen by the active
+    lens), the set form, and the defined-budgets list. ``months`` is fetched once by
     the handler and threaded in (it also resolves ``selected_month``)."""
     all_categories = category_queries.list_categories(session)
+    # The lens picks which budget scope(s) to show: Home budget -> household only,
+    # Private -> the viewer's private only, All -> both (stacked sections).
+    if lens is Lens.private:
+        section_scopes = [Scope.private]
+    elif lens is Lens.home:
+        section_scopes = [Scope.household]
+    else:
+        section_scopes = [Scope.household, Scope.private]
+    sections = [
+        {
+            "label": "Household budgets" if s is Scope.household else "My private budgets",
+            "statuses": budget_queries.budget_overview(
+                session, selected_month, scope=s, viewer_id=user.id
+            ),
+        }
+        for s in section_scopes
+    ]
     return {
         "user": user,
         "months": months,
         "month": selected_month,
-        "statuses": budget_queries.budget_overview(session, selected_month),
-        "budgets": budget_queries.list_budgets(session),
+        "sections": sections,
+        "budgets": budget_queries.list_budgets(session, viewer_id=user.id),
         "categories": budget_queries.budgetable_categories(session),
         "category_names": {c.id: c.name for c in all_categories if c.id is not None},
         "category_colors": {c.id: c.color for c in all_categories if c.id is not None},
+        "default_scope": (Scope.private if lens is Lens.private else Scope.household).value,
+        "scopes": [s.value for s in Scope],
         **extra,
     }
 
@@ -58,11 +77,12 @@ def _context(
 def budgets_page(
     request: Request,
     user: CurrentUser,
+    lens: CurrentLens,
     session: DbSession,
     month: str | None = None,
     edit: str | None = None,
 ) -> HTMLResponse:
-    months = stats.available_months(session)
+    months = stats.available_months(session, viewer_id=user.id, lens=lens)
     selected = stats.default_month(months, month)
 
     # ``?edit=<id>`` prefills the form to change one budget's limit. Category and
@@ -71,7 +91,11 @@ def budgets_page(
     # same row. A non-numeric or stale id just falls back to the create form (taken
     # as a string so a malformed ``?edit=`` degrades gracefully, not a 422).
     edit_id = int(edit) if edit is not None and edit.isdigit() else None
-    edit_budget = budget_queries.get_budget(session, edit_id) if edit_id is not None else None
+    edit_budget = (
+        budget_queries.get_budget(session, edit_id, viewer_id=user.id)
+        if edit_id is not None
+        else None
+    )
     extra: dict = {}
     if edit_budget is not None:
         extra = {
@@ -80,7 +104,9 @@ def budgets_page(
         }
 
     return templates.TemplateResponse(
-        request, "planning/budgets.html", _context(session, user, selected, months, **extra)
+        request,
+        "planning/budgets.html",
+        _context(session, user, selected, months, lens=lens, **extra),
     )
 
 
@@ -89,9 +115,10 @@ def set_budget(
     request: Request,
     form: Annotated[BudgetForm, Form()],
     user: CurrentUser,
+    lens: CurrentLens,
     session: DbSession,
 ) -> Response:
-    months = stats.available_months(session)
+    months = stats.available_months(session, viewer_id=user.id, lens=lens)
     month = form.month.strip() or None
     selected = stats.default_month(months, month)
 
@@ -114,12 +141,17 @@ def set_budget(
         return templates.TemplateResponse(
             request,
             "planning/budgets.html",
-            _context(session, user, selected, months, error=error),
+            _context(session, user, selected, months, lens=lens, error=error),
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
     budget_queries.set_budget(
-        session, category_id=form.category_id, month=month, limit_amount=limit_minor
+        session,
+        category_id=form.category_id,
+        month=month,
+        limit_amount=limit_minor,
+        scope=form.scope,
+        viewer_id=user.id,
     )
     target = f"/dashboard/budgets?month={selected}" if selected else "/dashboard/budgets"
 
@@ -127,7 +159,7 @@ def set_budget(
 
 
 @router.post("/{budget_id}/delete")
-def delete_budget(budget_id: int, session: DbSession) -> RedirectResponse:
-    budget_queries.delete_budget(session, budget_id)
+def delete_budget(budget_id: int, user: CurrentUser, session: DbSession) -> RedirectResponse:
+    budget_queries.delete_budget(session, budget_id, viewer_id=user.id)
 
     return RedirectResponse("/dashboard/budgets", status_code=status.HTTP_303_SEE_OTHER)

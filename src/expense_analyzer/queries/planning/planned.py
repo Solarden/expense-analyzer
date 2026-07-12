@@ -33,7 +33,9 @@ from sqlmodel import Session, col, delete, select
 from expense_analyzer.clock import local_today, utc_now
 from expense_analyzer.loans import LoanScheduleError, Schedule, ScheduleRow
 from expense_analyzer.models import PlannedItem, PlannedItemPayment, Transaction
+from expense_analyzer.queries.money.transactions import _get_visible
 from expense_analyzer.queries.planning import loans as loan_queries
+from expense_analyzer.queries.visibility import visible_to
 
 
 def list_planned_items(session: Session, *, active_only: bool = False) -> list[PlannedItem]:
@@ -227,7 +229,9 @@ def mark_unpaid(session: Session, *, planned_item_id: int, month: str) -> bool:
     return True
 
 
-def link_transaction(session: Session, *, planned_item_id: int, month: str, tx_id: int) -> bool:
+def link_transaction(
+    session: Session, *, planned_item_id: int, month: str, tx_id: int, viewer_id: int | None = None
+) -> bool:
     """Link a real transaction to a non-loan planned item for ``month``.
 
     Upserts the ``(item, month)`` status row with ``transaction_id`` set (this *is*
@@ -237,10 +241,12 @@ def link_transaction(session: Session, *, planned_item_id: int, month: str, tx_i
     linked to another planned item/month. Loan-backed items don't link here — their
     payment is managed in Loans (see module docstring)."""
     item = session.get(PlannedItem, planned_item_id)
-    tx = session.get(Transaction, tx_id)
+    # Viewer-scoped (IDOR gate): another member's private tx reads as absent here,
+    # so it can't be linked; the viewer's own private tx can.
+    tx = _get_visible(session, tx_id, viewer_id=viewer_id)
     if item is None or item.loan_id is not None:
         return False
-    if tx is None or tx.deleted_at is not None or tx.loan_id is not None:
+    if tx is None or tx.loan_id is not None:
         return False
     if _is_tx_linked(session, tx_id, exclude=(planned_item_id, month)):
         return False
@@ -286,7 +292,9 @@ def _is_tx_linked(session: Session, tx_id: int, *, exclude: tuple[int, str] | No
     return False
 
 
-def last_linked_amount(session: Session, planned_item_id: int, *, before_month: str) -> int | None:
+def last_linked_amount(
+    session: Session, planned_item_id: int, *, before_month: str, viewer_id: int | None = None
+) -> int | None:
     """The magnitude (positive minor units) of the most recent real transaction
     linked to this item in a month earlier than ``before_month``.
 
@@ -304,9 +312,9 @@ def last_linked_amount(session: Session, planned_item_id: int, *, before_month: 
     if payment is None or payment.transaction_id is None:
         return None
 
-    tx = session.get(Transaction, payment.transaction_id)
+    tx = _get_visible(session, payment.transaction_id, viewer_id=viewer_id)
 
-    return abs(tx.amount) if tx is not None and tx.deleted_at is None else None
+    return abs(tx.amount) if tx is not None else None
 
 
 def _due_date(month: str, due_day: int) -> date:
@@ -394,7 +402,9 @@ def _resolve_schedule(
     return cache[loan_id]
 
 
-def plan_overview(session: Session, month: str, *, today: date | None = None) -> PlanOverview:
+def plan_overview(
+    session: Session, month: str, *, today: date | None = None, viewer_id: int | None = None
+) -> PlanOverview:
     """Derive the cashflow checklist for ``month`` from the active planned items.
 
     Each line's figure is its **effective amount** — the fixed ``expected_amount``
@@ -429,7 +439,10 @@ def plan_overview(session: Session, month: str, *, today: date | None = None) ->
         {
             tx.id: tx
             for tx in session.exec(
-                select(Transaction).where(col(Transaction.id).in_(linked_tx_ids))
+                visible_to(
+                    select(Transaction).where(col(Transaction.id).in_(linked_tx_ids)),
+                    viewer_id=viewer_id,
+                )
             ).all()
         }
         if linked_tx_ids
@@ -445,9 +458,13 @@ def plan_overview(session: Session, month: str, *, today: date | None = None) ->
             installment = _installment_for_month(schedule, month)
             if installment is None:
                 continue  # no installment due this month -> auto-expire from the view
-            row = _loan_backed_row(session, item, month, installment, schedule, today)
+            row = _loan_backed_row(
+                session, item, month, installment, schedule, today, viewer_id=viewer_id
+            )
         else:
-            row = _manual_row(session, item, month, payments.get(item.id), linked_txs, today)
+            row = _manual_row(
+                session, item, month, payments.get(item.id), linked_txs, today, viewer_id=viewer_id
+            )
 
         rows.append(row)
 
@@ -481,10 +498,12 @@ def _loan_backed_row(
     installment: ScheduleRow,
     schedule: Schedule,
     today: date,
+    *,
+    viewer_id: int | None = None,
 ) -> PlannedRow:
     """Build a loan-backed row: name/amount from the schedule, paid from reconciliation."""
     loan = loan_queries.get_loan(session, item.loan_id)
-    recon = loan_queries.loan_reconciliation(session, item.loan_id, schedule)
+    recon = loan_queries.loan_reconciliation(session, item.loan_id, schedule, viewer_id=viewer_id)
     reconciled = recon.rows[installment.index - 1] if recon is not None else None
     payment_tx = reconciled.payment if reconciled is not None else None
 
@@ -523,6 +542,8 @@ def _manual_row(
     payment: PlannedItemPayment | None,
     linked_txs: dict[int, Transaction],
     today: date,
+    *,
+    viewer_id: int | None = None,
 ) -> PlannedRow:
     """Build a non-loan row: amount from ``expected_amount`` (or a linked transaction),
     paid from the item's ``PlannedItemPayment`` status."""
@@ -541,7 +562,7 @@ def _manual_row(
     real = linked_tx.amount if linked_tx is not None else None
     # A variable, still-unestimated line gets a "last time it was …" guide.
     hint = (
-        last_linked_amount(session, item.id, before_month=month)
+        last_linked_amount(session, item.id, before_month=month, viewer_id=viewer_id)
         if expected is None and real is None
         else None
     )
@@ -580,6 +601,7 @@ def suggest_links(
     *,
     window_days: int,
     tolerance_pct: int,
+    viewer_id: int | None = None,
 ) -> dict[int, list[Transaction]]:
     """Candidate transactions to link, per **unpaid non-loan** item id.
 
@@ -599,11 +621,14 @@ def suggest_links(
     candidates = [
         tx
         for tx in session.exec(
-            select(Transaction).where(
-                col(Transaction.deleted_at).is_(None),
-                col(Transaction.loan_id).is_(None),
-                Transaction.booked_date >= lo,
-                Transaction.booked_date < hi,
+            visible_to(
+                select(Transaction).where(
+                    col(Transaction.deleted_at).is_(None),
+                    col(Transaction.loan_id).is_(None),
+                    Transaction.booked_date >= lo,
+                    Transaction.booked_date < hi,
+                ),
+                viewer_id=viewer_id,
             )
         ).all()
         if tx.id not in linked
@@ -663,7 +688,7 @@ def _match_candidates(
 
 
 def for_living_trend(
-    session: Session, *, months: int, today: date | None = None
+    session: Session, *, months: int, today: date | None = None, viewer_id: int | None = None
 ) -> list[tuple[str, int]]:
     """ "FOR LIVING" (income − charges) per month for the last ``months`` months,
     ending at the current local month, oldest first (left-to-right on a chart).
@@ -682,4 +707,7 @@ def for_living_trend(
             month, year = 12, year - 1
     keys.reverse()
 
-    return [(key, plan_overview(session, key, today=today).for_living) for key in keys]
+    return [
+        (key, plan_overview(session, key, today=today, viewer_id=viewer_id).for_living)
+        for key in keys
+    ]

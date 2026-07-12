@@ -34,6 +34,8 @@ from expense_analyzer.models import (
     RateType,
     Transaction,
 )
+from expense_analyzer.queries.money.transactions import _get_visible
+from expense_analyzer.queries.visibility import visible_to
 
 
 def list_loans(session: Session) -> list[Loan]:
@@ -216,20 +218,31 @@ def outstanding_principal(
     return loan.principal - paid
 
 
-def linked_payments(session: Session, loan_id: int) -> list[Transaction]:
-    """Non-deleted transactions linked to this loan as installment payments."""
+def linked_payments(
+    session: Session, loan_id: int, *, viewer_id: int | None = None
+) -> list[Transaction]:
+    """Non-deleted transactions the ``viewer`` may see linked to this loan as
+    installment payments. Viewer-scoped like transfers: pass ``viewer_id`` and the
+    viewer's own private payments surface too; the ``None`` default is household-only."""
     return list(
         session.exec(
-            select(Transaction).where(
-                Transaction.loan_id == loan_id,
-                col(Transaction.deleted_at).is_(None),
+            visible_to(
+                select(Transaction).where(
+                    Transaction.loan_id == loan_id,
+                    col(Transaction.deleted_at).is_(None),
+                ),
+                viewer_id=viewer_id,
             )
         ).all()
     )
 
 
 def loan_reconciliation(
-    session: Session, loan_id: int, schedule: Schedule | None = None
+    session: Session,
+    loan_id: int,
+    schedule: Schedule | None = None,
+    *,
+    viewer_id: int | None = None,
 ) -> Reconciliation | None:
     """Plan vs reality: the schedule with linked payments attached.
 
@@ -240,15 +253,24 @@ def loan_reconciliation(
     if schedule is None:
         return None
 
-    return reconcile(schedule, linked_payments(session, loan_id))
+    return reconcile(schedule, linked_payments(session, loan_id, viewer_id=viewer_id))
 
 
-def link_payment(session: Session, *, loan_id: int, tx_id: int, installment_index: int) -> bool:
+def link_payment(
+    session: Session,
+    *,
+    loan_id: int,
+    tx_id: int,
+    installment_index: int,
+    viewer_id: int | None = None,
+) -> bool:
     """Pin a transaction to a loan installment. Returns False if either is missing
     or the transaction is already linked to a loan."""
     loan = session.get(Loan, loan_id)
-    tx = session.get(Transaction, tx_id)
-    if loan is None or tx is None or tx.deleted_at is not None:
+    # Viewer-scoped (IDOR gate): another member's private tx reads as absent here,
+    # so it can't be pinned; the viewer's own private tx can.
+    tx = _get_visible(session, tx_id, viewer_id=viewer_id)
+    if loan is None or tx is None:
         return False
     if tx.loan_id is not None:
         return False
@@ -261,9 +283,9 @@ def link_payment(session: Session, *, loan_id: int, tx_id: int, installment_inde
     return True
 
 
-def unlink_payment(session: Session, tx_id: int) -> bool:
+def unlink_payment(session: Session, tx_id: int, *, viewer_id: int | None = None) -> bool:
     """Unpin a transaction from its loan installment."""
-    tx = session.get(Transaction, tx_id)
+    tx = _get_visible(session, tx_id, viewer_id=viewer_id)
     if tx is None or tx.loan_id is None:
         return False
 
@@ -292,6 +314,7 @@ def suggest_payments(
     *,
     window_days: int,
     tolerance_pct: int,
+    viewer_id: int | None = None,
 ) -> list[PaymentSuggestion]:
     """Candidate outflows that could pay still-unpaid installments.
 
@@ -306,15 +329,18 @@ def suggest_payments(
     """
     paid_indexes = {
         tx.loan_installment_index
-        for tx in linked_payments(session, loan.id)
+        for tx in linked_payments(session, loan.id, viewer_id=viewer_id)
         if tx.loan_installment_index is not None
     }
     candidates = session.exec(
-        select(Transaction).where(
-            col(Transaction.deleted_at).is_(None),
-            col(Transaction.loan_id).is_(None),
-            Transaction.amount < 0,
-            Transaction.account_id != loan.account_id,
+        visible_to(
+            select(Transaction).where(
+                col(Transaction.deleted_at).is_(None),
+                col(Transaction.loan_id).is_(None),
+                Transaction.amount < 0,
+                Transaction.account_id != loan.account_id,
+            ),
+            viewer_id=viewer_id,
         )
     ).all()
 

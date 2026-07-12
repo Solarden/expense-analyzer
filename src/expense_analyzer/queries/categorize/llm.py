@@ -1,8 +1,8 @@
-"""LLM categorization (piec Ollama) — primary categorizer, classifier fallback.
+"""LLM categorization (Ollama host) — primary categorizer, classifier fallback.
 
-The owner's decision (PR 2): the LLM on piec is the *primary* categorizer for the
+The owner's decision (PR 2): the LLM is the *primary* categorizer for the
 review-queue "classify now" action; the local classifier (layer 2) is the
-fallback used only when piec is unreachable. Import stays rules-only — the LLM
+fallback used only when the Ollama host is unreachable. Import stays rules-only — the LLM
 never runs inline on upload.
 
 Precedence and eligibility mirror the classifier exactly:
@@ -14,7 +14,7 @@ Precedence and eligibility mirror the classifier exactly:
   ``source = llm`` and ``confidence``. Below the threshold the row stays in the
   queue. An out-of-range category id (a model hallucination) is skipped, not
   applied.
-- If piec is unreachable/slow/garbled (:class:`OllamaError`), the run falls back
+- If the Ollama host is unreachable/slow/garbled (:class:`OllamaError`), the run falls back
   to :func:`classifier.classify`; rows tagged before the failure are kept.
 """
 
@@ -47,9 +47,9 @@ def _learnable_categories(session: Session) -> list[Category]:
 def classify_llm(
     session: Session, *, settings: Settings | None = None, client: OllamaClient | None = None
 ) -> ClassifyResult:
-    """Categorize uncategorized rows via piec's Ollama, one call per row.
+    """Categorize uncategorized rows via the Ollama host, one call per row.
 
-    Raises :class:`OllamaError` if piec fails on any row (the caller falls back to
+    Raises :class:`OllamaError` if the Ollama host fails on any row (the caller falls back to
     the local classifier); rows applied before the failure are committed first, so
     the fallback only reconsiders what's left.
     """
@@ -85,7 +85,7 @@ def classify_llm(
             session.add(tx)
             categorized += 1
     except OllamaError:
-        session.commit()  # keep whatever was tagged before piec went away
+        session.commit()  # keep whatever was tagged before the Ollama host went away
         raise
 
     session.commit()
@@ -98,9 +98,9 @@ def classify_llm(
 def categorize_uncategorized(
     session: Session, *, settings: Settings | None = None, client: OllamaClient | None = None
 ) -> ClassifyResult:
-    """The "classify now" entry point: LLM (piec) primary, classifier fallback.
+    """The "classify now" entry point: LLM (Ollama host) primary, classifier fallback.
 
-    With the LLM enabled and configured, try piec first; on :class:`OllamaError`
+    With the LLM enabled and configured, try the Ollama host first; on :class:`OllamaError`
     (unreachable/slow/garbled) log a warning and fall back to the local classifier.
     With the LLM off, this is just the classifier — the pre-PR-2 behaviour.
     """
@@ -109,7 +109,7 @@ def categorize_uncategorized(
         try:
             return classify_llm(session, settings=settings, client=client)
         except OllamaError:
-            # A silent fallback would hide a down piec — the owner would think the
+            # A silent fallback would hide a down Ollama host — the owner would think the
             # LLM is working when it never runs. Say so, then use the local model.
             log.warning("LLM categorizer unreachable; falling back to the local classifier")
 

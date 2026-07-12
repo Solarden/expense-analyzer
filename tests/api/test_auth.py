@@ -1,11 +1,13 @@
 """Auth tests: hashing, login/logout, route protection, user management."""
 
+from collections.abc import Callable
+
 from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from expense_analyzer.auth import hash_password, verify_password
-from expense_analyzer.models import Owner
+from expense_analyzer.models import Account, Owner, Scope, Transaction
 from expense_analyzer.queries.core import users
 
 
@@ -186,6 +188,31 @@ def test_admin_can_delete_member_keeping_their_data(client: TestClient, db_sessi
     assert account.owner_id is None
 
 
+def test_delete_member_soft_deletes_private_keeps_household(
+    db_session: Session,
+    account: Account,
+    make_transaction: Callable[..., Transaction],
+):
+    """A deleted member's private rows leave with them (soft-deleted, owner cleared);
+    their household rows stay in the shared dataset with only the owner tag cleared."""
+    member = users.create_user(db_session, username="plain", name="Plain", password="pw")
+    private = make_transaction(
+        account_id=account.id, amount=-500, owner_id=member.id, scope=Scope.private
+    )
+    shared = make_transaction(
+        account_id=account.id, amount=-700, owner_id=member.id, scope=Scope.household
+    )
+
+    users.delete_user(db_session, member)
+
+    db_session.expire_all()
+    assert users.get(db_session, member.id) is None
+    db_session.refresh(private)
+    db_session.refresh(shared)
+    assert private.deleted_at is not None and private.owner_id is None  # left with the user
+    assert shared.deleted_at is None and shared.owner_id is None  # kept, shared, untagged
+
+
 def test_admin_cannot_delete_self(client: TestClient, db_session: Session):
     admin = users.create_user(db_session, username="admin", name="Admin", password="pw")
     _login_as(client, "admin", "pw")
@@ -315,3 +342,63 @@ def test_non_admin_cannot_toggle_admin(client: TestClient, db_session: Session):
     assert resp.status_code == status.HTTP_403_FORBIDDEN
     db_session.refresh(admin)
     assert admin.is_admin is True
+
+
+def test_member_cannot_see_another_members_private_transaction(
+    client: TestClient,
+    db_session: Session,
+    account: Account,
+    make_transaction: Callable[..., Transaction],
+):
+    """End-to-end privacy boundary: a member's private row is invisible to another
+    member — absent from the list and unreachable by direct id (IDOR)."""
+    alice = users.create_user(db_session, username="alice", name="Alice", password="pw")
+    users.create_user(db_session, username="bob", name="Bob", password="pw")
+    alice_private = make_transaction(
+        account_id=account.id,
+        amount=-111,
+        owner_id=alice.id,
+        scope=Scope.private,
+        raw_description="ALICE-SECRET",
+    )
+    make_transaction(account_id=account.id, amount=-222, raw_description="SHARED-GROCERIES")
+
+    _login_as(client, "bob", "pw")
+    listing = client.get("/dashboard/transactions").text
+    assert "SHARED-GROCERIES" in listing  # bob sees the household row
+    assert "ALICE-SECRET" not in listing  # but never alice's private row
+
+    # ...and can't reach it directly by id (IDOR closed).
+    edit = client.get(f"/dashboard/transactions/{alice_private.id}/edit", follow_redirects=False)
+    assert edit.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_lens_switcher_scopes_the_list_and_persists(
+    auth_client: TestClient,
+    db_session: Session,
+    account: Account,
+    make_transaction: Callable[..., Transaction],
+):
+    """The global lens re-scopes the list and sticks across requests (session-backed)."""
+    tester = users.get_by_username(db_session, "tester")
+    make_transaction(
+        account_id=account.id,
+        amount=-11,
+        owner_id=tester.id,
+        scope=Scope.private,
+        raw_description="MY-PRIVATE",
+    )
+    make_transaction(account_id=account.id, amount=-22, raw_description="THE-HOUSEHOLD")
+
+    both = auth_client.get("/dashboard/transactions?lens=all").text
+    assert "MY-PRIVATE" in both and "THE-HOUSEHOLD" in both
+
+    home = auth_client.get("/dashboard/transactions?lens=home").text
+    assert "THE-HOUSEHOLD" in home and "MY-PRIVATE" not in home
+
+    private = auth_client.get("/dashboard/transactions?lens=private").text
+    assert "MY-PRIVATE" in private and "THE-HOUSEHOLD" not in private
+
+    # No ?lens= this time: the session remembers the last choice (private).
+    persisted = auth_client.get("/dashboard/transactions").text
+    assert "MY-PRIVATE" in persisted and "THE-HOUSEHOLD" not in persisted

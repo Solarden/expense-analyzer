@@ -33,7 +33,9 @@ router = APIRouter(
 
 @router.get("", response_class=HTMLResponse)
 def subscriptions_page(request: Request, user: CurrentUser, session: DbSession) -> HTMLResponse:
-    views = subscription_queries.subscription_overview(session, get_settings(), today=local_today())
+    views = subscription_queries.subscription_overview(
+        session, get_settings(), today=local_today(), viewer_id=user.id
+    )
     all_categories = category_queries.list_categories(session)
 
     return templates.TemplateResponse(

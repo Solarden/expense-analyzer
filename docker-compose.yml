@@ -7,7 +7,7 @@ services:
     environment:
       # The shared /opt/stack PostgreSQL on the Pi (NOT a service of this
       # compose). Full URL incl. credentials, e.g.
-      #   postgresql+psycopg://expense_analyzer:...@192.168.1.206:5432/expense_analyzer
+      #   postgresql+psycopg://expense_analyzer:...@192.168.1.x:5432/expense_analyzer
       # Must be set (no silent dev fallback for a finance app).
       EA_DATABASE_URL: ${EA_DATABASE_URL:?set EA_DATABASE_URL in your environment or .env}
       EA_DATA_PATH: /data

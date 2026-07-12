@@ -84,10 +84,14 @@ def neighbor_suggestions(
     session: Session,
     transactions: Sequence[Transaction],
     *,
+    viewer_id: int | None = None,
     settings: Settings | None = None,
     embedder: Embedder | None = None,
 ) -> dict[int, NeighborSuggestion]:
     """The kNN suggestion for each of ``transactions``, keyed by transaction id.
+
+    Scoped to ``viewer_id``: the neighbour index is built only from labels that
+    viewer may see, so another member's private description never surfaces as a hint.
 
     Only rows with a useful match appear in the result — a transaction with blank
     text, or whose nearest labelled neighbour is below
@@ -105,7 +109,10 @@ def neighbor_suggestions(
             embedder = load_embedder(settings.embeddings_model, settings.embeddings_model_revision)
             cache_key = f"{settings.embeddings_model}@{settings.embeddings_model_revision}"
 
-        samples = [TrainingSample(text=t, category_id=c) for t, c in confirmed_label_texts(session)]
+        samples = [
+            TrainingSample(text=t, category_id=c)
+            for t, c in confirmed_label_texts(session, viewer_id=viewer_id)
+        ]
         model = _index(samples, embedder, settings=settings, cache_key=cache_key)
         if model is None:
             return {}

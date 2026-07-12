@@ -7,7 +7,7 @@ tests/api/test_transaction_edit.py.
 from collections.abc import Callable
 from datetime import date
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from expense_analyzer.models import Account, Category, CategoryKind, Scope, Transaction, TxSource
 from expense_analyzer.queries.money import transactions
@@ -55,8 +55,8 @@ def test_two_identical_cash_entries_both_persist(db_session: Session, account: A
 
     assert a.id != b.id
     assert a.fingerprint != b.fingerprint
-    page = transactions.list_transactions(db_session, TransactionFilters(), page=1, page_size=10)
-    assert page.total == 2
+    rows = db_session.exec(select(Transaction)).all()
+    assert len(rows) == 2
 
 
 def test_manual_batch_is_reused_and_counts(db_session: Session, account: Account):

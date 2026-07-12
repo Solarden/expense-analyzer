@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlmodel import Session
 
 from expense_analyzer.api.categorize import apply_categorization, parse_category_id
-from expense_analyzer.api.deps import CurrentUser, DbSession
+from expense_analyzer.api.deps import CurrentLens, CurrentUser, DbSession
 from expense_analyzer.api.forms import (
     CategorizeForm,
     EditTransactionForm,
@@ -20,7 +20,7 @@ from expense_analyzer.api.forms import (
 from expense_analyzer.auth import require_user
 from expense_analyzer.clock import local_today
 from expense_analyzer.config import get_settings
-from expense_analyzer.models import Owner, Scope, Transaction
+from expense_analyzer.models import Lens, Owner, Scope, Transaction
 from expense_analyzer.money import MoneyParseError, from_minor_units, parse_pln
 from expense_analyzer.queries.categorize import categories
 from expense_analyzer.queries.core import accounts
@@ -32,7 +32,6 @@ router = APIRouter(
     prefix="/dashboard/transactions", tags=["transactions"], dependencies=[Depends(require_user)]
 )
 
-_SCOPE_VALUES = {s.value for s in Scope}
 _LIST_PATH = "/dashboard/transactions"
 # Selectable rows-per-page. A whitelist (not a raw int) so a hand-edited ?size=
 # can't ask for a 100k-row page on the Pi. EA_PAGE_SIZE stays the default when no
@@ -55,10 +54,10 @@ def _list_context(
     user: Owner,
     session: Session,
     *,
+    lens: Lens = Lens.all,
     account_id: str | None = None,
     month: str | None = None,
     category: str | None = None,
-    scope: str | None = None,
     q: str | None = None,
     page: str | None = None,
     size: str | None = None,
@@ -71,7 +70,6 @@ def _list_context(
     uncategorized = category == UNCATEGORIZED
     category_id = int(category) if category and category.isdigit() else None
     parsed_account_id = int(account_id) if account_id and account_id.isdigit() else None
-    parsed_scope = Scope(scope) if scope in _SCOPE_VALUES else None
     page_num = max(1, int(page)) if page and page.isdigit() else 1
     # Explicit choice only if it's on the whitelist; otherwise fall back to the
     # configured default (and don't echo a bogus value into the pager links).
@@ -83,11 +81,10 @@ def _list_context(
         month=month or None,
         category_id=category_id,
         uncategorized=uncategorized,
-        scope=parsed_scope,
         search=q or None,
     )
     result = transactions.list_transactions(
-        session, filters, page=page_num, page_size=resolved_size
+        session, filters, page=page_num, page_size=resolved_size, viewer_id=user.id, lens=lens
     )
 
     def page_query(target_page: int) -> str:
@@ -99,8 +96,6 @@ def _list_context(
             params.append(("month", month))
         if category:
             params.append(("category", category))
-        if parsed_scope:
-            params.append(("scope", parsed_scope.value))
         if q:
             params.append(("q", q))
         if parsed_size is not None:
@@ -136,7 +131,7 @@ def _list_context(
         "categories": all_categories,
         "category_colors": {c.id: c.color for c in all_categories if c.id is not None},
         "edit_meta": edit_meta,
-        "months": stats.available_months(session),
+        "months": stats.available_months(session, viewer_id=user.id, lens=lens),
         "scopes": [s.value for s in Scope],
         "directions": [d.value for d in TxDirection],
         "page_sizes": list(_PAGE_SIZES),
@@ -149,7 +144,6 @@ def _list_context(
         "f_account_id": parsed_account_id,
         "f_month": month or "",
         "f_category": category or "",
-        "f_scope": parsed_scope.value if parsed_scope else "",
         "f_q": q or "",
         "f_page_size": resolved_size,
     }
@@ -159,11 +153,11 @@ def _list_context(
 def list_transactions(
     request: Request,
     user: CurrentUser,
+    lens: CurrentLens,
     session: DbSession,
     account_id: str | None = None,  # "" (all accounts) or a digit
     month: str | None = None,
     category: str | None = None,  # "none" = uncategorized, a digit = that category
-    scope: str | None = None,  # "" (any scope) or a Scope value
     q: str | None = None,
     page: str | None = None,
     size: str | None = None,  # rows per page; off-list -> EA_PAGE_SIZE default
@@ -175,10 +169,10 @@ def list_transactions(
             request,
             user,
             session,
+            lens=lens,
             account_id=account_id,
             month=month,
             category=category,
-            scope=scope,
             q=q,
             page=page,
             size=size,
@@ -190,9 +184,16 @@ def list_transactions(
 def categorize(
     tx_id: int,
     form: Annotated[CategorizeForm, Form()],
+    user: CurrentUser,
     session: DbSession,
 ) -> RedirectResponse:
-    apply_categorization(session, tx_id=tx_id, raw_category_id=form.category_id, scope=form.scope)
+    apply_categorization(
+        session,
+        tx_id=tx_id,
+        raw_category_id=form.category_id,
+        scope=form.scope,
+        viewer_id=user.id,
+    )
 
     return RedirectResponse(_safe_return_to(form.return_to), status_code=status.HTTP_303_SEE_OTHER)
 
@@ -201,10 +202,14 @@ def categorize(
 def update_note(
     tx_id: int,
     form: Annotated[NoteForm, Form()],
+    user: CurrentUser,
     session: DbSession,
 ) -> RedirectResponse:
     """Save the note from the note modal (works on any row, imported or manual)."""
-    if transactions.set_note(session, tx_id=tx_id, note=form.note.strip() or None) is None:
+    result = transactions.set_note(
+        session, tx_id=tx_id, note=form.note.strip() or None, viewer_id=user.id
+    )
+    if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="transaction not found")
 
     return RedirectResponse(_safe_return_to(form.return_to), status_code=status.HTTP_303_SEE_OTHER)
@@ -225,6 +230,7 @@ def add_transaction(
     request: Request,
     form: Annotated[ManualTransactionForm, Form()],
     user: CurrentUser,
+    lens: CurrentLens,
     session: DbSession,
 ) -> Response:
     """Hand-enter a transaction (mainly cash — the only entry path for a cash
@@ -244,7 +250,7 @@ def add_transaction(
         return templates.TemplateResponse(
             request,
             "money/transactions.html",
-            _list_context(request, user, session, error=error),
+            _list_context(request, user, session, lens=lens, error=error),
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -295,7 +301,7 @@ def edit_transaction_form(
     session: DbSession,
     return_to: str = _LIST_PATH,
 ) -> HTMLResponse:
-    tx = transactions.get_transaction(session, tx_id)
+    tx = transactions.get_transaction(session, tx_id, viewer_id=user.id)
     if tx is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="transaction not found")
 
@@ -314,7 +320,7 @@ def edit_transaction(
     user: CurrentUser,
     session: DbSession,
 ) -> Response:
-    tx = transactions.get_transaction(session, tx_id)
+    tx = transactions.get_transaction(session, tx_id, viewer_id=user.id)
     if tx is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="transaction not found")
 
@@ -352,7 +358,13 @@ def edit_transaction(
             )
 
     transactions.update_transaction(
-        session, tx_id=tx_id, category_id=category_id, scope=form.scope, note=note, **money_fields
+        session,
+        tx_id=tx_id,
+        viewer_id=user.id,
+        category_id=category_id,
+        scope=form.scope,
+        note=note,
+        **money_fields,
     )
 
     return RedirectResponse(_safe_return_to(form.return_to), status_code=status.HTTP_303_SEE_OTHER)
@@ -361,12 +373,13 @@ def edit_transaction(
 @router.post("/{tx_id}/delete")
 def delete_transaction(
     tx_id: int,
+    user: CurrentUser,
     session: DbSession,
     return_to: Annotated[str, Form()] = _LIST_PATH,
 ) -> RedirectResponse:
     """Soft-delete a manual entry. Imported rows are removed by rolling back their
     import batch, not one at a time — so deletion is gated to manual entries."""
-    tx = transactions.get_transaction(session, tx_id)
+    tx = transactions.get_transaction(session, tx_id, viewer_id=user.id)
     if tx is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="transaction not found")
     if not transactions.is_manual_entry(session, tx):
@@ -374,6 +387,6 @@ def delete_transaction(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="only manual entries can be deleted; roll back the import batch instead",
         )
-    transactions.soft_delete_transaction(session, tx_id=tx_id)
+    transactions.soft_delete_transaction(session, tx_id=tx_id, viewer_id=user.id)
 
     return RedirectResponse(_safe_return_to(return_to), status_code=status.HTTP_303_SEE_OTHER)

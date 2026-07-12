@@ -56,6 +56,7 @@ async def upload(
                 importer=get_importer(importer),
                 filename=file.filename or "upload.csv",
                 data=data,
+                owner_id=user.id,
             )
         except ImporterError as exc:
             # Wrong bank/format or a malformed row — a normal user mistake, not a crash.

@@ -17,6 +17,7 @@ from expense_analyzer.importers import (
     run_import,
 )
 from expense_analyzer.models import Account, ImportBatch, ImportStatus, Transaction, TxSource
+from expense_analyzer.queries.core import users
 
 
 def _records() -> list[NormalizedTransaction]:
@@ -50,6 +51,24 @@ def test_import_inserts_new_transactions(
     batch = db_session.get(ImportBatch, summary.batch_id)
     assert batch.record_count == 3
     assert batch.status == ImportStatus.active
+
+
+def test_import_stamps_owner_id(
+    db_session: Session, account: Account, make_importer: Callable[..., Importer]
+):
+    """Imported rows carry the uploading user's id (provenance for per-user scoping)."""
+    alice = users.create_user(db_session, username="alice", name="Alice", password="secret123")
+    run_import(
+        db_session,
+        account_id=account.id,
+        importer=make_importer(_records()),
+        filename="may.csv",
+        data=b"",
+        owner_id=alice.id,
+    )
+
+    rows = db_session.exec(select(Transaction)).all()
+    assert rows and all(tx.owner_id == alice.id for tx in rows)
 
 
 def test_reimport_same_file_is_idempotent(
@@ -211,6 +230,10 @@ def test_import_auto_links_cross_account_transfer(
     make_account: Callable[..., Account],
     make_importer: Callable[..., Importer],
 ):
+    # Imports stamp the uploader as owner and auto-link runs as that viewer, so a
+    # user's own (default-private) transfer legs still pair — mirroring production,
+    # where the upload endpoint passes owner_id=user.id.
+    alice = users.create_user(db_session, username="alice", name="Alice", password="pw")
     other = make_account(name="mBank")
 
     # Outflow lands on the first account; its equal-and-opposite counterpart
@@ -221,6 +244,7 @@ def test_import_auto_links_cross_account_transfer(
         importer=make_importer([NormalizedTransaction(date(2026, 5, 1), -200000, "Transfer out")]),
         filename="a.csv",
         data=b"",
+        owner_id=alice.id,
     )
     summary = run_import(
         db_session,
@@ -228,6 +252,7 @@ def test_import_auto_links_cross_account_transfer(
         importer=make_importer([NormalizedTransaction(date(2026, 5, 2), 200000, "Transfer in")]),
         filename="b.csv",
         data=b"",
+        owner_id=alice.id,
     )
 
     assert summary.transfers_auto_linked == 1

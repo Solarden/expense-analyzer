@@ -3,142 +3,203 @@
 {% block content %}
   <div class="cols">
     <div class="panel">
-      <h2 style="margin-top:0">Accounts</h2>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="m-0">Accounts</h2>
+        <a class="btn" href="#add-account">+ Add account</a>
+      </div>
       {% if accounts %}
         <table>
           <thead>
             <tr>
               <th>Name</th>
-              <th>Edit</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {% for a in accounts %}
               <tr>
                 <td>
-                  {{ a.name }}
-                  <br>
-                  <span class="muted" style="font-size:12px">{{ a.type.value }} · {{ a.currency }}</span>
+                  <div>{{ a.name }}</div>
+                  <div class="muted text-[12px]">{{ a.type.value }} · {{ a.currency }}</div>
                   {% if a.number %}
-                    <br>
-                    <span class="muted" style="font-size:12px">{{ a.number }}</span>
-                    <button type="button" class="ghost" data-copy="{{ a.number }}">Copy</button>
+                    <div class="muted text-[12px]">
+                      {{ a.number }}
+                      <button type="button" class="ghost" data-copy="{{ a.number }}">Copy</button>
+                    </div>
                   {% endif %}
                 </td>
                 <td>
-                  {# Inline edit per account: rename, change type, and set the account
-                     number / IBAN in one Save. On a validation error rf holds what the
-                     user just typed for this row, so their edit survives the re-render. #}
-                  {% set rf = account_form if edit_id == a.id else none %}
-                  <form class="hstack"
-                        method="post"
-                        action="/dashboard/accounts/{{ a.id }}/edit">
-                    <input name="name"
-                           value="{{ rf.name if rf else a.name }}"
-                           aria-label="Name for {{ a.name }}"
-                           required>
-                    <select name="type" aria-label="Type for {{ a.name }}">
-                      {% for t in account_types %}
-                        <option value="{{ t }}"
-                                {% if t == (rf.type.value if rf else a.type.value) %}selected{% endif %}>
-                          {{ t }}
-                        </option>
-                      {% endfor %}
-                    </select>
-                    <input name="number"
-                           value="{{ rf.number if rf else (a.number or '') }}"
-                           placeholder="Account no. / IBAN"
-                           aria-label="Number for {{ a.name }}"
-                           class="flex-1 min-w-[260px]">
-                    <button class="ghost" type="submit">Save</button>
-                  </form>
+                  <a class="btn" href="#edit-account-{{ a.id }}">Edit</a>
                 </td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
+        {# Edit modals — pure-CSS :target overlay (same pattern as transactions).
+           is-open reopens the right modal when a validation error re-renders the
+           page (no URL hash after a POST), keeping the user's typed values (rf). #}
+        {% for a in accounts %}
+          {% set rf = account_form if edit_id == a.id else none %}
+          <div id="edit-account-{{ a.id }}"
+               class="modal{% if edit_id == a.id %} is-open{% endif %}">
+            <a href="#close" class="modal-backdrop" aria-label="Close"></a>
+            <div class="modal-card"
+                 role="dialog"
+                 aria-modal="true"
+                 aria-label="Edit account">
+              <h3>Edit account</h3>
+              <form method="post" action="/dashboard/accounts/{{ a.id }}/edit">
+                <label for="acct-name-{{ a.id }}">Name</label>
+                <input id="acct-name-{{ a.id }}"
+                       name="name"
+                       value="{{ rf.name if rf else a.name }}"
+                       required>
+                <label for="acct-type-{{ a.id }}">Type</label>
+                <select id="acct-type-{{ a.id }}" name="type">
+                  {% for t in account_types %}
+                    <option value="{{ t }}"
+                            {% if t == (rf.type.value if rf else a.type.value) %}selected{% endif %}>{{ t }}</option>
+                  {% endfor %}
+                </select>
+                <label for="acct-number-{{ a.id }}">Account no. / IBAN</label>
+                <input id="acct-number-{{ a.id }}"
+                       name="number"
+                       value="{{ rf.number if rf else (a.number or '') }}"
+                       placeholder="Account no. / IBAN">
+                <div class="hstack mt-3">
+                  <button type="submit">Save</button>
+                  <a class="btn" href="#close">Close</a>
+                </div>
+              </form>
+            </div>
+          </div>
+        {% endfor %}
       {% else %}
         <p class="muted">No accounts yet. Add one to import a CSV.</p>
       {% endif %}
-      <h2>Add account</h2>
-      {# On a create error, af carries the just-typed values back so the form keeps them. #}
+      {# Add-account modal — always present; is-open on a create error (af set,
+         and not an edit error). af carries the just-typed values back. #}
       {% set af = account_form if not edit_id else none %}
-      <form class="hstack" method="post" action="/dashboard/accounts">
-        <input name="name"
-               value="{{ af.name if af else '' }}"
-               placeholder="PKO checking"
-               aria-label="Account name"
-               required>
-        <select name="type" aria-label="Account type">
-          {% for t in account_types %}
-            <option value="{{ t }}" {% if af and t == af.type.value %}selected{% endif %}>{{ t }}</option>
-          {% endfor %}
-        </select>
-        <input name="number"
-               value="{{ af.number if af else '' }}"
-               placeholder="Account no. / IBAN (optional)"
-               aria-label="Account number"
-               class="flex-1 min-w-[260px]">
-        <button type="submit">Add account</button>
-      </form>
+      <div id="add-account" class="modal{% if af %} is-open{% endif %}">
+        <a href="#close" class="modal-backdrop" aria-label="Close"></a>
+        <div class="modal-card"
+             role="dialog"
+             aria-modal="true"
+             aria-label="Add account">
+          <h3>Add account</h3>
+          <form method="post" action="/dashboard/accounts">
+            <label for="add-acct-name">Name</label>
+            <input id="add-acct-name"
+                   name="name"
+                   value="{{ af.name if af else '' }}"
+                   placeholder="PKO checking"
+                   required>
+            <label for="add-acct-type">Type</label>
+            <select id="add-acct-type" name="type">
+              {% for t in account_types %}
+                <option value="{{ t }}" {% if af and t == af.type.value %}selected{% endif %}>{{ t }}</option>
+              {% endfor %}
+            </select>
+            <label for="add-acct-number">Account no. / IBAN (optional)</label>
+            <input id="add-acct-number"
+                   name="number"
+                   value="{{ af.number if af else '' }}"
+                   placeholder="Account no. / IBAN (optional)">
+            <div class="hstack mt-3">
+              <button type="submit">Add account</button>
+              <a class="btn" href="#close">Close</a>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
     <div class="panel">
-      <h2 style="margin-top:0">Categories</h2>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="m-0">Categories</h2>
+        <a class="btn" href="#add-cat">+ Add category</a>
+      </div>
       {% if categories %}
         <table>
           <thead>
             <tr>
               <th>Name</th>
-              <th>Edit</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {% for c in categories %}
               <tr>
-                <td>{{ ui.swatch(c.color) }}{{ c.name }}</td>
                 <td>
-                  {# Inline edit per category (Phase 20b): rename, change kind, and
-                     set the colour in one Save. Clear (only when set) drops the
-                     colour back to none. Changing kind reclassifies it for stats. #}
-                  <form class="hstack"
-                        method="post"
-                        action="/dashboard/categories/{{ c.id }}/edit">
-                    <input name="name"
-                           value="{{ c.name }}"
-                           aria-label="Name for {{ c.name }}"
-                           required>
-                    <select name="kind" aria-label="Kind for {{ c.name }}">
-                      {% for k in category_kinds %}
-                        <option value="{{ k }}" {% if k == c.kind.value %}selected{% endif %}>{{ k }}</option>
-                      {% endfor %}
-                    </select>
-                    <input type="color"
-                           name="color"
-                           value="{{ c.color or '#4f8cff' }}"
-                           aria-label="Colour for {{ c.name }}">
-                    <button class="ghost" type="submit">Save</button>
-                    {% if c.color %}<button class="ghost" type="submit" name="clear" value="1">Clear</button>{% endif %}
-                  </form>
+                  <div>{{ ui.swatch(c.color) }}{{ c.name }}</div>
+                  <div class="muted text-[12px]">{{ c.kind.value }}</div>
+                </td>
+                <td>
+                  <a class="btn" href="#edit-cat-{{ c.id }}">Edit</a>
                 </td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
+        {# Edit modals. Clear (only when a colour is set) drops it back to none;
+           changing kind reclassifies the category for stats. #}
+        {% for c in categories %}
+          <div id="edit-cat-{{ c.id }}" class="modal">
+            <a href="#close" class="modal-backdrop" aria-label="Close"></a>
+            <div class="modal-card"
+                 role="dialog"
+                 aria-modal="true"
+                 aria-label="Edit category">
+              <h3>Edit category</h3>
+              <form method="post" action="/dashboard/categories/{{ c.id }}/edit">
+                <label for="cat-name-{{ c.id }}">Name</label>
+                <input id="cat-name-{{ c.id }}" name="name" value="{{ c.name }}" required>
+                <label for="cat-kind-{{ c.id }}">Kind</label>
+                <select id="cat-kind-{{ c.id }}" name="kind">
+                  {% for k in category_kinds %}
+                    <option value="{{ k }}" {% if k == c.kind.value %}selected{% endif %}>{{ k }}</option>
+                  {% endfor %}
+                </select>
+                <label for="cat-color-{{ c.id }}">Colour</label>
+                <input id="cat-color-{{ c.id }}"
+                       type="color"
+                       name="color"
+                       value="{{ c.color or '#4f8cff' }}">
+                <div class="hstack mt-3">
+                  <button type="submit">Save</button>
+                  {% if c.color %}<button class="ghost" type="submit" name="clear" value="1">Clear</button>{% endif %}
+                  <a class="btn" href="#close">Close</a>
+                </div>
+              </form>
+            </div>
+          </div>
+        {% endfor %}
       {% else %}
         <p class="muted">No categories yet. Add some to categorize transactions manually.</p>
       {% endif %}
-      <h2>Add category</h2>
-      <form class="hstack" method="post" action="/dashboard/categories">
-        <input name="name" placeholder="Food" aria-label="Category name" required>
-        <select name="kind" aria-label="Category kind">
-          {% for k in category_kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}
-        </select>
-        <input name="color"
-               type="color"
-               value="#4f8cff"
-               aria-label="Category colour">
-        <button type="submit">Add category</button>
-      </form>
+      {# Add-category modal — always present. #}
+      <div id="add-cat" class="modal">
+        <a href="#close" class="modal-backdrop" aria-label="Close"></a>
+        <div class="modal-card"
+             role="dialog"
+             aria-modal="true"
+             aria-label="Add category">
+          <h3>Add category</h3>
+          <form method="post" action="/dashboard/categories">
+            <label for="add-cat-name">Name</label>
+            <input id="add-cat-name" name="name" placeholder="Food" required>
+            <label for="add-cat-kind">Kind</label>
+            <select id="add-cat-kind" name="kind">
+              {% for k in category_kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}
+            </select>
+            <label for="add-cat-color">Colour</label>
+            <input id="add-cat-color" name="color" type="color" value="#4f8cff">
+            <div class="hstack mt-3">
+              <button type="submit">Add category</button>
+              <a class="btn" href="#close">Close</a>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
   </div>
   <h2>Recent imports</h2>
