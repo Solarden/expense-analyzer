@@ -60,6 +60,38 @@
       {% endif %}
     </div>
   {% endfor %}
+  {% if by_member %}
+    {% set member_total = by_member | sum(attribute='total') %}
+    <div class="panel">
+      <h2 style="margin-top:0">Spending by member — {{ month }}</h2>
+      <table class="table-cards">
+        <thead>
+          <tr>
+            <th>Member</th>
+            <th class="num">Spent</th>
+            <th>Share</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in by_member %}
+            <tr>
+              <td data-label="Member">{{ m.name }}</td>
+              <td class="num" data-label="Spent">{{ m.total | pln }}</td>
+              <td data-label="Share">
+                {% set pct = (m.total * 100 // member_total) if member_total else 0 %}
+                <div class="flex items-center gap-2">
+                  <div class="h-2 min-w-[80px] flex-1 overflow-hidden rounded bg-bg">
+                    <div class="h-full bg-pos" style="width: {{ pct }}%"></div>
+                  </div>
+                  <span class="muted text-[12px]">{{ pct }}%</span>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
   {% if edit_budget %}
     <h2>Edit budget</h2>
     <div class="panel">

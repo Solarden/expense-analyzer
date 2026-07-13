@@ -39,11 +39,19 @@ from expense_analyzer.models import Category, CategoryKind, Lens, Transaction
 from expense_analyzer.queries.visibility import visible_to
 
 UNCATEGORIZED_LABEL = "Uncategorized"
+UNKNOWN_OWNER_LABEL = "Unknown"  # shared rows a departed member added (owner_id NULL)
 
 
 @dataclass(frozen=True)
 class CategoryTotal:
     category_id: int | None  # None == uncategorized
+    name: str
+    total: int  # positive magnitude of spending, minor units
+
+
+@dataclass(frozen=True)
+class OwnerTotal:
+    owner_id: int | None  # None == added by a departed member
     name: str
     total: int  # positive magnitude of spending, minor units
 
@@ -165,6 +173,38 @@ def month_summary(
     categories.sort(key=lambda c: c.total, reverse=True)
 
     return MonthSummary(month=month, spending=spending, income=income, by_category=categories)
+
+
+def spend_by_owner(
+    transactions: list[Transaction], month: str, owner_names: dict[int, str]
+) -> list[OwnerTotal]:
+    """Shared-budget spending grouped by the member who added each row, for one
+    ``YYYY-MM``, largest first.
+
+    Same pure bucketing as :func:`month_summary`, keyed on ``owner_id`` instead of
+    category. ``transactions`` must be the household spendable set (call
+    :func:`spendable_transactions` with ``lens=Lens.home``). Rows added by a
+    since-departed member carry ``owner_id=None`` (``delete_user`` nulls it) and
+    bucket under "Unknown"."""
+    by_owner: dict[int | None, int] = defaultdict(int)
+
+    for tx in transactions:
+        if tx.booked_date.strftime("%Y-%m") != month:
+            continue
+        if tx.amount < 0:
+            by_owner[tx.owner_id] += -tx.amount  # magnitude
+
+    owners = [
+        OwnerTotal(
+            owner_id=oid,
+            name=UNKNOWN_OWNER_LABEL if oid is None else owner_names.get(oid, f"#{oid}"),
+            total=total,
+        )
+        for oid, total in by_owner.items()
+    ]
+    owners.sort(key=lambda o: o.total, reverse=True)
+
+    return owners
 
 
 def spending_trend(transactions: list[Transaction], *, months: int) -> list[MonthTotals]:

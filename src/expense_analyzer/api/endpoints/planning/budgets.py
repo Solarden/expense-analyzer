@@ -23,6 +23,7 @@ from expense_analyzer.auth import require_user
 from expense_analyzer.models import CategoryKind, Lens, Owner, Scope
 from expense_analyzer.money import MoneyParseError, from_minor_units, parse_pln
 from expense_analyzer.queries.categorize import categories as category_queries
+from expense_analyzer.queries.core import users
 from expense_analyzer.queries.money import stats
 from expense_analyzer.queries.planning import budgets as budget_queries
 from expense_analyzer.templating import templates
@@ -58,11 +59,20 @@ def _context(
         }
         for s in section_scopes
     ]
+    # In the Home budget, break the month's shared spend down by the member who
+    # added each row (owner_id). Only meaningful under the household lens; empty
+    # elsewhere so the block hides itself.
+    by_member = []
+    if lens is Lens.home:
+        owner_names = {u.id: u.name for u in users.list_users(session)}
+        spendable = stats.spendable_transactions(session, viewer_id=user.id, lens=Lens.home)
+        by_member = stats.spend_by_owner(spendable, selected_month, owner_names)
     return {
         "user": user,
         "months": months,
         "month": selected_month,
         "sections": sections,
+        "by_member": by_member,
         "budgets": budget_queries.list_budgets(session, viewer_id=user.id),
         "categories": budget_queries.budgetable_categories(session),
         "category_names": {c.id: c.name for c in all_categories if c.id is not None},
