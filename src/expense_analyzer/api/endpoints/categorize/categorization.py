@@ -19,6 +19,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from expense_analyzer.api.categorize import apply_categorization
 from expense_analyzer.api.deps import CurrentUser, DbSession
 from expense_analyzer.api.forms import CategorizeForm
+from expense_analyzer.api.params import opt_int
 from expense_analyzer.auth import require_user
 from expense_analyzer.config import get_settings
 from expense_analyzer.models import Scope
@@ -61,7 +62,7 @@ def queue_page(
     queued: int | None = None,
     trained: int | None = None,
 ) -> HTMLResponse:
-    page_num = max(1, int(page)) if page and page.isdigit() else 1
+    page_num = max(1, opt_int(page) or 1)
     result = classifier_queries.review_queue(
         session, page=page_num, page_size=get_settings().page_size, viewer_id=user.id
     )
@@ -119,7 +120,7 @@ def categorize(
         viewer_id=user.id,
     )
 
-    page_num = max(1, int(page)) if page and page.isdigit() else 1
+    page_num = max(1, opt_int(page) or 1)
     dest = "/dashboard/queue" if page_num == 1 else f"/dashboard/queue?page={page_num}"
 
     return RedirectResponse(dest, status_code=status.HTTP_303_SEE_OTHER)

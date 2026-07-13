@@ -431,3 +431,9 @@ def test_home_lens_shows_added_by_pill_and_filter(
     assert "SHARED-GROCERIES" in kept
     gone = auth_client.get("/dashboard/transactions?lens=home&added_by=999999").text
     assert "SHARED-GROCERIES" not in gone
+
+    # A crafted value that str.isdigit() accepts but int() rejects (Unicode
+    # superscript "²") must fall back to no filter, never a 500.
+    exotic = auth_client.get("/dashboard/transactions?lens=home&added_by=²")
+    assert exotic.status_code == status.HTTP_200_OK
+    assert "SHARED-GROCERIES" in exotic.text

@@ -17,6 +17,7 @@ from expense_analyzer.api.forms import (
     NoteForm,
     TxDirection,
 )
+from expense_analyzer.api.params import opt_int
 from expense_analyzer.auth import require_user
 from expense_analyzer.clock import local_today
 from expense_analyzer.config import get_settings
@@ -69,17 +70,19 @@ def _list_context(
     # Parse each leniently into None rather than declaring typed params that 422
     # on an empty/invalid value (consistent with the malformed-month fix, Phase 4).
     uncategorized = category == UNCATEGORIZED
-    category_id = int(category) if category and category.isdigit() else None
-    parsed_account_id = int(account_id) if account_id and account_id.isdigit() else None
-    page_num = max(1, int(page)) if page and page.isdigit() else 1
+    category_id = opt_int(category)
+    parsed_account_id = opt_int(account_id)
+    page_num = max(1, opt_int(page) or 1)
     # Explicit choice only if it's on the whitelist; otherwise fall back to the
     # configured default (and don't echo a bogus value into the pager links).
-    parsed_size = int(size) if size and size.isdigit() and int(size) in _PAGE_SIZES else None
+    parsed_size = opt_int(size)
+    if parsed_size not in _PAGE_SIZES:
+        parsed_size = None
     resolved_size = parsed_size if parsed_size is not None else get_settings().page_size
     # "Added by" filter: "none" -> rows added by a departed member (owner IS NULL),
-    # a digit -> that member, anything else ("" / garbage) -> no filter.
+    # a member id -> that member, anything else ("" / garbage) -> no filter.
     unowned = added_by == "none"
-    owner_id = int(added_by) if added_by and added_by.isdigit() else None
+    owner_id = opt_int(added_by)
 
     filters = TransactionFilters(
         account_id=parsed_account_id,
@@ -144,7 +147,11 @@ def _list_context(
         "page": result,
         "accounts": accounts.list_accounts(session),
         "owner_names": owner_names,
-        "users": sorted(household_members, key=lambda u: u.name.lower()),
+        # Dropdown options — only rendered under the home lens, so don't bother
+        # sorting/shipping them otherwise (owner_names above still backs the pills).
+        "users": sorted(household_members, key=lambda u: u.name.lower())
+        if lens is Lens.home
+        else [],
         "categories": all_categories,
         "category_colors": {c.id: c.color for c in all_categories if c.id is not None},
         "edit_meta": edit_meta,

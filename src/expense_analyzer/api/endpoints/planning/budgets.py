@@ -19,6 +19,7 @@ from sqlmodel import Session
 
 from expense_analyzer.api.deps import CurrentLens, CurrentUser, DbSession
 from expense_analyzer.api.forms import BudgetForm
+from expense_analyzer.api.params import opt_int
 from expense_analyzer.auth import require_user
 from expense_analyzer.models import CategoryKind, Lens, Owner, Scope
 from expense_analyzer.money import MoneyParseError, from_minor_units, parse_pln
@@ -50,23 +51,27 @@ def _context(
         section_scopes = [Scope.household]
     else:
         section_scopes = [Scope.household, Scope.private]
+    # In the Home budget, break the month's shared spend down by the member who
+    # added each row (owner_id). Compute the household spendable scan once here and
+    # reuse it for both the by_member panel and the household section's overview
+    # (whose spend_lens is Lens.home too) — one scan per render, not two. Only
+    # meaningful under the household lens; empty/None elsewhere, so the block hides
+    # and each section self-scans with its own scope's lens.
+    by_member = []
+    spendable = None
+    if lens is Lens.home:
+        spendable = stats.spendable_transactions(session, viewer_id=user.id, lens=Lens.home)
+        owner_names = {u.id: u.name for u in users.list_users(session)}
+        by_member = stats.spend_by_owner(spendable, selected_month, owner_names)
     sections = [
         {
             "label": "Household budgets" if s is Scope.household else "My private budgets",
             "statuses": budget_queries.budget_overview(
-                session, selected_month, scope=s, viewer_id=user.id
+                session, selected_month, scope=s, viewer_id=user.id, spendable=spendable
             ),
         }
         for s in section_scopes
     ]
-    # In the Home budget, break the month's shared spend down by the member who
-    # added each row (owner_id). Only meaningful under the household lens; empty
-    # elsewhere so the block hides itself.
-    by_member = []
-    if lens is Lens.home:
-        owner_names = {u.id: u.name for u in users.list_users(session)}
-        spendable = stats.spendable_transactions(session, viewer_id=user.id, lens=Lens.home)
-        by_member = stats.spend_by_owner(spendable, selected_month, owner_names)
     return {
         "user": user,
         "months": months,
@@ -100,7 +105,7 @@ def budgets_page(
     # — only the limit is editable, and the existing set_budget upsert hits the
     # same row. A non-numeric or stale id just falls back to the create form (taken
     # as a string so a malformed ``?edit=`` degrades gracefully, not a 422).
-    edit_id = int(edit) if edit is not None and edit.isdigit() else None
+    edit_id = opt_int(edit)
     edit_budget = (
         budget_queries.get_budget(session, edit_id, viewer_id=user.id)
         if edit_id is not None
