@@ -44,11 +44,11 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3",
-    "ruff>=0.8",
+    "ruff>=0.15.21",
     "pre-commit>=4.0",
     # Jinja template formatter (used as a *formatter*, like ruff-format — not as a
     # linter: djlint's lint rules are mostly inapplicable here, see PROGRESS.md).
-    "djlint>=1.36",
+    "djlint>=1.40.6",
 ]
 
 [build-system]
