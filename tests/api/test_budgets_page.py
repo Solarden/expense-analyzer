@@ -12,7 +12,8 @@ from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
-from expense_analyzer.models import Account, Category, CategoryKind, Transaction
+from expense_analyzer.models import Account, Category, CategoryKind, Scope, Transaction
+from expense_analyzer.queries.core import users
 from expense_analyzer.queries.planning import budgets as bq
 
 
@@ -171,6 +172,31 @@ def test_budget_edit_malformed_id_falls_back_not_422(auth_client: TestClient) ->
 
     assert resp.status_code == status.HTTP_200_OK
     assert "Set a budget" in resp.text
+
+
+def test_home_lens_shows_spending_by_member(
+    auth_client: TestClient,
+    db_session: Session,
+    make_account: Callable[..., Account],
+    make_transaction: Callable[..., Transaction],
+) -> None:
+    """Under the home lens the budgets page breaks shared spend down by the member
+    who added each row."""
+    tester = users.get_by_username(db_session, "tester")
+    account = make_account()
+    make_transaction(
+        account_id=account.id,
+        amount=-120_00,
+        booked_date=date(2026, 6, 5),
+        owner_id=tester.id,
+        scope=Scope.household,
+    )
+
+    resp = auth_client.get("/dashboard/budgets?lens=home&month=2026-06")
+
+    assert resp.status_code == status.HTTP_200_OK
+    assert "Spending by member" in resp.text
+    assert "120,00" in resp.text  # tester's shared spend, formatted PLN
 
 
 def test_overview_shows_remaining_for_over_budget_category(

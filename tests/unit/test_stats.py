@@ -12,6 +12,7 @@ from datetime import date
 from sqlmodel import Session
 
 from expense_analyzer.models import Account, Category, CategoryKind, Transaction
+from expense_analyzer.queries.core import users
 from expense_analyzer.queries.money import stats
 
 
@@ -33,6 +34,41 @@ def test_month_summary_sign_split_and_net(
     assert summary.spending == 7500  # magnitudes summed
     assert summary.income == 10000
     assert summary.net == 2500
+
+
+def test_spend_by_owner_buckets_labels_and_month(
+    db_session: Session,
+    account: Account,
+    make_transaction: Callable[..., Transaction],
+):
+    alice = users.create_user(db_session, username="alice", name="Alice", password="pw")
+    bob = users.create_user(db_session, username="bob", name="Bob", password="pw")
+    make_transaction(
+        account_id=account.id, amount=-5000, booked_date=date(2026, 5, 3), owner_id=alice.id
+    )
+    make_transaction(
+        account_id=account.id, amount=-2500, booked_date=date(2026, 5, 9), owner_id=alice.id
+    )
+    make_transaction(
+        account_id=account.id, amount=-1000, booked_date=date(2026, 5, 4), owner_id=bob.id
+    )
+    make_transaction(
+        account_id=account.id, amount=-700, booked_date=date(2026, 5, 5), owner_id=None
+    )  # departed
+    make_transaction(
+        account_id=account.id, amount=-9999, booked_date=date(2026, 4, 30), owner_id=bob.id
+    )  # other month
+    make_transaction(
+        account_id=account.id, amount=3000, booked_date=date(2026, 5, 6), owner_id=alice.id
+    )  # income
+
+    result = stats.spend_by_owner(
+        stats.spendable_transactions(db_session), "2026-05", {alice.id: "Alice", bob.id: "Bob"}
+    )
+
+    # Magnitudes summed per owner; None -> "Unknown"; income and other months excluded.
+    assert {o.name: o.total for o in result} == {"Alice": 7500, "Bob": 1000, "Unknown": 700}
+    assert [o.name for o in result] == ["Alice", "Bob", "Unknown"]  # largest first
 
 
 def test_month_summary_filters_by_month(

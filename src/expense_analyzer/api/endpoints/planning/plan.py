@@ -21,6 +21,7 @@ from sqlmodel import Session
 
 from expense_analyzer.api.deps import CurrentUser, DbSession
 from expense_analyzer.api.forms import PlannedItemForm, PlannedLinkForm, TxDirection
+from expense_analyzer.api.params import opt_int
 from expense_analyzer.auth import require_user
 from expense_analyzer.clock import local_month, utc_now
 from expense_analyzer.config import get_settings
@@ -119,12 +120,12 @@ def _parse_item_form(form: PlannedItemForm) -> tuple[str | None, dict | None]:
 
     due_day: int | None = None
     if form.due_day.strip():
-        if not form.due_day.strip().isdigit() or not 1 <= int(form.due_day) <= 31:
+        due_day = opt_int(form.due_day.strip())
+        if due_day is None or not 1 <= due_day <= 31:
             return "Due day must be a day of the month (1–31), or left blank.", None
-        due_day = int(form.due_day)
 
-    category_id = int(form.category_id) if form.category_id.isdigit() else None
-    loan_id = int(form.loan_id) if form.loan_id.isdigit() else None
+    category_id = opt_int(form.category_id)
+    loan_id = opt_int(form.loan_id)
 
     return None, {
         "name": name,
@@ -175,7 +176,7 @@ def plan_page(
 
     # ``?edit=<id>`` prefills the form to change one item. A non-numeric or stale id
     # falls back to the create form (taken as a string so it degrades, not a 422).
-    edit_id = int(edit) if edit is not None and edit.isdigit() else None
+    edit_id = opt_int(edit)
     edit_item = planned_queries.get_planned_item(session, edit_id) if edit_id is not None else None
     extra: dict = {}
     if edit_item is not None:

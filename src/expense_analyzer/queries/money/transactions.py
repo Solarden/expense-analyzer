@@ -41,6 +41,8 @@ class TransactionFilters:
     category_id: int | None = None  # set with uncategorized=False
     uncategorized: bool = False  # category_id IS NULL
     scope: Scope | None = None
+    owner_id: int | None = None  # rows added by this member (set with unowned=False)
+    unowned: bool = False  # owner_id IS NULL (rows added by a departed member)
     search: str | None = None  # substring in raw_description / merchant_normalized
 
 
@@ -105,6 +107,13 @@ def _apply_filters(
         query = query.where(col(Transaction.category_id).is_(None))
     elif filters.category_id is not None:
         query = query.where(Transaction.category_id == filters.category_id)
+    # "Added by" filter — mirrors the category/uncategorized pair. Applied AFTER
+    # visible_to, so it can only narrow the already-visible set: a crafted
+    # ?added_by=<other member> can never surface that member's private rows.
+    if filters.unowned:
+        query = query.where(col(Transaction.owner_id).is_(None))
+    elif filters.owner_id is not None:
+        query = query.where(Transaction.owner_id == filters.owner_id)
     if filters.scope is not None:
         query = query.where(Transaction.scope == filters.scope)
     if filters.search and filters.search.strip():

@@ -402,3 +402,38 @@ def test_lens_switcher_scopes_the_list_and_persists(
     # No ?lens= this time: the session remembers the last choice (private).
     persisted = auth_client.get("/dashboard/transactions").text
     assert "MY-PRIVATE" in persisted and "THE-HOUSEHOLD" not in persisted
+
+
+def test_home_lens_shows_added_by_pill_and_filter(
+    auth_client: TestClient,
+    db_session: Session,
+    account: Account,
+    make_transaction: Callable[..., Transaction],
+):
+    """In the home budget the list shows who added each shared row and offers an
+    'Added by' filter that narrows to that member."""
+    tester = users.get_by_username(db_session, "tester")
+    make_transaction(
+        account_id=account.id,
+        amount=-33,
+        owner_id=tester.id,
+        scope=Scope.household,
+        raw_description="SHARED-GROCERIES",
+    )
+
+    home = auth_client.get("/dashboard/transactions?lens=home")
+    assert home.status_code == status.HTTP_200_OK
+    assert 'aria-label="Filter by who added it"' in home.text  # the filter dropdown
+    assert "Added to the shared budget by Tester" in home.text  # the "Added by" pill
+
+    # Filtering by the member keeps the row; an unknown member id drops it.
+    kept = auth_client.get(f"/dashboard/transactions?lens=home&added_by={tester.id}").text
+    assert "SHARED-GROCERIES" in kept
+    gone = auth_client.get("/dashboard/transactions?lens=home&added_by=999999").text
+    assert "SHARED-GROCERIES" not in gone
+
+    # A crafted value that str.isdigit() accepts but int() rejects (Unicode
+    # superscript "²") must fall back to no filter, never a 500.
+    exotic = auth_client.get("/dashboard/transactions?lens=home&added_by=²")
+    assert exotic.status_code == status.HTTP_200_OK
+    assert "SHARED-GROCERIES" in exotic.text

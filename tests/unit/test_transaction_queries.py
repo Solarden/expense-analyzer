@@ -6,6 +6,7 @@ from datetime import date
 from sqlmodel import Session
 
 from expense_analyzer.models import Account, Category, CategoryKind, Scope, Transaction
+from expense_analyzer.queries.core import users
 from expense_analyzer.queries.money import transactions
 from expense_analyzer.queries.money.transactions import TransactionFilters
 
@@ -176,6 +177,41 @@ def test_filter_by_scope(
 
     assert page.total == 1
     assert page.rows[0].scope == Scope.household
+
+
+def test_filter_by_owner(
+    db_session: Session,
+    account: Account,
+    make_transaction: Callable[..., Transaction],
+):
+    alice = users.create_user(db_session, username="alice", name="A", password="pw")
+    bob = users.create_user(db_session, username="bob", name="B", password="pw")
+    make_transaction(account_id=account.id, amount=-100, day=1, owner_id=alice.id)
+    make_transaction(account_id=account.id, amount=-200, day=2, owner_id=bob.id)
+
+    page = transactions.list_transactions(
+        db_session, TransactionFilters(owner_id=alice.id), page=1, page_size=10
+    )
+
+    assert page.total == 1
+    assert page.rows[0].owner_id == alice.id
+
+
+def test_filter_unowned(
+    db_session: Session,
+    account: Account,
+    make_transaction: Callable[..., Transaction],
+):
+    alice = users.create_user(db_session, username="alice", name="A", password="pw")
+    make_transaction(account_id=account.id, amount=-100, day=1, owner_id=alice.id)
+    make_transaction(account_id=account.id, amount=-200, day=2, owner_id=None)  # departed member
+
+    page = transactions.list_transactions(
+        db_session, TransactionFilters(unowned=True), page=1, page_size=10
+    )
+
+    assert page.total == 1
+    assert page.rows[0].owner_id is None
 
 
 def test_filter_search_matches_description_and_merchant(

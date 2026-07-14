@@ -11,6 +11,7 @@ two handlers to "apply, then redirect". It belongs in the API layer (it raises
 from fastapi import HTTPException, status
 from sqlmodel import Session
 
+from expense_analyzer.api.params import opt_int
 from expense_analyzer.models import Scope
 from expense_analyzer.queries.categorize import categories as category_queries
 from expense_analyzer.queries.money import transactions as transaction_queries
@@ -25,12 +26,12 @@ def parse_category_id(session: Session, raw_category_id: str) -> int | None:
     """
     if not raw_category_id:
         return None
-    if not raw_category_id.isdigit():
+    category_id = opt_int(raw_category_id)
+    if category_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"invalid category id: {raw_category_id!r}",
         )
-    category_id = int(raw_category_id)
     if category_queries.get_category(session, category_id) is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

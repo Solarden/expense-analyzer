@@ -26,6 +26,16 @@
           title="Shared with the household — counts toward the home budget">shared</span>
   {%- endif -%}
 {%- endmacro %}
+{# "Added by <name>" on a shared row so the home budget shows which member put a
+   transaction into the shared pot. Muted pill (matches the non-LLM source_badge);
+   renders nothing for private rows or when the owner is unknown (a departed
+   member's rows are owner-less). Plain palette utilities (run `make css`). #}
+{% macro owner_badge(scope, name) -%}
+  {%- if scope == "household" and name -%}
+    <span class="rounded border px-1.5 py-0.5 text-[11px] align-middle border-line text-muted"
+          title="Added to the shared budget by {{ name }}">{{ name }}</span>
+  {%- endif -%}
+{%- endmacro %}
 {# Scope <option>s with friendly labels (submitted values stay private/household).
    ``selected`` is the current value; pass "" for a new-row form (defaults to Private). #}
 {% macro scope_options(scopes, selected) -%}

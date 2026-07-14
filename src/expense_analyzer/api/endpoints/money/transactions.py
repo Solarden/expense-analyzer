@@ -17,13 +17,14 @@ from expense_analyzer.api.forms import (
     NoteForm,
     TxDirection,
 )
+from expense_analyzer.api.params import opt_int
 from expense_analyzer.auth import require_user
 from expense_analyzer.clock import local_today
 from expense_analyzer.config import get_settings
 from expense_analyzer.models import Lens, Owner, Scope, Transaction
 from expense_analyzer.money import MoneyParseError, from_minor_units, parse_pln
 from expense_analyzer.queries.categorize import categories
-from expense_analyzer.queries.core import accounts
+from expense_analyzer.queries.core import accounts, users
 from expense_analyzer.queries.money import stats, transactions
 from expense_analyzer.queries.money.transactions import UNCATEGORIZED, TransactionFilters
 from expense_analyzer.templating import templates
@@ -61,6 +62,7 @@ def _list_context(
     q: str | None = None,
     page: str | None = None,
     size: str | None = None,
+    added_by: str | None = None,
     error: str | None = None,
 ) -> dict:
     # The filter bar auto-submits every control on change, so the "— all … —"
@@ -68,19 +70,27 @@ def _list_context(
     # Parse each leniently into None rather than declaring typed params that 422
     # on an empty/invalid value (consistent with the malformed-month fix, Phase 4).
     uncategorized = category == UNCATEGORIZED
-    category_id = int(category) if category and category.isdigit() else None
-    parsed_account_id = int(account_id) if account_id and account_id.isdigit() else None
-    page_num = max(1, int(page)) if page and page.isdigit() else 1
+    category_id = opt_int(category)
+    parsed_account_id = opt_int(account_id)
+    page_num = max(1, opt_int(page) or 1)
     # Explicit choice only if it's on the whitelist; otherwise fall back to the
     # configured default (and don't echo a bogus value into the pager links).
-    parsed_size = int(size) if size and size.isdigit() and int(size) in _PAGE_SIZES else None
+    parsed_size = opt_int(size)
+    if parsed_size not in _PAGE_SIZES:
+        parsed_size = None
     resolved_size = parsed_size if parsed_size is not None else get_settings().page_size
+    # "Added by" filter: "none" -> rows added by a departed member (owner IS NULL),
+    # a member id -> that member, anything else ("" / garbage) -> no filter.
+    unowned = added_by == "none"
+    owner_id = opt_int(added_by)
 
     filters = TransactionFilters(
         account_id=parsed_account_id,
         month=month or None,
         category_id=category_id,
         uncategorized=uncategorized,
+        owner_id=owner_id,
+        unowned=unowned,
         search=q or None,
     )
     result = transactions.list_transactions(
@@ -98,6 +108,8 @@ def _list_context(
             params.append(("category", category))
         if q:
             params.append(("q", q))
+        if added_by:
+            params.append(("added_by", added_by))
         if parsed_size is not None:
             params.append(("size", str(parsed_size)))
         params.append(("page", str(max(1, target_page))))
@@ -110,6 +122,12 @@ def _list_context(
         return_to += f"?{request.url.query}"
 
     all_categories = categories.list_categories(session)
+    # Owner attribution for the "Added by" pill + filter (household rows only). One
+    # user list backs both: a name lookup for the badge, and the dropdown options
+    # (sorted by display name; list_users orders by username). Departed members are
+    # gone from the table, so their old rows resolve to no name -> no pill.
+    household_members = users.list_users(session)
+    owner_names = {u.id: u.name for u in household_members}
     # Per-row data for the inline edit modal (mirrors _edit_context, precomputed
     # here so the template stays declarative): which rows are hand-entered (fully
     # editable), and the unsigned magnitude + direction the amount field needs.
@@ -128,6 +146,12 @@ def _list_context(
         "user": user,
         "page": result,
         "accounts": accounts.list_accounts(session),
+        "owner_names": owner_names,
+        # Dropdown options — only rendered under the home lens, so don't bother
+        # sorting/shipping them otherwise (owner_names above still backs the pills).
+        "users": sorted(household_members, key=lambda u: u.name.lower())
+        if lens is Lens.home
+        else [],
         "categories": all_categories,
         "category_colors": {c.id: c.color for c in all_categories if c.id is not None},
         "edit_meta": edit_meta,
@@ -145,6 +169,7 @@ def _list_context(
         "f_month": month or "",
         "f_category": category or "",
         "f_q": q or "",
+        "f_added_by": added_by or "",
         "f_page_size": resolved_size,
     }
 
@@ -161,6 +186,7 @@ def list_transactions(
     q: str | None = None,
     page: str | None = None,
     size: str | None = None,  # rows per page; off-list -> EA_PAGE_SIZE default
+    added_by: str | None = None,  # "" (anyone), "none" (unassigned), or an owner id
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
@@ -176,6 +202,7 @@ def list_transactions(
             q=q,
             page=page,
             size=size,
+            added_by=added_by,
         ),
     )
 

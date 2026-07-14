@@ -37,6 +37,21 @@
                   {% if f_category == c.id|string %}selected{% endif %}>{{ c.name }}</option>
         {% endfor %}
       </select>
+      {# "Added by" only in the home budget — under other lenses every visible row
+         is the viewer's own, so filtering by member is meaningless there. #}
+      {% if lens.value == 'home' %}
+        <select name="added_by"
+                aria-label="Filter by who added it"
+                onchange="this.form.submit()"
+                class="flex-1 min-w-[150px]">
+          <option value="">— anyone —</option>
+          {% for u in users %}
+            <option value="{{ u.id }}"
+                    {% if f_added_by == u.id|string %}selected{% endif %}>{{ u.name }}</option>
+          {% endfor %}
+          <option value="none" {% if f_added_by == 'none' %}selected{% endif %}>— unassigned —</option>
+        </select>
+      {% endif %}
       <input type="search"
              name="q"
              value="{{ f_q }}"
@@ -148,6 +163,7 @@
                 {% if tx.transfer_group_id %}<span class="muted" title="Internal transfer">⇄ transfer</span>{% endif %}
                 {{ ui.source_badge(tx.source.value) }}
                 {{ ui.household_badge(tx.scope.value) }}
+                {{ ui.owner_badge(tx.scope.value, owner_names.get(tx.owner_id) ) }}
               </td>
               <td class="num {{ 'neg' if tx.amount < 0 else 'pos' }}"
                   data-label="Amount">{{ tx.amount | pln }}</td>

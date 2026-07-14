@@ -13,6 +13,7 @@ from sqlmodel import Session
 from expense_analyzer.models import (
     Account,
     Category,
+    Lens,
     Loan,
     PlannedItem,
     Scope,
@@ -21,6 +22,7 @@ from expense_analyzer.models import (
 )
 from expense_analyzer.queries.categorize.classifier import confirmed_label_texts
 from expense_analyzer.queries.core import users
+from expense_analyzer.queries.money import transactions as tx_q
 from expense_analyzer.queries.money import transfers as transfer_q
 from expense_analyzer.queries.planning import budgets as budget_q
 from expense_analyzer.queries.planning import loans as loan_q
@@ -192,6 +194,36 @@ def test_private_budgets_are_owner_isolated(
     )
     assert bobs.id != alices.id
     assert bobs.owner_id == bob.id and alices.owner_id == alice.id
+
+
+def test_added_by_filter_never_surfaces_a_private_row(
+    db_session: Session,
+    account: Account,
+    make_transaction: Callable[..., Transaction],
+):
+    """The "Added by" filter is ANDed *after* the visibility boundary, so it can
+    only narrow the already-visible set: Bob filtering the list by Alice sees her
+    shared rows, never her private one — even with a crafted ?added_by=<Alice>."""
+    alice = users.create_user(db_session, username="alice", name="A", password="pw")
+    bob = users.create_user(db_session, username="bob", name="B", password="pw")
+    alice_private = make_transaction(
+        account_id=account.id, amount=-500, day=1, owner_id=alice.id, scope=Scope.private
+    )
+    alice_shared = make_transaction(
+        account_id=account.id, amount=-600, day=2, owner_id=alice.id, scope=Scope.household
+    )
+
+    page = tx_q.list_transactions(
+        db_session,
+        tx_q.TransactionFilters(owner_id=alice.id),
+        page=1,
+        page_size=10,
+        viewer_id=bob.id,
+        lens=Lens.all,
+    )
+    ids = {t.id for t in page.rows}
+    assert alice_shared.id in ids
+    assert alice_private.id not in ids
 
 
 def test_confirmed_labels_scoped_for_neighbours_not_the_classifier(
