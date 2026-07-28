@@ -9,7 +9,7 @@ classifiers = [
     "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
 ]
 dependencies = [
-    "fastapi>=0.115",
+    "fastapi>=0.140.13",
     "uvicorn[standard]>=0.50.0",
     "sqlmodel>=0.0.22",
     "alembic>=1.14",
@@ -38,17 +38,17 @@ dependencies = [
     # Pulls torch — heavy, but a *local* library, not a service. The model weights
     # are baked into the Docker image at build time and read offline at runtime
     # (HF_HUB_OFFLINE=1), so nothing leaves the Pi. Footprint OK'd (external SSD).
-    "sentence-transformers>=3.0",
+    "sentence-transformers>=5.6.1",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3",
-    "ruff>=0.8",
-    "pre-commit>=4.0",
+    "ruff>=0.16.0",
+    "pre-commit>=4.6.1",
     # Jinja template formatter (used as a *formatter*, like ruff-format — not as a
     # linter: djlint's lint rules are mostly inapplicable here, see PROGRESS.md).
-    "djlint>=1.36",
+    "djlint>=1.43.1",
 ]
 
 [build-system]
