@@ -173,10 +173,8 @@ def edit_category(
     user: CurrentUser,
     session: DbSession,
 ) -> Response:
-    # Name is the required field, so check it first — its error shouldn't be
-    # masked by a colour problem. "Clear" wins over whatever the picker holds;
-    # otherwise validate the hex. Normalisation (strip) lives in the query layer,
-    # consistent with create_category.
+    # Name is checked first so a colour problem can't mask a missing name.
+    # "Clear" wins over whatever the picker holds.
     color, error = None, None
 
     if not form.name.strip():

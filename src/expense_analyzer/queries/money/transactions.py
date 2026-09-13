@@ -1,9 +1,9 @@
 """Transaction queries — the read/write side of the transaction list.
 
-The list is filtered and paginated: the old unpaginated 500-row cap is
-gone, replaced by ``page_size`` windows so an old, large DB renders one cheap
-page at a time. Filters and pagination share one ``_apply_filters`` builder so
-the page query and its ``COUNT`` can never drift apart.
+The list is filtered and paginated in ``page_size`` windows, so even a large
+database renders one cheap page at a time. Filters and pagination share one
+``_apply_filters`` builder so the page query and its ``COUNT`` can never drift
+apart.
 """
 
 import re

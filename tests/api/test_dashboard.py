@@ -24,14 +24,12 @@ def test_index_renders(auth_client: TestClient, db_session: Session):
 
 
 def test_dashboard_home_is_overview(auth_client: TestClient, db_session: Session):
-    # /dashboard now lands on the Overview, not the account/category setup page.
     body = auth_client.get("/dashboard").text
     assert "Overview" in body
     assert "Add account" not in body
 
 
 def test_settings_page_is_config(auth_client: TestClient, db_session: Session):
-    # The setup page (accounts & categories) moved to /dashboard/settings.
     body = auth_client.get("/dashboard/settings").text
     assert "Add account" in body
     assert "Add category" in body
