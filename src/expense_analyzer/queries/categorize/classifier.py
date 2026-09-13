@@ -1,10 +1,9 @@
-"""Classifier queries — the DB side of categorization layer 2 (design §7.7 point 2).
+"""Classifier queries — the DB side of categorization layer 2.
 
 Selects the training set, runs the pure model (:mod:`expense_analyzer.classifier`)
 over candidate transactions, and either writes a confident prediction back or
-leaves the row for the manual review queue. Applied both at import time (the new
-rows, via the import pipeline, after the deterministic rules) and on demand from
-the queue page ("Train & classify now").
+leaves the row for the manual review queue. Runs on demand from the queue page
+("Train & classify now"), and as the fallback when the LLM host is unreachable.
 
 Layered precedence — manual > rule > classifier > none:
 
@@ -76,6 +75,7 @@ class QueuePage:
     @property
     def pages(self) -> int:
         size = max(1, self.page_size)
+
         return max(1, -(-self.total // size))  # ceil div, never 0
 
     @property
@@ -112,6 +112,7 @@ def confirmed_label_texts(
     ``viewer_id=None`` (the classifier) the whole confirmed set is used: that model
     only ever outputs a category id on the user's *own* row, so it needs no split."""
     learnable = _learnable_category_ids(session)
+
     if not learnable:
         return []
 
@@ -120,6 +121,7 @@ def confirmed_label_texts(
         col(Transaction.category_id).in_(learnable),
         col(Transaction.source).in_([TxSource.manual, TxSource.rule]),
     )
+
     if viewer_id is not None:
         query = visible_to(query, viewer_id=viewer_id)
     rows = session.exec(query).all()
@@ -165,6 +167,7 @@ def classify(session: Session, *, settings: Settings | None = None) -> ClassifyR
     candidates = list(session.exec(_candidate_filter(select(Transaction))).all())
 
     model = _train_model(session, settings)
+
     if model is None:
         return ClassifyResult(
             categorized=0, queued=len(candidates), candidates=len(candidates), trained=False
@@ -176,10 +179,12 @@ def classify(session: Session, *, settings: Settings | None = None) -> ClassifyR
     )
     categorized = 0
     queued = 0
+
     for tx, prediction in zip(candidates, predictions, strict=True):
         if prediction is None or prediction.confidence < threshold:
             queued += 1
             continue
+
         tx.category_id = prediction.category_id
         tx.source = TxSource.classifier
         tx.confidence = prediction.confidence

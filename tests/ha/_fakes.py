@@ -1,9 +1,8 @@
 """Shared MQTT test doubles for the Home Assistant publisher tests.
 
 A fake paho client that records what the publisher does instead of talking to a
-broker, used by both ``test_mqtt.py`` (Phase 7) and ``test_update_notify.py``
-(Phase 18). Not a test module itself (no ``test_`` prefix), so pytest won't
-collect it.
+broker. Not a test module itself (no ``test_`` prefix), so pytest won't collect
+it.
 """
 
 from dataclasses import dataclass, field
@@ -25,6 +24,7 @@ class _Published:
         # (e.g. bad credentials) makes the real paho method raise RuntimeError.
         if self.rejected:
             raise RuntimeError("message publish failed")
+
         return None
 
 
@@ -59,6 +59,7 @@ class FakeMqttClient:
     def publish(self, topic: str, payload: str, qos: int = 0, retain: bool = False) -> _Published:
         info = _Published(topic, payload, qos, retain, rejected=self.publish_rejected)
         self.published.append(info)
+
         return info
 
     def loop_stop(self) -> None:

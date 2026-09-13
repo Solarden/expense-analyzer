@@ -51,9 +51,11 @@ def logout_session(request: Request) -> None:
 def current_user(request: Request, session: Session = Depends(get_session)) -> Owner | None:
     """The logged-in user, or None. Inactive/unknown users count as logged out."""
     user_id = request.session.get(_SESSION_USER_KEY)
+
     if user_id is None:
         return None
     user = users.get(session, user_id)
+
     if user is None or not user.is_active:
         return None
 

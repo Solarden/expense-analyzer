@@ -1,7 +1,7 @@
-"""Privacy boundary on the ancillary link/suggest surfaces (PR6 regression).
+"""Privacy boundary on the ancillary link/suggest surfaces.
 
-The core boundary (list / dashboard / budgets / review-queue rows) is covered in
-test_visibility.py + test_auth.py. These guard the transfer, plan, loan, and
+The core boundary (list / dashboard / budgets / review-queue rows) is covered
+elsewhere. These guard the transfer, plan, loan, and
 embeddings-neighbour paths — each links, suggests, or lists transactions and must
 never surface or accept another member's private row.
 """
@@ -84,6 +84,7 @@ def test_plan_link_viewer_scoped(
     # Viewer-scoped: Alice links her own private tx; Bob's private is invisible to her (IDOR).
     assert _link(alices_private.id, "2026-05", alice.id) is True
     assert _link(bobs_private.id, "2026-06", alice.id) is False
+
     # A household tx is linkable by anyone.
     assert _link(shared.id, "2026-07", bob.id) is True
 
@@ -252,4 +253,5 @@ def test_confirmed_labels_scoped_for_neighbours_not_the_classifier(
     # ...but the classifier's model (unscoped) still trains on it — it exposes no text
     # to a user, only a category on that user's own row.
     all_texts = [t for t, _ in confirmed_label_texts(db_session)]
+
     assert any("ALICE-PRIVATE-SHOP" in t for t in all_texts)

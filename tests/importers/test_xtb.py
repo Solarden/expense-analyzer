@@ -77,6 +77,7 @@ def test_bad_number_raises_importer_error(xtb_xlsx: Callable[..., bytes]) -> Non
             "pl": "0",
         }
     ]
+
     with pytest.raises(ImporterError):
         XTBImporter().parse(xtb_xlsx(lots=lots))
 
@@ -127,6 +128,7 @@ def test_edge_cases_fixture(fixtures_dir: Path) -> None:
 
 def test_broken_fixture_raises(fixtures_dir: Path) -> None:
     data = (fixtures_dir / "xtb" / "broken.xlsx").read_bytes()
+
     with pytest.raises(ImporterError):
         XTBImporter().parse(data)
 
@@ -149,5 +151,6 @@ def test_zip_bomb_part_rejected(
     import expense_analyzer.importers.xtb as xtb_mod
 
     monkeypatch.setattr(xtb_mod, "MAX_PART_BYTES", 10)
+
     with pytest.raises(ImporterError, match="zip bomb"):
         XTBImporter().parse(xtb_xlsx())

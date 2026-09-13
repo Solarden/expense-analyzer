@@ -1,4 +1,4 @@
-"""Home Assistant page (design §9): MQTT push status and a manual publish.
+"""Home Assistant page: MQTT push status and a manual publish.
 
 Shows whether the MQTT push is configured, the topic layout HA will see, and a
 live preview of the metrics that would be published. The "Publish now" button
@@ -34,6 +34,7 @@ router = APIRouter(
 def _context(session: Session, user: Owner, **extra) -> dict:
     settings = get_settings()
     base = settings.mqtt_base_topic
+
     return {
         "user": user,
         "mqtt_configured": settings.mqtt_configured,

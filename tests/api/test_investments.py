@@ -63,6 +63,7 @@ def test_upload_xtb_imports_positions(
     rows = db_session.exec(
         select(InvestmentPosition).where(InvestmentPosition.account_id == acc.id)
     ).all()
+
     assert {r.ticker for r in rows} == {"SXR8.DE", "SNT.PL"}
 
 

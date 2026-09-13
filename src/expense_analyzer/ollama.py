@@ -1,8 +1,8 @@
 """Ollama chat client — the primary transaction categorizer, plus two
 human-in-the-loop helpers (merchant normalization + rule suggestions).
 
-The owner runs Ollama on a capable LAN box, so heavy LLM work doesn't tax
-the Pi. This is a thin, sync client over Ollama's ``/api/chat`` with JSON-schema
+Ollama runs on a capable LAN box, so heavy LLM work doesn't tax the app
+host. This is a thin, sync client over Ollama's ``/api/chat`` with JSON-schema
 structured output; the local sklearn classifier stays the fallback for when that
 host is unreachable (see :mod:`expense_analyzer.queries.categorize.llm`).
 
@@ -128,6 +128,7 @@ class OllamaClient:
             # Deterministic: these tasks want the argmax, not a sampled guess.
             "options": {"temperature": 0},
         }
+
         try:
             with httpx.Client(
                 base_url=self._base_url,
@@ -172,6 +173,7 @@ class OllamaClient:
             user=_transaction_prompt(merchant, description, amount),
             schema=_CATEGORIZE_SCHEMA,
         )
+
         try:
             return LlmVerdict(
                 category_id=int(verdict["category_id"]),
@@ -192,6 +194,7 @@ class OllamaClient:
             schema=_MERCHANT_SCHEMA,
         )
         merchant = result.get("merchant")
+
         if not isinstance(merchant, str):
             raise OllamaError("Ollama returned unusable output: merchant not a string")
 
@@ -209,6 +212,7 @@ class OllamaClient:
             schema=_RULES_SCHEMA,
         )
         patterns = result.get("patterns")
+
         if not isinstance(patterns, list):
             raise OllamaError("Ollama returned unusable output: patterns not a list")
 
@@ -234,6 +238,7 @@ class OllamaClient:
 
 def _system_prompt(categories: Sequence[tuple[int, str]]) -> str:
     lines = "\n".join(f"{cid}: {name}" for cid, name in categories)
+
     return (
         "You categorize a single bank transaction into exactly one category.\n"
         "Choose the best match from this list (id: name):\n"
@@ -249,6 +254,7 @@ def _transaction_prompt(merchant: str | None, description: str, amount: int) -> 
     direction = "expense" if amount < 0 else "income"
     value = f"{abs(amount) / 100:.2f}"
     label = merchant or description
+
     return (
         f"Merchant/description: {label}\n"
         f"Raw description: {description}\n"
@@ -284,12 +290,14 @@ _RULES_PROMPT = (
 
 def _rules_prompt(category_name: str, examples: Sequence[str]) -> str:
     joined = "\n".join(f"- {e}" for e in examples)
+
     return f"Category: {category_name}\nExample merchant strings:\n{joined}"
 
 
 def _query_prompt(categories: Sequence[str], accounts: Sequence[str], today: date) -> str:
     cats = ", ".join(categories) or "(none)"
     accs = ", ".join(accounts) or "(none)"
+
     return (
         "You turn a question about personal spending into a structured filter. "
         f"Today is {today.isoformat()}.\n"

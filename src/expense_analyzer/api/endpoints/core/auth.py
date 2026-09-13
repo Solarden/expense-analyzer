@@ -26,6 +26,7 @@ def login(
     session: DbSession,
 ) -> Response:
     user = users.get_by_username(session, form.username.strip())
+
     if (
         user is None
         or not user.is_active

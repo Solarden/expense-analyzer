@@ -1,12 +1,12 @@
-"""Notify Home Assistant when a newer release tag is available (Phase 18).
+"""Notify Home Assistant when a newer release tag is available.
 
 The "smart" half of the updater. ``scripts/check_update.sh`` does the git
-plumbing on the Pi host (``git fetch --tags`` from our OWN repo, then the tag
+plumbing on the host (``git fetch --tags`` from our OWN repo, then the tag
 reachable from HEAD = what's deployed) and pipes the candidate tags here; this
 module decides whether a newer release exists and pushes the verdict to HA over
 MQTT — a retained ``sensor.expense_analyzer_update`` plus a one-off alert when an
 update is waiting. It NEVER deploys: the owner runs ``make deploy`` when they
-choose (notify + one-click, not unattended — keep-pi-fully-local stays intact;
+choose (notify + one-click, never unattended;
 the only egress is the host's git fetch of our own repo).
 
     git tag --list 'v*' | python -m expense_analyzer.ha.update_notify --current v1.2.0
@@ -49,6 +49,7 @@ class UpdateStatus:
 def parse_version(tag: str) -> tuple[int, int, int] | None:
     """Parse a ``vX.Y.Z`` release tag into a comparable tuple, else ``None``."""
     match = _VERSION_RE.match(tag.strip())
+
     if match is None:
         return None
 
@@ -60,10 +61,11 @@ def select_update(current: str | None, tags: list[str]) -> UpdateStatus:
 
     Tags that aren't clean ``vX.Y.Z`` releases are ignored. With no releases at
     all the verdict is "no update". An unparseable/absent ``current`` (e.g. the
-    Pi has never been tagged) counts as behind any real release.
+    host has never been tagged) counts as behind any real release.
     """
     versioned = [(parse_version(t), t) for t in tags]
     releases = [(v, t) for v, t in versioned if v is not None]
+
     if not releases:
         return UpdateStatus(current=current, latest=None, update_available=False)
 
@@ -88,7 +90,7 @@ class StoredStatus:
 def save_status(status: UpdateStatus, *, path: Path, checked_at: datetime) -> None:
     """Persist the verdict to ``path`` as JSON so the web app can show it without
     any network of its own. Written by the cron check inside the app container (the
-    host did the git fetch); the web app only ever reads it (keep-pi-fully-local)."""
+    host did the git fetch); the web app only ever reads it."""
     payload = {
         "current": status.current,
         "latest": status.latest,
@@ -108,6 +110,7 @@ def load_status(path: Path) -> StoredStatus | None:
     has run yet, or a corrupt file — the view then shows a neutral "not checked")."""
     try:
         data = json.loads(path.read_text())
+
         return StoredStatus(
             current=data.get("current"),
             latest=data.get("latest"),
@@ -123,8 +126,10 @@ def _publish(status: UpdateStatus) -> None:
     from expense_analyzer.ha.mqtt import MqttError, MqttPublisher
 
     settings = get_settings()
+
     if not settings.mqtt_configured:
         log.info("MQTT not configured — skipping HA update notification")
+
         return
 
     try:
@@ -134,13 +139,14 @@ def _publish(status: UpdateStatus) -> None:
             latest=status.latest,
             update_available=status.update_available,
         )
+
         if status.update_available:
             publisher.publish_alert(
                 title="Expense Analyzer update available",
                 message=(
                     f"Release {status.latest} is available "
                     f"(running {status.current or 'an untagged build'}). "
-                    'Run `make deploy a="--pull"` on the Pi to update.'
+                    'Run `make deploy a="--pull"` on the host to update.'
                 ),
                 severity="info",
             )

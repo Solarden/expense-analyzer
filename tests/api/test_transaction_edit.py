@@ -1,5 +1,5 @@
-"""HTTP layer for the single-row edit layer (Phase 13): manual entry, notes,
-edit and delete. Query-layer behaviour is covered in tests/unit/test_manual_transactions.py.
+"""HTTP layer for the single-row edit layer: manual entry, notes, edit and
+delete. Query-layer behaviour has its own unit tests.
 
 ``auth_client`` and ``db_session`` share the same temp engine, so a row created
 over HTTP is then asserted against ``db_session``.
@@ -64,6 +64,7 @@ def test_add_manual_income_is_positive(
             "scope": "private",
         },
     )
+
     assert _only_row(db_session).amount == 100000  # income -> positive
 
 
@@ -85,6 +86,7 @@ def test_add_manual_bad_amount_flashes_error_and_creates_nothing(
     assert "could not read the amount" in resp.text.lower()
 
     page = transactions.list_transactions(db_session, TransactionFilters(), page=1, page_size=10)
+
     assert page.total == 0  # nothing persisted
 
 
@@ -231,6 +233,7 @@ def test_delete_manual_soft_deletes(auth_client: TestClient, db_session: Session
     db_session.expire_all()  # the soft-delete committed in the app's session
     assert transactions.get_transaction(db_session, tx.id) is None
     page = transactions.list_transactions(db_session, TransactionFilters(), page=1, page_size=10)
+
     assert page.total == 0
 
 
@@ -302,6 +305,7 @@ def test_clear_note_via_endpoint(
     auth_client.post(f"/dashboard/transactions/{tx.id}/note", data={"note": "   "})
 
     db_session.expire_all()
+
     assert transactions.get_transaction(db_session, tx.id).note is None  # blank clears it
 
 
@@ -333,6 +337,7 @@ def test_manual_batch_rollback_is_rejected(
 
     assert resp.status_code == status.HTTP_400_BAD_REQUEST
     db_session.expire_all()
+
     assert transactions.get_transaction(db_session, tx.id) is not None  # survived
 
 
@@ -352,6 +357,7 @@ def test_manual_batch_offers_no_rollback_button(
     )
     batch = transactions.ensure_manual_batch(db_session)
     resp = auth_client.get("/dashboard/settings")
+
     assert f"/dashboard/batches/{batch.id}/rollback" not in resp.text
 
 
@@ -382,6 +388,8 @@ def test_nav_uses_icon_sprite_and_groups(auth_client: TestClient):
     assert 'class="nav-ico"' in resp.text  # icon links rendered
     # Grouped into hover dropdowns (Money / Planning / …) instead of 14 flat links.
     assert 'class="nav-trigger"' in resp.text
+
     for group in ("Money", "Planning", "Categorize", "Wealth", "System"):
         assert f">{group}</span>" in resp.text
+
     assert "Transactions" in resp.text  # the items still live inside the menus

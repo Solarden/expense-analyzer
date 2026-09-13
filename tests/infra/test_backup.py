@@ -1,4 +1,4 @@
-"""Tests for the backup helper (Phase 18; PostgreSQL branch in Phase 23).
+"""Tests for the backup helper, including the PostgreSQL branch.
 
 SQLite: the risky part is correctness of the copy — a consistent, single-file
 snapshot even with a live WAL writer, and pruning keeping the newest N.
@@ -38,6 +38,7 @@ def _make_db(path: Path, rows: int) -> None:
 
 def _count(path: Path) -> int:
     conn = sqlite3.connect(path)
+
     try:
         return conn.execute("SELECT count(*) FROM t").fetchone()[0]
     finally:
@@ -66,6 +67,7 @@ def test_backup_captures_uncheckpointed_wal_writes(tmp_path: Path):
     live.execute("PRAGMA journal_mode=WAL")
     live.execute("INSERT INTO t (v) VALUES ('wal-only')")
     live.commit()  # in the -wal, not yet checkpointed into the main file
+
     try:
         backup = create_backup(src, tmp_path / "backups")
     finally:
@@ -105,6 +107,7 @@ def test_prune_keeps_newest(tmp_path: Path):
 
     assert sorted(removed) == sorted(made[:3])  # the three oldest are gone
     survivors = sorted(dest.glob(f"{BACKUP_PREFIX}*.db"))
+
     assert survivors == made[3:]  # the two newest remain
 
 
@@ -123,6 +126,7 @@ def test_create_backup_prunes(tmp_path: Path):
     src = tmp_path / "src.db"
     _make_db(src, rows=1)
     dest = tmp_path / "backups"
+
     for d in range(1, 4):
         create_backup(src, dest, keep=2, now=datetime(2026, 6, d, tzinfo=UTC))
 
@@ -144,6 +148,7 @@ class FakeRun:
 
     def __call__(self, argv, **kwargs):
         self.calls.append((argv, kwargs))
+
         if argv[0] == "pg_dump":
             # Real pg_dump creates the --file target even on failure — mimic
             # that, so the partial-file-cleanup assertion actually bites.
@@ -282,10 +287,12 @@ def test_sqlite_restore_copies_file_and_drops_sidecars(tmp_path: Path):
     db = tmp_path / "app.db"
     _make_db(db, rows=1)
     backup = create_backup(db, tmp_path / "backups")
+
     # Diverge the live DB and leave stale WAL sidecars behind.
     with contextlib.closing(sqlite3.connect(db)) as live:
         live.execute("DROP TABLE t")
         live.commit()
+
     (tmp_path / "app.db-wal").write_bytes(b"stale")
     (tmp_path / "app.db-shm").write_bytes(b"stale")
 
@@ -304,6 +311,7 @@ def _run_cli(*args: str, database_url: str = "sqlite:///data/unused.db"):
     import sys
 
     project_root = Path(__file__).resolve().parents[2]
+
     return subprocess.run(
         [sys.executable, "-m", "expense_analyzer.backup", *args],
         cwd=project_root,
@@ -350,6 +358,7 @@ def test_cli_restore_round_trips_sqlite(tmp_path: Path):
     db = tmp_path / "app.db"
     _make_db(db, rows=3)
     backup = create_backup(db, tmp_path / "backups")
+
     with contextlib.closing(sqlite3.connect(db)) as live:
         live.execute("DROP TABLE t")
         live.commit()
@@ -387,6 +396,7 @@ def test_prune_is_suffix_scoped(tmp_path: Path):
     dest.mkdir()
     db_files = [dest / f"{BACKUP_PREFIX}2026060{d}_000000Z.db" for d in range(1, 4)]
     dump_files = [dest / f"{BACKUP_PREFIX}2026060{d}_000000Z.dump" for d in range(1, 4)]
+
     for p in db_files + dump_files:
         p.touch()
 

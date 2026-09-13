@@ -1,4 +1,4 @@
-"""Budgets (Phase 8): pure helpers and the query layer.
+"""Budgets: pure helpers and the query layer.
 
 Pure helpers (``effective_limits``, ``BudgetStatus`` properties) run on plain
 objects; the query-layer tests run on ``db_session`` with conftest builders. The
@@ -168,6 +168,7 @@ def test_budgetable_categories_only_expense(
     make_category(name="Transfer", kind=CategoryKind.transfer)
 
     names = [c.name for c in bq.budgetable_categories(db_session)]
+
     assert names == ["Food"]  # income/transfer excluded
 
 

@@ -1,10 +1,10 @@
-"""Pure-logic tests for the embeddings neighbours (Phase 12, layer 3).
+"""Pure-logic tests for the embeddings neighbours (layer 3).
 
 No DB, no session, and crucially **no torch / no model download** — the
 :class:`Embedder` protocol is injected as a tiny deterministic fake (a bag-of-known-
 words → normalized vector, so cosine similarity is token overlap). That exercises
 the kNN vote, the similarity floor and the cold-start guards without the heavy
-sentence-transformers stack (mirrors test_classifier.py for layer 2)."""
+sentence-transformers stack."""
 
 from collections.abc import Sequence
 
@@ -31,10 +31,12 @@ class FakeEmbedder:
 
     def encode(self, texts: Sequence[str]) -> np.ndarray:
         matrix = np.zeros((len(texts), len(self._vocab)), dtype=np.float32)
+
         for i, text in enumerate(texts):
             for word in text.lower().split():
                 if word in self._vocab:
                     matrix[i, self._vocab[word]] += 1.0
+
         norms = np.linalg.norm(matrix, axis=1, keepdims=True)
         norms[norms == 0] = 1.0  # leave all-unknown rows as the zero vector
 
@@ -71,6 +73,7 @@ def test_build_returns_none_below_min_samples():
 
 def test_build_returns_none_with_single_category():
     samples = [TrainingSample("BIEDRONKA", FOOD) for _ in range(10)]
+
     assert build(samples, _embedder(), min_samples=4) is None
 
 
@@ -80,6 +83,7 @@ def test_build_drops_blank_text_rows():
         TrainingSample("BIEDRONKA", FOOD),
         TrainingSample("NETFLIX", FUN),
     ]
+
     assert build(samples, _embedder(), min_samples=5) is None
 
 
@@ -107,6 +111,7 @@ def test_far_neighbour_below_floor_yields_no_suggestion():
     [suggestion] = model.suggest_batch(
         _embedder().encode(["MYSTERY VENDOR"]), k=5, min_similarity=0.45
     )
+
     assert suggestion is None
 
 

@@ -1,4 +1,4 @@
-"""Rule queries — the DB side of categorization layer 1 (design §7.7).
+"""Rule queries — the DB side of categorization layer 1.
 
 CRUD over stored rules plus :func:`apply_rules`, which runs the pure matcher
 (:mod:`expense_analyzer.rules`) over candidate transactions and writes the matched
@@ -40,6 +40,7 @@ def delete_rule(session: Session, rule_id: int) -> bool:
     transactions). Existing categorizations it made are left in place.
     """
     rule = session.get(Rule, rule_id)
+
     if rule is None:
         return False
 
@@ -78,7 +79,7 @@ def apply_rules(session: Session) -> int:
     A human's verdict (``source = manual``) is **never** touched — including a row
     a human deliberately *cleared* to uncategorized (``category_id IS NULL`` but
     ``source = manual``), which is why the filter keys on source, not just on a
-    null category. A classifier's row (``source = classifier``, Phase 11) is left
+    null category. A classifier's row (``source = classifier``) is left
     alone too. Auto-linked transfer legs (categorized ``Transfer`` with
     ``source = import_csv``) have a category set, so they're not eligible. An
     *unconfirmed ambiguous* transfer leg is still uncategorized, so a rule matching
@@ -91,6 +92,7 @@ def apply_rules(session: Session) -> int:
     as-is and not counted.
     """
     rules = _rule_specs(list_rules(session))
+
     if not rules:
         return 0
 
@@ -105,12 +107,14 @@ def apply_rules(session: Session) -> int:
     ).all()
 
     changed = 0
+
     for tx in candidates:
         category_id = match_category(
             rules,
             merchant_normalized=tx.merchant_normalized,
             raw_description=tx.raw_description,
         )
+
         if category_id is None or category_id == tx.category_id:
             continue
         tx.category_id = category_id

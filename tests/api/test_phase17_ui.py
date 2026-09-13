@@ -1,4 +1,4 @@
-"""Phase 17 — UI/UX polish pass. HTTP-layer checks for the bits with server-side
+"""UI/UX polish. HTTP-layer checks for the bits with server-side
 behaviour: the transaction page-size picker, the net-worth assets/liabilities
 split, and a couple of render smokes (burger, dark-theme chart script).
 
@@ -48,6 +48,7 @@ def test_page_size_off_whitelist_falls_back_to_default(
     # echoed into the pager querystring.
     assert "Page 1 of 1" in body
     assert '<option value="50" selected>50 / page</option>' in body
+
     # The off-list value is not echoed into the pager querystring — the Next link
     # is a bare ?page=N (with a size it would read ?size=...&page=N).
     assert 'href="?page=2"' in body
@@ -100,6 +101,7 @@ def test_base_renders_burger_and_nav_id(auth_client: TestClient):
     assert resp.status_code == 200
     assert 'class="nav-toggle' in resp.text
     assert 'id="primary-nav"' in resp.text
+
     # Escape-to-close handler (a11y follow-up) ships in the base layout.
     assert "if (e.key !== 'Escape') return;" in resp.text
 

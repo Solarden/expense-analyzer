@@ -1,7 +1,7 @@
 """Setup page (/dashboard/settings): account & category setup and import-batch
 rollback. The dashboard landing page (/dashboard) is the overview — see overview.py.
 
-Part of the dashboard — the working surface (design §8). Handlers stay thin: all
+Part of the dashboard — the working surface. Handlers stay thin: all
 DB access goes through ``expense_analyzer.queries``. Every route requires a
 logged-in user; the household view is shared (no per-user data isolation).
 """
@@ -49,8 +49,10 @@ def _parse_color(raw: str) -> tuple[str | None, str | None]:
     ``(colour, error)``: blank input is a valid "no colour" (``None``); anything
     that isn't a 6-digit hex colour is rejected so it never reaches the markup."""
     value = raw.strip().lower()
+
     if not value:
         return None, None
+
     if not HEX_COLOR_RE.match(value):
         return None, "Colour must be a hex value like #4f8cff."
 
@@ -67,6 +69,7 @@ def _parse_number(raw: str) -> tuple[str | None, str | None]:
     if not raw.strip():
         return None, None
     compact = iban.normalize(raw)
+
     if iban.looks_like_iban(compact):
         if not iban.is_valid(compact):
             return None, "That IBAN doesn't look valid — check the digits."
@@ -92,6 +95,7 @@ def create_account(
     # Name is the required field, so check it first — its error shouldn't be masked
     # by a number problem (mirrors create/edit category).
     number = None
+
     if not form.name.strip():
         error = "Account name can't be empty."
     else:
@@ -119,6 +123,7 @@ def edit_account(
     session: DbSession,
 ) -> Response:
     number = None
+
     if not form.name.strip():
         error = "Account name can't be empty."
     else:
@@ -146,6 +151,7 @@ def create_category(
     request: Request, form: Annotated[CategoryForm, Form()], user: CurrentUser, session: DbSession
 ) -> Response:
     color, error = _parse_color(form.color)
+
     if error is not None:
         return templates.TemplateResponse(
             request,
@@ -172,6 +178,7 @@ def edit_category(
     # otherwise validate the hex. Normalisation (strip) lives in the query layer,
     # consistent with create_category.
     color, error = None, None
+
     if not form.name.strip():
         error = "Category name can't be empty."
     elif not form.clear:
@@ -203,11 +210,13 @@ def rollback(batch_id: int, session: DbSession) -> RedirectResponse:
     # a time from the transactions list instead. Refuse it (defence in depth; the UI
     # also hides the button for this batch).
     batch = session.get(ImportBatch, batch_id)
+
     if batch is not None and batch.source == MANUAL_BATCH_SOURCE:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="manual entries are deleted individually, not rolled back as a batch",
         )
+
     rollback_batch(session, batch_id)
 
     return RedirectResponse("/dashboard/settings", status_code=status.HTTP_303_SEE_OTHER)

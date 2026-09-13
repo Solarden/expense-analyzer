@@ -1,4 +1,4 @@
-"""Smoke tests for scripts/deploy.sh (Phase 18).
+"""Smoke tests for scripts/deploy.sh.
 
 We cannot run a real docker deploy in CI, but we can guard against the script
 being syntactically broken or its dry-run plan regressing — the parts that would
@@ -23,6 +23,7 @@ def test_deploy_script_exists_and_is_executable():
 @pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
 def test_deploy_script_is_valid_bash():
     result = subprocess.run(["bash", "-n", str(DEPLOY)], capture_output=True, text=True)
+
     assert result.returncode == 0, result.stderr
 
 

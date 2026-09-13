@@ -1,9 +1,9 @@
 """Stats queries — the figures behind the overview charts.
 
-The load-bearing rule is that **transfers never count** as spending or income
-(design §6): a row is dropped if it has a ``transfer_group_id`` or sits in a
-``kind=transfer`` category. Everything else is straightforward sign-based
-bucketing in integer minor units.
+The load-bearing rule is that **transfers never count** as spending or income: a
+row is dropped if it has a ``transfer_group_id`` or sits in a ``kind=transfer``
+category. Everything else is straightforward sign-based bucketing in integer
+minor units.
 """
 
 from collections.abc import Callable
@@ -211,4 +211,5 @@ def test_default_month_prefers_request_then_newest_then_current():
     assert stats.default_month(months, None) == "2026-05"
     # No request and no data -> a current local YYYY-MM (not a crash / blank).
     fallback = stats.default_month([], None)
+
     assert len(fallback) == 7 and fallback[4] == "-"

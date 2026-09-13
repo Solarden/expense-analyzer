@@ -1,8 +1,8 @@
-"""Smoke tests for scripts/check_update.sh (Phase 18).
+"""Smoke tests for scripts/check_update.sh.
 
 Only the paths that exit BEFORE `git fetch` are exercised (--help, bad args), so
-the suite never reaches out to a remote. The version/publish logic is covered in
-tests/ha/test_update_notify.py.
+the suite never reaches out to a remote. The version/publish logic has its own
+tests.
 """
 
 import shutil
@@ -23,6 +23,7 @@ def test_script_exists_and_is_executable():
 @pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
 def test_is_valid_bash():
     result = subprocess.run(["bash", "-n", str(SCRIPT)], capture_output=True, text=True)
+
     assert result.returncode == 0, result.stderr
 
 
@@ -48,6 +49,7 @@ def _dry_run(args, env_extra=None):
     import os
 
     env = {**os.environ, **(env_extra or {})}
+
     return subprocess.run(
         ["bash", str(SCRIPT), *args, "--dry-run"],
         cwd=PROJECT_ROOT,
@@ -69,16 +71,19 @@ def test_dry_run_resolves_a_remote_without_fetching():
 def test_remote_flag_overrides():
     # A fork can point the check at its own repo (remote name or URL).
     result = _dry_run(["--remote", "upstream"])
+
     assert "'upstream'" in result.stdout
 
 
 @pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
 def test_ea_update_remote_env_is_honored():
     result = _dry_run([], env_extra={"EA_UPDATE_REMOTE": "myfork"})
+
     assert "'myfork'" in result.stdout
 
 
 @pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
 def test_flag_beats_env():
     result = _dry_run(["--remote", "fromflag"], env_extra={"EA_UPDATE_REMOTE": "fromenv"})
+
     assert "'fromflag'" in result.stdout

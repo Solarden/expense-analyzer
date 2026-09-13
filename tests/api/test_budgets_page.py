@@ -1,4 +1,4 @@
-"""Budgets dashboard page (Phase 8): set/override/delete and the month overview.
+"""Budgets dashboard page: set/override/delete and the month overview.
 
 HTTP tests use ``auth_client`` (logged in); they share the temp engine with
 ``db_session`` so a budget set over HTTP is visible to a query-layer assertion.

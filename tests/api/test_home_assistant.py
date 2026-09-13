@@ -1,4 +1,4 @@
-"""Home Assistant page (Phase 7) — endpoint smoke + the manual publish button."""
+"""Home Assistant page — endpoint smoke + the manual publish button."""
 
 from collections.abc import Callable
 
@@ -55,7 +55,7 @@ def test_publish_now_pushes_and_reports_count(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Stub the actual push so the routing/flash is tested without a broker
-    # (the publisher itself is covered by tests/ha/test_mqtt.py).
+    # (the publisher itself has its own tests).
     monkeypatch.setattr(home_assistant, "publish_snapshot", lambda session, settings: 4)
 
     resp = auth_client.post("/dashboard/home-assistant/publish")

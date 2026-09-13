@@ -1,4 +1,4 @@
-"""Investment positions — the shared, source-agnostic snapshot path (design §7.3).
+"""Investment positions — the shared, source-agnostic snapshot path.
 
 Investment positions are *not* transactions, so they don't go through the
 fingerprint/batch import pipeline. A monthly portfolio export (or an API pull) is
@@ -92,6 +92,7 @@ def reconcile_positions(result: PositionsResult, imported_total: int) -> Positio
 
     cash = result.cash_balance or 0
     computed = cash + imported_total
+
     if computed == result.declared_total:
         return PositionsReconciliation(
             ok=True,
@@ -147,8 +148,10 @@ def import_positions(
 
     inserted = 0
     updated = 0
+
     for p in result.positions:
         existing = by_key.get((p.ticker, p.snapshot_date))
+
         if existing is None:
             row = InvestmentPosition(
                 account_id=account_id,

@@ -1,6 +1,6 @@
 """Subscription queries — detect recurring payments and persist the user verdict.
 
-The DB side of Phase 9 (design §7.5). Detection itself is pure and stateless
+Detection itself is pure and stateless
 (:mod:`expense_analyzer.subscriptions`); this layer feeds it the right
 transactions (transfer- and loan-excluded, via :mod:`expense_analyzer.queries.money.stats`)
 and overlays the persisted confirm/dismiss verdict stored per merchant in the
@@ -111,6 +111,7 @@ def set_verdict(session: Session, *, merchant: str, status: SubscriptionStatus) 
         subscription = Subscription(merchant=merchant, status=status)
     else:
         subscription.status = status
+
     session.add(subscription)
     session.commit()
     session.refresh(subscription)
@@ -127,6 +128,7 @@ def clear_verdict(session: Session, merchant: str) -> bool:
     subscription = session.exec(
         select(Subscription).where(col(Subscription.merchant) == merchant)
     ).first()
+
     if subscription is None:
         return False
 

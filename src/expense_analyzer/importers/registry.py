@@ -2,7 +2,7 @@
 
 The dashboard upload form lists whatever is registered here, so adding a new
 bank is one ``register()`` call — no dashboard changes. This is the seam the
-design's "build around the importer" principle (§1) buys us.
+design's "build around the importer" principle buys us.
 """
 
 from expense_analyzer.importers.base import Importer

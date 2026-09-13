@@ -1,4 +1,4 @@
-"""Categorization classifier — layer 2, the text model (design §7.7 point 2).
+"""Categorization classifier — layer 2, the text model.
 
 Pure logic, zero DB (mirrors :mod:`expense_analyzer.rules` /
 :mod:`expense_analyzer.transfers` / :mod:`expense_analyzer.subscriptions`). A
@@ -83,11 +83,13 @@ class Classifier:
         results: list[Prediction | None] = [None] * len(stripped)
 
         nonempty = [i for i, t in enumerate(stripped) if t]
+
         if not nonempty:
             return results
 
         proba = self._pipeline.predict_proba([stripped[i] for i in nonempty])
         classes = self._pipeline.classes_
+
         for slot, row in zip(nonempty, proba, strict=True):
             best = int(row.argmax())
             results[slot] = Prediction(category_id=int(classes[best]), confidence=float(row[best]))
@@ -108,8 +110,10 @@ def train(samples: Sequence[TrainingSample], *, min_samples: int) -> Classifier 
     (and the same predictions) — deterministic, like the rest of the pipeline.
     """
     usable = [s for s in samples if s.text.strip()]
+
     if len(usable) < max(min_samples, MIN_DISTINCT_CATEGORIES):
         return None
+
     if len({s.category_id for s in usable}) < MIN_DISTINCT_CATEGORIES:
         return None
 

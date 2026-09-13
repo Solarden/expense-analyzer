@@ -1,7 +1,7 @@
 """Internal-transfer detection — the pairing logic, kept pure (no DB).
 
 A move of, say, 2000 PLN from PKO to mBank is neither an expense nor income —
-it's a transfer (design §6, §7.2). Left unpaired it shows as a fake expense on
+it's a transfer. Left unpaired it shows as a fake expense on
 one account and a fake inflow on the other, and every spending/income number is
 junk. This module finds the two legs; linking and labelling them lives in
 :mod:`expense_analyzer.queries.money.transfers`.
@@ -67,12 +67,14 @@ def find_transfer_pairs(transactions: list[Transaction], *, window_days: int) ->
     inflows = [t for t in transactions if t.amount > 0]
 
     by_amount: dict[int, list[Transaction]] = defaultdict(list)
+
     for inflow in inflows:
         by_amount[inflow.amount].append(inflow)
 
     # Candidate edges, plus a degree count per transaction id to spot ambiguity.
     edges: list[TransferPair] = []
     degree: dict[int, int] = defaultdict(int)
+
     for outflow in outflows:
         for inflow in by_amount.get(-outflow.amount, []):
             if not _is_candidate(outflow, inflow, window_days):
@@ -84,9 +86,11 @@ def find_transfer_pairs(transactions: list[Transaction], *, window_days: int) ->
 
     auto: list[TransferPair] = []
     ambiguous: list[TransferPair] = []
+
     for pair in edges:
         mutually_unique = degree[pair.outflow.id] == 1 and degree[pair.inflow.id] == 1
         uncategorized = pair.outflow.category_id is None and pair.inflow.category_id is None
+
         if mutually_unique and uncategorized:
             auto.append(pair)
         else:

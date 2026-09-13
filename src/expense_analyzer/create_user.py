@@ -3,7 +3,7 @@
 Bootstraps the first user (there is no public registration — a household app).
 Additional users can then be added from the logged-in Users page.
 
-    python -m expense_analyzer.create_user --username pawel --name "Paweł"
+    python -m expense_analyzer.create_user --username alice --name "Alice"
 """
 
 import argparse
@@ -23,8 +23,10 @@ def main() -> None:
     args = parser.parse_args()
 
     password = getpass.getpass("Password: ")
+
     if not password:
         sys.exit("aborted: empty password")
+
     if password != getpass.getpass("Confirm password: "):
         sys.exit("aborted: passwords do not match")
 

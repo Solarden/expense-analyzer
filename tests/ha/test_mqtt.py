@@ -1,4 +1,4 @@
-"""MQTT publisher (Phase 7) — driven by a fake client, never a real broker."""
+"""MQTT publisher — driven by a fake client, never a real broker."""
 
 import json
 
@@ -33,6 +33,7 @@ def test_publish_metrics_announces_availability_discovery_and_state() -> None:
     assert json.loads(state.payload) == {"net_worth": "100.00", "month_net": "5.00"}
     assert state.retain is True
     assert state.qos == 1
+
     # Cleanly torn down.
     assert client.loop_stopped and client.disconnected
 
@@ -44,6 +45,7 @@ def test_credentials_only_set_when_a_username_is_configured() -> None:
 
     authed = FakeMqttClient()
     _publisher(authed, username="ha").publish_metrics([])
+
     assert authed.credentials == ("ha", "pw")
 
 
@@ -57,6 +59,7 @@ def test_publish_alert_is_a_non_retained_event() -> None:
     assert alert.topic == "expense_analyzer/alert"
     assert alert.retain is False  # events must not replay to late subscribers
     assert json.loads(alert.payload)["title"] == "Budget exceeded"
+
     # No availability Last Will for a one-off alert.
     assert client.will is None
 
@@ -93,7 +96,7 @@ def test_publish_snapshot_fires_budget_exceeded_alert(
     db_session, make_account, make_category, make_transaction, make_budget
 ) -> None:
     """An over-budget category turns into a (non-retained) alert event alongside
-    the normal metrics push — the Phase 7 publish_alert primitive wired up."""
+    the normal metrics push — the publish_alert primitive wired up."""
     from expense_analyzer.clock import local_today
     from expense_analyzer.ha.mqtt import publish_snapshot
     from expense_analyzer.models import CategoryKind
@@ -163,6 +166,7 @@ def test_publish_snapshot_fires_subscription_price_rise_alert(
     alerts = [
         json.loads(p.payload) for p in client.published if p.topic == "expense_analyzer/alert"
     ]
+
     assert any("price went up" in a["title"].lower() and "NETFLIX" in a["title"] for a in alerts)
 
 

@@ -41,6 +41,7 @@ def test_parse_loose_amount_numeric_inputs() -> None:
 def test_parse_loose_amount_rejects_garbage_and_bool() -> None:
     with pytest.raises(MoneyParseError):
         parse_loose_amount("nonsense")
+
     with pytest.raises(MoneyParseError):
         parse_loose_amount(True)  # bool is an int subclass — rejected explicitly
 

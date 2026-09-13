@@ -1,4 +1,4 @@
-"""Categorization rules — layer 1, the deterministic matcher (design §7.7).
+"""Categorization rules — layer 1, the deterministic matcher.
 
 Pure logic, zero DB (mirrors :mod:`expense_analyzer.transfers` /
 :mod:`expense_analyzer.subscriptions`). A rule is a case-insensitive **substring**
@@ -46,11 +46,13 @@ def match_category(
     rather than a catch-all.
     """
     text = (merchant_normalized or raw_description or "").casefold()
+
     if not text:
         return None
 
     for rule in rules:
         needle = rule.pattern.strip().casefold()
+
         if needle and needle in text:
             return rule.category_id
 

@@ -1,4 +1,4 @@
-"""Import CSV page: upload a bank export and run the import (design §6).
+"""Import CSV page: upload a bank export and run the import.
 
 A bad file is a normal user mistake (wrong bank/format, a malformed row), so the
 parser's :class:`ImporterError` becomes a red flash, not a 500.
@@ -49,6 +49,7 @@ async def upload(
         context["error"] = f"Unknown account #{account_id}."
     else:
         data = await file.read()
+
         try:
             summary = run_import(
                 session,

@@ -187,7 +187,7 @@ systemd timer or cron on the Pi, e.g.:
 
 ```cron
 # /etc/cron.d/expense-analyzer-update — check for a new release each morning
-30 7 * * *  pi  cd /home/pi/expense-analyzer && make check-update >> data/check-update.log 2>&1
+30 7 * * *  youruser  cd "$HOME/expense-analyzer" && make check-update >> data/check-update.log 2>&1
 ```
 
 ## Migrations

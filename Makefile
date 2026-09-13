@@ -43,7 +43,7 @@ migrate: ## Apply migrations up to head
 revision: ## Autogenerate a migration: make revision m="add transaction"
 	uv run alembic revision --autogenerate -m "$(m)"
 
-user: ## Create a login user: make user u=pawel n="Paweł"
+user: ## Create a login user: make user u=alice n="Alice"
 	uv run python -m expense_analyzer.create_user --username "$(u)" --name "$(n)"
 
 seed: ## Reset the local DB to a demo dataset to click through (login: admin / demo1234)

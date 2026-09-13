@@ -1,5 +1,4 @@
-"""Budgets page: per-category monthly limits and how spending tracks against them
-(design §7.6).
+"""Budgets page: per-category monthly limits and how spending tracks against them.
 
 A recurring default applies every month; a ``"YYYY-MM"`` override replaces it for
 one month. The overview compares each effective limit to the month's actual
@@ -43,6 +42,7 @@ def _context(
     lens), the set form, and the defined-budgets list. ``months`` is fetched once by
     the handler and threaded in (it also resolves ``selected_month``)."""
     all_categories = category_queries.list_categories(session)
+
     # The lens picks which budget scope(s) to show: Home budget -> household only,
     # Private -> the viewer's private only, All -> both (stacked sections).
     if lens is Lens.private:
@@ -51,6 +51,7 @@ def _context(
         section_scopes = [Scope.household]
     else:
         section_scopes = [Scope.household, Scope.private]
+
     # In the Home budget, break the month's shared spend down by the member who
     # added each row (owner_id). Compute the household spendable scan once here and
     # reuse it for both the by_member panel and the household section's overview
@@ -59,10 +60,12 @@ def _context(
     # and each section self-scans with its own scope's lens.
     by_member = []
     spendable = None
+
     if lens is Lens.home:
         spendable = stats.spendable_transactions(session, viewer_id=user.id, lens=Lens.home)
         owner_names = {u.id: u.name for u in users.list_users(session)}
         by_member = stats.spend_by_owner(spendable, selected_month, owner_names)
+
     sections = [
         {
             "label": "Household budgets" if s is Scope.household else "My private budgets",
@@ -72,6 +75,7 @@ def _context(
         }
         for s in section_scopes
     ]
+
     return {
         "user": user,
         "months": months,
@@ -112,6 +116,7 @@ def budgets_page(
         else None
     )
     extra: dict = {}
+
     if edit_budget is not None:
         extra = {
             "edit_budget": edit_budget,
@@ -139,6 +144,7 @@ def set_budget(
 
     category = category_queries.get_category(session, form.category_id)
     error: str | None = None
+
     if category is None or category.kind != CategoryKind.expense:
         error = "Pick an expense category to budget."
     elif month is not None and not _MONTH_RE.match(month):

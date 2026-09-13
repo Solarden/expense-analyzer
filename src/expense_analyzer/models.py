@@ -1,6 +1,6 @@
-"""SQLModel table definitions — Phase 1 data model.
+"""SQLModel table definitions.
 
-See internal_docs/expense-analyzer-design.md §5. Decisions baked in here:
+Decisions baked in here:
 
 - Money is stored as **integer minor units** (1/100 PLN), never float.
   ``amount`` is negative for expenses, positive for inflows.
@@ -46,23 +46,25 @@ class CategoryKind(StrEnum):
 
 
 class RateType(StrEnum):
-    """Interest rate type of a loan (design §5)."""
+    """Whether the loan's interest rate is fixed for its term or tracks a base rate."""
 
     fixed = "fixed"
     variable = "variable"  # ``Loan.rate_bp`` is the margin; base tracked separately
 
 
 class InstallmentType(StrEnum):
-    """Amortization style (design §7.4)."""
+    """How the loan is repaid: equal total instalments, or a fixed principal
+    portion with shrinking interest."""
 
     equal = "equal"  # annuity: fixed total installment
     decreasing = "decreasing"  # fixed principal portion, shrinking interest
 
 
+# Not a display flag: the per-viewer `visible_to` boundary enforces it as a real
+# permission, so a private row is unreachable for other members.
 class Scope(StrEnum):
-    """Whether a transaction is a member's **private** row or part of the shared
-    **household** budget. Enforced as a real permission via the per-viewer
-    :func:`expense_analyzer.queries.visibility.visible_to` boundary."""
+    """Whether a transaction is a member's private row or part of the shared
+    household budget."""
 
     private = "private"
     household = "household"
@@ -79,7 +81,7 @@ class Lens(StrEnum):
 
 
 class SubscriptionStatus(StrEnum):
-    """A user's verdict on a detected recurring-payment group (Phase 9)."""
+    """A user's verdict on a detected recurring-payment group."""
 
     confirmed = "confirmed"  # yes, a real subscription
     dismissed = "dismissed"  # a false positive — hide it and stop alerting
@@ -136,7 +138,7 @@ class Category(SQLModel, table=True):
     name: str
     parent_id: int | None = Field(default=None, foreign_key="category.id")  # tree: Food > Groceries
     kind: CategoryKind
-    # Optional display colour as a "#rrggbb" hex string (Phase 16). Drives the
+    # Optional display colour as a "#rrggbb" hex string. Drives the
     # swatch next to the category name and its series colour on the overview
     # chart. NULL = no colour chosen (legacy rows, or cleared) -> no swatch.
     color: str | None = Field(default=None)
@@ -164,15 +166,13 @@ class Transaction(SQLModel, table=True):
 
     # minor units (1/100 PLN): negative = expense, positive = inflow. Never a float.
     amount: int
-    # Running balance from the CSV, used for reconciliation (design §6).
+    # Running balance from the CSV, used for reconciliation.
     balance_after: int | None = Field(default=None)
     booked_date: date = Field(index=True)
 
     raw_description: str
     merchant_normalized: str | None = Field(default=None)  # cleaned up, used by rules later
-    note: str | None = Field(
-        default=None
-    )  # free-text human annotation (Phase 13); not categorization
+    note: str | None = Field(default=None)  # free-text human annotation; not categorization
 
     category_id: int | None = Field(default=None, foreign_key="category.id", index=True)
     scope: Scope = Field(default=Scope.private)
@@ -182,7 +182,7 @@ class Transaction(SQLModel, table=True):
     source: TxSource = Field(default=TxSource.import_csv)
     transfer_group_id: str | None = Field(default=None, index=True)  # links the two sides
 
-    # Plan-vs-reality (Phase 5): a real loan installment is an outflow (usually on
+    # Plan-vs-reality: a real loan installment is an outflow (usually on
     # the checking account, not the loan account). ``loan_id`` marks it as a
     # payment toward a loan; ``loan_installment_index`` pins it to a specific
     # scheduled row (1-based) so a missed/double/prepaid month doesn't shift the
@@ -211,13 +211,13 @@ class LoanBase(SQLModel):
     installment_type: InstallmentType
     start_date: date  # disbursement; first installment is one month later
     term_months: int
-    # Bank contract number (e.g. "BLP0068094260"). Display meta on its own; from
-    # Phase 19b it also feeds the planned-item transfer-title hint ("umowa nr …").
+    # Bank contract number (e.g. "BLP0068094260"). Display meta on its own; also
+    # feeds the planned-item transfer-title hint ("umowa nr …").
     contract_number: str | None = Field(default=None)
 
 
 class Loan(LoanBase, table=True):
-    """A loan/mortgage with a repayment schedule (design §5, §7.4).
+    """A loan/mortgage with a repayment schedule.
 
     The amortization schedule is **not** stored — it's recomputed on the fly from
     these fields plus the variable-rate history (see :mod:`expense_analyzer.loans`),
@@ -244,7 +244,7 @@ class LoanCreate(LoanBase):
 
 
 class InvestmentPosition(SQLModel, table=True):
-    """One holding in a portfolio account, as of a snapshot (design §5, §7.3).
+    """One holding in a portfolio account, as of a snapshot.
 
     Informational: positions are imported once a month (XTB .xlsx) or pulled from
     the myFund.pl API — not a live feed. A snapshot is *latest-wins per date*: the
@@ -280,7 +280,7 @@ class InvestmentPosition(SQLModel, table=True):
 
 
 class Budget(SQLModel, table=True):
-    """A per-category monthly spending limit (design §5, §7.6).
+    """A per-category monthly spending limit.
 
     ``month`` resolves the design's "a specific month *or* a recurring monthly
     limit" with one schema:
@@ -295,19 +295,13 @@ class Budget(SQLModel, table=True):
     overlay on spending — they touch no transaction and need no transfer/loan
     machinery.
 
-    ``scope`` keeps a member's **private** category limits separate from the shared
-    **household** ones, and ``owner_id`` is *who* a private budget belongs to (NULL
-    for a shared household budget). Visibility mirrors :class:`Transaction`: a member
-    sees household budgets plus their own private ones — enforced in the query layer
-    (:func:`expense_analyzer.queries.planning.budgets.list_budgets`), not the DB.
+    ``scope`` separates a member's **private** limits from the shared **household**
+    ones; ``owner_id`` is who a private budget belongs to (NULL for household).
 
-    The ``(category_id, month, scope, owner_id)`` unique constraint guards against
-    duplicate overrides for the same month within a scope+owner. ``NULL`` months and
-    ``NULL`` owner (household) count as *distinct* (both SQLite and PostgreSQL default
-    to NULLS DISTINCT), so the constraint does **not** stop a second recurring/household
-    row on its own — the single-writer query layer enforces "one slot per
-    category+month+scope+owner" by upserting (find-or-update) in
-    :func:`expense_analyzer.queries.planning.budgets.set_budget`.
+    The ``(category_id, month, scope, owner_id)`` unique constraint stops duplicate
+    overrides within a scope+owner. NULL months and NULL owner count as distinct, so
+    one slot per combination is guaranteed by the single-writer query layer upserting
+    in :func:`expense_analyzer.queries.planning.budgets.set_budget`.
     """
 
     __tablename__ = "budget"
@@ -330,7 +324,7 @@ class Budget(SQLModel, table=True):
 
 
 class Subscription(SQLModel, table=True):
-    """A user's verdict on a detected recurring-payment group (design §7.5, §11).
+    """A user's verdict on a detected recurring-payment group.
 
     Subscriptions themselves are **derived**, not stored: the recurring-cost view
     is recomputed live from transaction history (a merchant grouping plus
@@ -361,7 +355,7 @@ class Subscription(SQLModel, table=True):
 
 
 class Rule(SQLModel, table=True):
-    """A categorization rule — layer 1 of categorization (design §5, §7.7).
+    """A categorization rule — layer 1 of categorization.
 
     The first, deterministic categorization layer: a case-insensitive substring
     ``pattern`` matched against a transaction's ``merchant_normalized`` (falling
@@ -403,7 +397,7 @@ class LoanRateChange(SQLModel, table=True):
 
 
 class LoanDocument(SQLModel, table=True):
-    """A file attached to a loan — contract, schedule, payment proof (Phase 21).
+    """A file attached to a loan — contract, schedule, payment proof.
 
     Local-only document storage (design's keep-everything-on-the-LAN principle,
     no OCR): the bytes live in a directory on the ``data/`` volume
@@ -428,26 +422,24 @@ class LoanDocument(SQLModel, table=True):
 
 
 class PlannedItem(SQLModel, table=True):
-    """One recurring line in the monthly cashflow checklist (design §11, Phase 19).
+    """One recurring line in the monthly cashflow checklist.
 
-    Replaces the Google-Sheet that listed every monthly obligation (income at the
-    top, fixed charges below, "FOR LIVING" as the remainder). The user defines each
-    repeating line once; the per-month view is **derived** (no "generate" step) from
-    these items plus their payment status for the selected month.
+    Income at the top, fixed charges below, "FOR LIVING" as the remainder. The user
+    defines each repeating line once; the per-month view is **derived** (no
+    "generate" step) from these items plus their payment status for the month.
 
     ``expected_amount`` is **signed** minor units — positive for income (salary),
     negative for an expense (rent, ZUS, a subscription). It is **nullable**: a
     variable charge (ZUS/US/VAT/utilities) has no fixed figure, so the real amount
-    only becomes known once a transaction is linked (Phase 19b). A row with no
+    only becomes known once a transaction is linked. A row with no
     expected amount reads as *unestimated* (never a silent zero).
 
-    ``loan_id`` (nullable) marks a **loan-backed** line: from Phase 19b its name,
-    installment counter and amount are computed live from the loan's amortization
-    schedule, not from ``expected_amount``. The column exists from 19a so 19b needs
-    no migration; the derivation itself lands in 19b.
+    ``loan_id`` (nullable) marks a **loan-backed** line: its name, installment
+    counter and amount are computed live from the loan's amortization schedule,
+    not from ``expected_amount``.
 
     ``category_id`` ties the line into spending stats/budgets; ``payee_account`` is
-    the destination IBAN (structured, for the Phase 19b "how to pay" card rather
+    the destination IBAN (structured, for the "how to pay" card rather
     than wedged into ``note``); ``due_day`` (1–31) is the typical payment day that
     drives the overdue flag. ``active`` retires a line without deleting its history;
     ``sort_order`` arranges the rows (income first, then charges).
@@ -461,7 +453,7 @@ class PlannedItem(SQLModel, table=True):
     # a real amount is known) — never treated as a silent zero.
     expected_amount: int | None = Field(default=None)
     category_id: int | None = Field(default=None, foreign_key="category.id", index=True)
-    # Set => loan-backed; name/counter/amount derive from the schedule (Phase 19b).
+    # Set => loan-backed; name/counter/amount derive from the schedule.
     loan_id: int | None = Field(default=None, foreign_key="loan.id", index=True)
     payee_account: str | None = Field(default=None)  # destination IBAN (how-to-pay card)
     due_day: int | None = Field(default=None)  # 1–31 typical pay day; drives overdue
@@ -472,11 +464,11 @@ class PlannedItem(SQLModel, table=True):
 
 
 class PlannedItemPayment(SQLModel, table=True):
-    """The paid/unpaid status of a **non-loan** planned item for one month (Phase 19).
+    """The paid/unpaid status of a **non-loan** planned item for one month.
 
     One row per ``(planned_item_id, month)`` records that the obligation was met
-    that month, either by a linked real transaction (``transaction_id`` — Phase 19b)
-    **or** a manual tick (``paid_at`` — cash/untracked, Phase 19a). The unique
+    that month, either by a linked real transaction (``transaction_id``)
+    **or** a manual tick (``paid_at`` — cash/untracked). The unique
     constraint guards against a duplicate status row for the same month.
 
     **Loan-backed items have no row here.** Their "paid this month" status is
@@ -493,6 +485,6 @@ class PlannedItemPayment(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     planned_item_id: int = Field(foreign_key="planned_item.id", index=True)
     month: str = Field(index=True)  # "YYYY-MM"
-    transaction_id: int | None = Field(default=None, foreign_key="transaction.id")  # Phase 19b link
+    transaction_id: int | None = Field(default=None, foreign_key="transaction.id")
     paid_at: datetime | None = Field(default=None)  # manual tick (no linked tx)
     created_at: datetime = Field(default_factory=utc_now)

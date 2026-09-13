@@ -1,14 +1,13 @@
 """Import orchestration: open a batch, upsert on fingerprint, summarize.
 
-Flow (design §6):
+Flow:
 1. An :class:`~expense_analyzer.models.ImportBatch` is opened.
 2. The importer parses the bytes into ``NormalizedTransaction`` records.
 3. A fingerprint is computed per record.
 4. Upsert: known fingerprint -> skip; new -> insert, linked to the batch.
 5. Return a summary (how many new, how many skipped as duplicates).
 
-Reconciliation via ``balance_after`` is stored now but only validated from
-Phase 2 (roadmap §11) — the column exists so no migration is needed later.
+``balance_after`` is stored per record and checked by :func:`reconcile`.
 """
 
 import logging
@@ -37,7 +36,7 @@ class ImportSummary:
     skipped: int  # duplicates (fingerprint already known, or repeated within the file)
     reconciliation: ReconciliationResult  # non-blocking sanity check on the parsed file
     transfers_auto_linked: int = 0  # unambiguous internal transfers paired post-import
-    auto_categorized: int = 0  # new rows categorized by a rule post-import (Phase 10)
+    auto_categorized: int = 0  # new rows categorized by a rule post-import
 
 
 def run_import(
@@ -67,17 +66,22 @@ def run_import(
     # set, so a file that repeats an identical row imports it once (design's
     # accepted in-file-duplicate behaviour) without tripping the unique index.
     seen: set[str] = set()
+
     for nt in result.transactions:
         fingerprint = compute_fingerprint(account_id, nt.booked_date, nt.amount, nt.raw_description)
+
         if fingerprint in seen:
             skipped += 1
             continue
+
         already = session.exec(
             select(Transaction.id).where(Transaction.fingerprint == fingerprint)
         ).first()
+
         if already is not None:
             skipped += 1
             continue
+
         seen.add(fingerprint)
 
         if batch is None:
@@ -113,16 +117,11 @@ def run_import(
 
     session.commit()
 
-    # Post-import analysis: a transfer's counterpart may have arrived in an
-    # earlier batch on another account, so scan *all* unmatched candidates, not
-    # just this run. Only unambiguous pairs are auto-linked; the rest wait on the
-    # Transfers page for manual confirmation.
-    #
-    # Kept strictly non-fatal: the import has already committed above, so a
-    # failure here must not turn a successful import into a 500. Auto-linking is a
-    # convenience — on error we log and report 0, and the user can still pair
-    # manually (or hit "Rescan") on the Transfers page.
+    # A transfer's counterpart may have arrived in an earlier batch on another
+    # account, so scan *all* unmatched candidates, not just this run. Only
+    # unambiguous pairs are auto-linked; the rest wait for manual confirmation.
     auto_linked = 0
+
     if new:
         try:
             auto_linked, _ = detect_and_autolink(
@@ -132,12 +131,10 @@ def run_import(
             log.exception("transfer auto-link failed after import; rows are committed")
             session.rollback()  # discard the half-done detection unit of work
 
-    # Post-import analysis: deterministic categorization (layer 1, Phase 10). New
-    # rows are uncategorized, so the rule matcher fills the ones a rule covers.
-    # Same non-fatal contract as transfer auto-linking above: the import is already
-    # committed, so a failure here logs and reports 0 rather than 500-ing — the user
-    # can still hit "Apply rules now" or categorize by hand.
+    # Deterministic categorization (layer 1): new rows are uncategorized, so the
+    # rule matcher fills the ones a rule covers.
     auto_categorized = 0
+
     if new:
         try:
             auto_categorized = apply_rules(session)
@@ -145,10 +142,9 @@ def run_import(
             log.exception("rule auto-categorization failed after import; rows are committed")
             session.rollback()
 
-    # Probabilistic categorization (the Ollama host, or the local classifier as
-    # fallback) is no longer run at import — it's an on-demand step from the review
-    # queue ("classify now"). Import stays rules-only, so a big or first import
-    # isn't blocked waiting on the Ollama host. See queries/categorize/llm.py.
+    # Import stays rules-only so a large or first import never blocks on the
+    # Ollama host; probabilistic categorization is an on-demand step from the
+    # review queue (see queries/categorize/llm.py).
 
     return ImportSummary(
         batch_id=batch.id if batch else None,
@@ -165,9 +161,10 @@ def rollback_batch(session: Session, batch_id: int) -> int:
     """Soft-delete every transaction in a batch and mark the batch rolled back.
 
     Returns the number of transactions soft-deleted. Idempotent: already
-    soft-deleted rows are left untouched. Nothing is hard-deleted (design §6).
+    soft-deleted rows are left untouched. Nothing is hard-deleted.
     """
     batch = session.get(ImportBatch, batch_id)
+
     if batch is None:
         raise ValueError(f"no import batch with id {batch_id}")
 
@@ -178,6 +175,7 @@ def rollback_batch(session: Session, batch_id: int) -> int:
             col(Transaction.deleted_at).is_(None),
         )
     ).all()
+
     for tx in rows:
         tx.deleted_at = now
         session.add(tx)

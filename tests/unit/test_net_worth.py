@@ -20,6 +20,7 @@ def test_cash_balance_sums_live_transactions(
     make_transaction(account_id=acc.id, amount=-120_00)
 
     balances = {b.account_id: b for b in net_worth.account_balances(db_session)}
+
     assert balances[acc.id].balance == 380_00
 
 
@@ -43,6 +44,7 @@ def test_portfolio_uses_only_latest_snapshot(
 
     assert investments.portfolio_value(db_session, acc.id) == 400_00
     balances = {b.account_id: b for b in net_worth.account_balances(db_session)}
+
     assert balances[acc.id].balance == 400_00
 
 
@@ -61,6 +63,7 @@ def test_outstanding_principal_bounds(
         loan_queries.outstanding_principal(db_session, loan.id, as_of=date(2026, 1, 15))
         == 120_000_00
     )
+
     # After the final installment: fully amortized.
     assert loan_queries.outstanding_principal(db_session, loan.id, as_of=date(2030, 1, 1)) == 0
 
@@ -77,6 +80,7 @@ def test_loan_balance_is_negative_outstanding(
 
     outstanding = loan_queries.outstanding_principal(db_session, loan.id)
     balances = {b.account_id: b for b in net_worth.account_balances(db_session)}
+
     assert balances[acc.id].balance == -(outstanding or 0)
 
 
@@ -109,4 +113,5 @@ def test_current_net_worth_sums_all(
 
     outstanding = loan_queries.outstanding_principal(db_session, loan.id) or 0
     expected = 1_000_00 + 500_00 - outstanding
+
     assert net_worth.current_net_worth(db_session) == expected

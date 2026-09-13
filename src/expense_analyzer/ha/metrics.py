@@ -1,10 +1,10 @@
-"""Glanceable household metrics for the Home Assistant push (design §9).
+"""Glanceable household metrics for the Home Assistant push.
 
 The data layer of the HA integration: gather a flat list of :class:`Metric` from
 the existing query modules (net worth, monthly stats). Money is converted from
 integer minor units to a display :class:`~decimal.Decimal` string **only here, at
 the MQTT edge** (the same discipline as ``format_pln`` on the web edge) — the rest
-of the app keeps integer minor units (design §5).
+of the app keeps integer minor units.
 
 Each :class:`Metric` maps 1:1 to one Home Assistant sensor.
 """
@@ -52,10 +52,10 @@ def collect_metrics(session: Session) -> list[Metric]:
     Headline figures (net worth, this-month spending/income/net — transfers and
     loan installments excluded, as everywhere in
     :mod:`~expense_analyzer.queries.money.stats`), the total fixed monthly cost of
-    detected subscriptions (Phase 9), one balance metric per account, and a
-    "budget remaining" metric per budgeted category for the current month (Phase
-    8). HA turns the remaining sensors into glanceable "left in food budget" cards
-    and can drive its own threshold automations off them (design §9).
+    detected subscriptions, one balance metric per account, and a "budget
+    remaining" metric per budgeted category for the current month. HA turns the
+    remaining sensors into glanceable "left in food budget" cards and can drive
+    its own threshold automations off them.
     """
     today = local_today()
     metrics = [
@@ -104,7 +104,7 @@ def collect_metrics(session: Session) -> list[Metric]:
         for status in budget_queries.budget_overview(session, month, spendable=spendable)
     ]
 
-    # Monthly cashflow checklist (Phase 19c): the remainder after all obligations
+    # Monthly cashflow checklist: the remainder after all obligations
     # ("FOR LIVING") and what's still unpaid this month. The paid X/Y progress and
     # overdue count ride on a separate plan sensor (see ``publish_plan``).
     plan = planned_queries.plan_overview(session, month, today=today)

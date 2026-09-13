@@ -1,5 +1,4 @@
-"""Embeddings neighbours (layer 3): query layer + the review-queue render
-(Phase 12, design §7.7 point 3).
+"""Embeddings neighbours (layer 3): query layer + the review-queue render.
 
 The query-layer tests inject a deterministic fake :class:`Embedder` (token overlap,
 no torch) plus a permissive :class:`Settings`, so a handful of fixture rows is
@@ -32,17 +31,19 @@ _LOW = Settings(
 
 class FakeEmbedder:
     """Bag-of-known-words → L2-normalized vector, so cosine similarity is token
-    overlap. No model, fully deterministic (see test_embeddings.py)."""
+    overlap. No model, fully deterministic."""
 
     def __init__(self, vocab: dict[str, int]) -> None:
         self._vocab = vocab
 
     def encode(self, texts: Sequence[str]) -> np.ndarray:
         matrix = np.zeros((len(texts), len(self._vocab)), dtype=np.float32)
+
         for i, text in enumerate(texts):
             for word in text.lower().split():
                 if word in self._vocab:
                     matrix[i, self._vocab[word]] += 1.0
+
         norms = np.linalg.norm(matrix, axis=1, keepdims=True)
         norms[norms == 0] = 1.0
 
@@ -108,6 +109,7 @@ def test_disabled_returns_no_suggestions_without_touching_the_embedder(
             raise AssertionError("embedder used while disabled")
 
     off = Settings(embeddings_enabled=False, embeddings_min_training_samples=4)
+
     assert eq.neighbor_suggestions(db_session, [tx], settings=off, embedder=Boom()) == {}
 
 

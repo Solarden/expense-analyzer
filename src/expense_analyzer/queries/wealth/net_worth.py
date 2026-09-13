@@ -1,4 +1,4 @@
-"""Net worth (design §7.3, §9): one number across accounts, assets minus debt.
+"""Net worth: one number across accounts, assets minus debt.
 
     net worth = Σ bank/cash balances + Σ portfolio values − Σ outstanding loan debt
 
@@ -55,14 +55,17 @@ def _loan_for_account(session: Session, account_id: int) -> int | None:
 def account_balances(session: Session) -> list[AccountBalance]:
     """Current balance per account, in declaration order from :func:`list_accounts`."""
     balances: list[AccountBalance] = []
+
     for account in list_accounts(session):
         note: str | None = None
+
         if account.type in (AccountType.bank, AccountType.cash):
             balance = _cash_balance(session, account.id)
         elif account.type == AccountType.portfolio:
             balance = investments.portfolio_value(session, account.id)
         elif account.type == AccountType.loan:
             loan_id = _loan_for_account(session, account.id)
+
             if loan_id is None:
                 balance, note = 0, "No loan defined for this account yet."
             else:

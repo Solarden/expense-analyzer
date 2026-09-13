@@ -39,7 +39,7 @@ def create_app() -> FastAPI:
     )
 
     # Vendored static assets (Chart.js for the overview charts) — served locally
-    # so the Pi never reaches out to a CDN (design: stays fully offline).
+    # so the host never reaches out to a CDN (design: stays fully offline).
     app.mount(
         "/static",
         StaticFiles(directory=str(Path(__file__).parent / "static")),

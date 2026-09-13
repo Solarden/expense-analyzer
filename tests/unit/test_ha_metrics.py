@@ -1,4 +1,4 @@
-"""Home Assistant metric collection (Phase 7).
+"""Home Assistant metric collection.
 
 Money is converted to a display decimal string at this edge; transfers stay
 excluded from the spending/income figures (consistent with queries/stats).
@@ -40,6 +40,7 @@ def test_fixed_monthly_costs_sensor(
     from datetime import date
 
     account = make_account(name="PKO checking")
+
     for month in (3, 4, 5):
         make_transaction(
             account_id=account.id,
@@ -74,6 +75,7 @@ def test_month_figures_exclude_transfers(
     assert metrics["month_net"] == "400.00"
     # The per-account balance is the raw sum of every live row (transfer included).
     assert metrics[f"account_{account.id}_balance"] == "200.00"
+
     # One bank account, no loans/portfolio -> net worth equals that balance.
     assert metrics["net_worth"] == "200.00"
 
@@ -101,6 +103,7 @@ def test_loan_installment_excluded_from_month_spending(
     metrics = {m.key: m.value for m in collect_metrics(db_session)}
 
     assert metrics["month_spending"] == "100.00"  # the 2000 installment is excluded
+
     # ...but it still left the account, so the balance reflects it.
     assert metrics[f"account_{account.id}_balance"] == "-2100.00"
 
@@ -135,5 +138,6 @@ def test_per_account_balance_sensor_named_after_account(
     )
 
     assert metric.name == "Mortgage Balance"
+
     # No loan defined yet -> outstanding 0 -> balance reads zero, not a crash.
     assert metric.value == "0.00"

@@ -1,13 +1,13 @@
-"""Subscriptions dashboard page + query layer (Phase 9).
+"""Subscriptions dashboard page + query layer.
 
-Detection is pure (covered in tests/unit/test_subscriptions.py); here we check the
+Detection is pure and covered separately; here we check the
 DB wiring — that spendable transactions feed the detector, that confirm/dismiss/
 restore verdicts persist, and that dismissed groups drop out of the monthly total.
 
 HTTP tests use ``auth_client`` (logged in); it shares the temp engine with
 ``db_session`` so a verdict set over HTTP is visible to a query-layer assertion.
 The file is ``..._page.py`` because test module names must be globally unique
-(no ``__init__.py``) and a unit test already owns ``test_subscriptions.py``.
+(no ``__init__.py``) and the unit-test module already claims the plain name.
 """
 
 from collections.abc import Callable
@@ -82,6 +82,7 @@ def test_active_monthly_cost_excludes_dismissed(
     )
 
     sq.set_verdict(db_session, merchant="SPOTIFY", status=SubscriptionStatus.dismissed)
+
     assert (
         sq.active_monthly_cost(sq.subscription_overview(db_session, SETTINGS, today=today)) == 2999
     )
@@ -113,6 +114,7 @@ def test_confirm_then_dismiss_then_restore(
     assert sq.list_verdicts(db_session) == {"NETFLIX": SubscriptionStatus.dismissed}
 
     auth_client.post("/dashboard/subscriptions/restore", data={"merchant": "NETFLIX"})
+
     assert sq.list_verdicts(db_session) == {}
 
 

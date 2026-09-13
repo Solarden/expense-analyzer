@@ -26,6 +26,7 @@ def health() -> JSONResponse:
     loop), and the deploy's health wait correctly refuses to declare success.
     """
     db_ok = True
+
     try:
         with Session(get_engine()) as session:
             session.execute(text("SELECT 1"))

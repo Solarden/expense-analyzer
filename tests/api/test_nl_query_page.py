@@ -1,4 +1,4 @@
-"""Natural-language query execution (PR 4), against the DB with a stubbed client.
+"""Natural-language query execution, against the DB with a stubbed client.
 
 The Ollama client is faked (no network): ``parse_query`` returns a canned raw dict
 or raises :class:`OllamaError`. Totals/breakdowns/filters are checked through
@@ -30,9 +30,11 @@ class _FakeClient:
 
     def parse_query(self, question: str, **_kw: object) -> dict:
         self.calls += 1
+
         if self._error:
             raise OllamaError("Ollama host down")
         assert self._raw is not None
+
         return self._raw
 
 
@@ -92,6 +94,7 @@ def test_month_breakdown(
 
     assert res.total == 18000  # no direction filter -> all magnitudes
     by_month = {m.month: (m.spending, m.income) for m in res.breakdown}
+
     assert by_month == {"2026-04": (5000, 0), "2026-05": (3000, 10000)}
 
 

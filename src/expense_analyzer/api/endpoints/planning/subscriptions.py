@@ -1,4 +1,4 @@
-"""Subscriptions page: recurring costs at a glance (design §7.5).
+"""Subscriptions page: recurring costs at a glance.
 
 Recurring payments are detected live from transaction history (merchant + date /
 amount regularity) — nothing is stored except the user's verdict over a detected

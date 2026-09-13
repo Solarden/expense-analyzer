@@ -1,4 +1,4 @@
-"""HTTP tests for the Phase 4 dashboard: overview page, list filters/pagination,
+"""HTTP tests for the dashboard: overview page, list filters/pagination,
 the vendored Chart.js asset, and the categorize return-to round trip.
 
 Rows are created directly via the model factories (same temp engine the app
@@ -67,7 +67,7 @@ def test_stats_page_empty_db(auth_client: TestClient, db_session: Session):
     assert "No spending recorded" in resp.text
 
 
-# --- Phase 20b: auto-palette + chart drilldown ---
+# --- Auto-palette + chart drilldown ---
 
 
 def test_bar_color_prefers_explicit_then_palette():
@@ -82,6 +82,7 @@ def test_bar_color_prefers_explicit_then_palette():
     # A colourless category gets a stable palette slot keyed by id.
     assert _bar_color(3, None) == AUTO_PALETTE[3 % len(AUTO_PALETTE)]
     assert _bar_color(3, None) == _bar_color(3, None)  # deterministic across calls
+
     # The uncategorized bucket (no id) gets the neutral default.
     assert _bar_color(None, None) == DEFAULT_CATEGORY_COLOR
 
@@ -90,6 +91,7 @@ def test_drilldown_link_builds_filtered_url():
     from expense_analyzer.api.endpoints.money.overview import _drilldown_link
 
     assert _drilldown_link(7, "2026-05") == "/dashboard/transactions?category=7&month=2026-05"
+
     # Uncategorized maps to the "none" filter the transactions list understands.
     assert _drilldown_link(None, "2026-05") == "/dashboard/transactions?category=none&month=2026-05"
 
@@ -129,6 +131,7 @@ def test_transactions_pagination(
     assert "60 transactions" in page1
 
     page2 = auth_client.get("/dashboard/transactions?page=2").text
+
     assert "Page 2 of 2" in page2
 
 

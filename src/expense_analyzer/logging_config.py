@@ -16,6 +16,7 @@ _configured = False
 def configure_logging(debug: bool = False) -> None:
     """Set up root logging. Idempotent, safe to call from every entrypoint."""
     global _configured
+
     if _configured:
         return
 

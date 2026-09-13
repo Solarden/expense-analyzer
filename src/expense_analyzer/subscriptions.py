@@ -1,6 +1,6 @@
 """Recurring-payment (subscription) detection — the logic, kept pure (no DB).
 
-A subscription is **derived** from transaction history, not stored (design §7.5):
+A subscription is **derived** from transaction history, not stored:
 group a merchant's outflows and look for *regularity of date and amount*. A
 streaming service, rent, or insurance charges a similar amount on a similar
 cadence; a supermarket charges the same merchant at random amounts and dates and
@@ -14,7 +14,7 @@ expected to be already transfer- and loan-excluded (see
 :func:`expense_analyzer.queries.money.stats.spendable_transactions`) — those are
 recurring too but are not consumption subscriptions.
 
-Money stays integer minor units throughout (never float; design §5); the
+Money stays integer minor units throughout (never float); the
 ``monthly_equivalent`` cost is scaled with an exact integer ratio so a yearly
 insurance and a monthly stream are comparable "fixed monthly cost" figures.
 """
@@ -130,6 +130,7 @@ def find_subscriptions(
     installments (they recur too, but aren't subscriptions).
     """
     groups: dict[str, list[Transaction]] = defaultdict(list)
+
     for tx in transactions:
         if tx.amount < 0 and tx.merchant_normalized:
             groups[tx.merchant_normalized].append(tx)
@@ -174,6 +175,7 @@ def _detect_one(
 
     gaps = [(b - a).days for a, b in pairwise(dates)]
     cadence = _classify_cadence(statistics.median(gaps))
+
     if cadence is None:
         return None
     period = _CADENCE_DAYS[cadence]
@@ -182,6 +184,7 @@ def _detect_one(
         return None
 
     typical = round(statistics.median(magnitudes))
+
     if typical <= 0 or not _is_regular(
         magnitudes, near=typical, tolerance=typical * amount_tolerance_pct / 100
     ):
@@ -211,8 +214,10 @@ def _classify_cadence(median_gap: float) -> Cadence | None:
     the interval is too far from any canonical cadence."""
     best: Cadence | None = None
     best_error = _CADENCE_TOLERANCE
+
     for cadence, period in _CADENCE_DAYS.items():
         error = abs(median_gap - period) / period
+
         if error <= best_error:
             best_error = error
             best = cadence
@@ -242,6 +247,7 @@ def _detect_price_rise(magnitudes: list[int], threshold_pct: int) -> PriceRise |
 
     baseline = round(statistics.median(magnitudes[:-1]))
     current = magnitudes[-1]
+
     if baseline <= 0 or (current - baseline) * 100 <= baseline * threshold_pct:
         return None
 
@@ -254,8 +260,10 @@ def _detect_price_rise(magnitudes: list[int], threshold_pct: int) -> PriceRise |
 
 def _status(today: date, last_date: date, next_expected: date, period: int) -> DetectionStatus:
     grace = timedelta(days=round(period * _CADENCE_TOLERANCE))
+
     if today <= next_expected + grace:
         return DetectionStatus.active
+
     if today <= last_date + timedelta(days=2 * period):
         return DetectionStatus.overdue
 
@@ -264,6 +272,7 @@ def _status(today: date, last_date: date, next_expected: date, period: int) -> D
 
 def _dominant_category(txns: list[Transaction]) -> int | None:
     counts = Counter(t.category_id for t in txns if t.category_id is not None)
+
     if not counts:
         return None
 
@@ -274,6 +283,7 @@ def _scale(amount: int, num: int, den: int) -> int:
     """``round(amount * num / den)`` with integer-only arithmetic (no float)."""
     total = amount * num
     quotient, remainder = divmod(total, den)
+
     if remainder * 2 >= den:
         quotient += 1
 

@@ -1,4 +1,4 @@
-"""Embeddings neighbours — the DB side of categorization layer 3 (design §7.7 point 3).
+"""Embeddings neighbours — the DB side of categorization layer 3.
 
 Builds a nearest-neighbour index from the same confirmed labels the classifier
 trains on (:func:`expense_analyzer.queries.categorize.classifier.confirmed_label_texts`), then
@@ -37,13 +37,9 @@ from expense_analyzer.queries.categorize.classifier import confirmed_label_texts
 
 log = logging.getLogger(__name__)
 
-# Single-entry cache of the embedded training index, keyed on (model@revision,
-# label-set fingerprint). Embedding a household's whole history is the costly step,
-# so we keep the last-built index and rebuild only when the confirmed labels change
-# (e.g. after tagging a queued row). Only used for the real (process-loaded)
-# embedder — an injected one (tests) bypasses the cache so a fake never shadows
-# another. A cold start (build -> None) isn't cached: that path returns before
-# embedding anything, so re-running it is cheap.
+# Embedding a household's whole history is the costly step, so the last-built index
+# is kept and rebuilt only when the confirmed labels change. An injected embedder
+# bypasses the cache, so a fake can never shadow another.
 _index_cache: dict[tuple[str, int], NeighborModel] = {}
 
 
@@ -61,15 +57,18 @@ def _index(
     global _index_cache
 
     min_samples = settings.embeddings_min_training_samples
+
     if cache_key is None:
         return build(samples, embedder, min_samples=min_samples)
 
     key = (cache_key, _fingerprint(samples))
     cached = _index_cache.get(key)
+
     if cached is not None:
         return cached
 
     model = build(samples, embedder, min_samples=min_samples)
+
     if model is not None:
         # Replace the whole dict (single entry, latest label set only). Rebinding the
         # module global is atomic under the GIL, so a concurrent reader sees either
@@ -100,11 +99,13 @@ def neighbor_suggestions(
     can't be loaded; never raises, so the queue always renders.
     """
     settings = settings or get_settings()
+
     if not settings.embeddings_enabled:
         return {}
 
     try:
         cache_key: str | None = None
+
         if embedder is None:
             embedder = load_embedder(settings.embeddings_model, settings.embeddings_model_revision)
             cache_key = f"{settings.embeddings_model}@{settings.embeddings_model_revision}"
@@ -114,6 +115,7 @@ def neighbor_suggestions(
             for t, c in confirmed_label_texts(session, viewer_id=viewer_id)
         ]
         model = _index(samples, embedder, settings=settings, cache_key=cache_key)
+
         if model is None:
             return {}
 
@@ -124,6 +126,7 @@ def neighbor_suggestions(
             if tx.id is not None
         ]
         queries = [(tid, text) for tid, text in queries if text]
+
         if not queries:
             return {}
 
@@ -134,6 +137,7 @@ def neighbor_suggestions(
         )
     except Exception:  # noqa: BLE001 — suggestions are a convenience; never break the queue
         log.exception("embeddings neighbour suggestions failed; rendering queue without them")
+
         return {}
 
     return {

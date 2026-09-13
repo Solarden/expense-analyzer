@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Check our OWN git repo for a newer release tag and notify Home Assistant if one
-# is waiting (Phase 18). Notify-only — it never deploys; you run `make deploy`
-# when you choose. Wire it into cron / a systemd timer on the Pi (see README).
+# is waiting. Notify-only — it never deploys; you run `make deploy`
+# when you choose. Wire it into cron / a systemd timer on the host (see README).
 #
 #   git fetch --tags  →  compare deployed tag (reachable from HEAD) vs newest tag
 #   →  publish the verdict to HA over MQTT (retained sensor + alert if behind)
 #
 # The only egress is the git fetch from our own remote (maintenance, not runtime
-# — the blessed exception to keep-pi-fully-local). HA publishing runs inside the
+# — the one exception to the no-egress rule). HA publishing runs inside the
 # app image, so the host needs nothing but docker + git.
 #
 # The remote it checks is configurable (EA_UPDATE_REMOTE in .env, or --remote) so
@@ -28,7 +28,7 @@ warn() { printf '\033[33m[check-update] WARNING:\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[31m[check-update] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
 # Read KEY=value from .env (ignoring comments); empty if absent. This shell
-# script, unlike docker compose, doesn't auto-load .env, so the Phase 18 ops
+# script, unlike docker compose, doesn't auto-load .env, so the ops
 # knobs (EA_UPDATE_REMOTE here) wouldn't take effect from .env without this. A
 # real environment variable and the CLI flag both take precedence.
 dotenv_get() { [ -f .env ] && sed -n "s/^$1=//p" .env | tail -n1 || true; }

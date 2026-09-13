@@ -76,6 +76,7 @@ def test_window_boundary_inclusive_then_excluded():
     assert len(within.auto) == 1
 
     outside = find_transfer_pairs([out, inn_far], window_days=3)
+
     assert not outside.auto and not outside.ambiguous
 
 

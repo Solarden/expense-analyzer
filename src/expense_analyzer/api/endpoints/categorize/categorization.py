@@ -1,4 +1,4 @@
-"""Review queue: categorization layer 2 — the classifier + manual queue (design §7.7).
+"""Review queue: categorization layer 2 — the classifier + manual queue.
 
 The queue lists the still-uncategorized transactions with the classifier's
 suggestion next to each (its top category + confidence). "Train & classify now"
@@ -39,6 +39,7 @@ def _classify_flash(categorized: int | None, queued: int | None, trained: int | 
     plain page load. ``trained=0`` is the cold start (not enough labeled data)."""
     if categorized is None:
         return None
+
     if trained == 0:
         return (
             "Not enough categorized transactions to train the classifier yet — "
@@ -46,6 +47,7 @@ def _classify_flash(categorized: int | None, queued: int | None, trained: int | 
         )
 
     parts = [f"{categorized} categorized"]
+
     if queued:
         parts.append(f"{queued} left for review")
 
@@ -67,7 +69,7 @@ def queue_page(
         session, page=page_num, page_size=get_settings().page_size, viewer_id=user.id
     )
 
-    # Layer 3 (Phase 12): the nearest already-categorized transaction for each
+    # Layer 3: the nearest already-categorized transaction for each
     # queued row, keyed by tx id. A suggestion only — fail-safe to {} (cold start,
     # disabled, or model unavailable), so the queue renders either way.
     neighbors = embeddings_queries.neighbor_suggestions(
@@ -75,6 +77,7 @@ def queue_page(
     )
 
     categories = category_queries.list_categories(session)
+
     return templates.TemplateResponse(
         request,
         "categorize/queue.html",

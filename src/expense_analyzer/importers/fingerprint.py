@@ -1,4 +1,4 @@
-"""Import idempotency hash (design §5/§6).
+"""Import idempotency hash.
 
 The fingerprint is what makes import an upsert: importing the same file twice,
 or overlapping daily exports, never creates duplicates. Computed exactly as the

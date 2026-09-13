@@ -16,7 +16,7 @@ def get_engine() -> Engine:
     Lazy on purpose: importing this module must not open a connection, so the
     database URL can still be overridden (e.g. by tests) before first use.
     Dialect-aware: SQLite for zero-setup local dev, PostgreSQL in production
-    (the shared /opt/stack server — see docker-compose.yml).
+    (a separate server — see docker-compose.yml).
     """
     settings = get_settings()
     url = make_url(settings.database_url)
@@ -34,7 +34,7 @@ def get_engine() -> Engine:
 
         @event.listens_for(engine, "connect")
         def _set_sqlite_pragma(dbapi_connection, _connection_record):
-            # WAL mode for write safety and better concurrency (see design doc §10).
+            # WAL mode for write safety and better concurrency.
             # foreign_keys is off by default in SQLite and must be enabled per-connection.
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA journal_mode=WAL")

@@ -68,12 +68,14 @@ def test_declared_total_is_portfolio_value() -> None:
 
 def test_status_code_7_raises_not_found() -> None:
     payload = {"status": {"code": "7", "text": "Portfel nie znaleziony"}}
+
     with pytest.raises(MyFundError, match="not found"):
         _client(payload).fetch()
 
 
 def test_status_code_1_raises_error() -> None:
     payload = {"status": {"code": "1", "text": "Zły klucz"}}
+
     with pytest.raises(MyFundError):
         _client(payload).fetch()
 
@@ -97,11 +99,13 @@ def test_does_not_follow_redirects() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(str(request.url))
+
         if request.url.path.endswith("getPortfel.php"):
             # If redirects were followed, httpx would issue a *second* request to
             # this Location through the same transport — which the asserts below
             # would catch.
             return httpx.Response(302, headers={"Location": "https://evil.example/steal"})
+
         return httpx.Response(200, json=_OK_PAYLOAD)  # the "evil" target — must never be hit
 
     client = MyFundClient(
@@ -110,6 +114,7 @@ def test_does_not_follow_redirects() -> None:
         portfolio="P",
         transport=httpx.MockTransport(handler),
     )
+
     # The unfollowed 302 has no JSON body, so fetch() surfaces a MyFundError.
     with pytest.raises(MyFundError):
         client.fetch()

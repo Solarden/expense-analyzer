@@ -31,6 +31,7 @@ def current_lens(request: Request) -> Lens:
     sticks across pages; otherwise the stored value is used, else the safe default.
     """
     raw = request.query_params.get("lens")
+
     if raw is not None and "session" in request.scope:
         request.session["lens"] = resolve_lens(raw).value
     stored = request.session.get("lens") if "session" in request.scope else None

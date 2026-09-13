@@ -1,4 +1,4 @@
-"""Investment-position queries — the DB side of portfolio snapshots (design §7.3).
+"""Investment-position queries — the DB side of portfolio snapshots.
 
 Positions are imported as dated snapshots (see
 :mod:`expense_analyzer.importers.positions`); the dashboard cares about the
@@ -34,6 +34,7 @@ def latest_snapshot_date(session: Session, account_id: int) -> date | None:
 def latest_positions(session: Session, account_id: int) -> list[InvestmentPosition]:
     """Holdings of an account as of its most recent snapshot, largest value first."""
     snapshot = latest_snapshot_date(session, account_id)
+
     if snapshot is None:
         return []
     rows = session.exec(

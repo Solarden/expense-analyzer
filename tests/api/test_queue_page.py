@@ -1,5 +1,4 @@
-"""Classifier (layer 2): query layer, review-queue page, and the import-time hook
-(Phase 11, design §7.7 point 2).
+"""Classifier (layer 2): query layer, review-queue page, and the import-time hook.
 
 HTTP tests use ``auth_client`` (logged in), sharing the temp engine with
 ``db_session``. The query-layer tests inject a :class:`Settings` with a low
@@ -158,6 +157,7 @@ def test_classifier_does_not_train_on_its_own_output(
     # They must NOT: only the 3 manual rows are usable -> cold start.
     food = make_category(name="Food")
     fun = make_category(name="Fun")
+
     for _ in range(10):
         make_transaction(
             account_id=account.id,
@@ -166,6 +166,7 @@ def test_classifier_does_not_train_on_its_own_output(
             category_id=food.id,
             source=TxSource.classifier,
         )
+
     for _ in range(3):
         make_transaction(
             account_id=account.id,
@@ -228,13 +229,6 @@ def test_review_queue_excludes_non_candidates(
     assert [r.transaction.id for r in queue.rows] == [keep.id]
 
 
-# --- import-time hook (removed) -------------------------------------------
-# Import no longer runs probabilistic categorization (PR 2): the LLM (primary)
-# and the classifier (fallback) run only on demand from the review queue — see
-# tests/api/test_queue_llm.py. Import is rules-only now (covered in
-# tests/api/test_rules_page.py).
-
-
 # --- endpoints ------------------------------------------------------------
 
 
@@ -251,6 +245,7 @@ def test_classify_endpoint_redirects_with_counts(auth_client: TestClient) -> Non
     # No labels -> cold start (trained=0); the follow-up GET explains it.
     assert resp.headers["location"] == "/dashboard/queue?categorized=0&queued=0&trained=0"
     page = auth_client.get(resp.headers["location"])
+
     assert "Not enough categorized transactions" in page.text
 
 

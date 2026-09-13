@@ -1,8 +1,8 @@
-"""Phase 19c — the monthly plan's Home Assistant surface.
+"""The monthly plan's Home Assistant surface.
 
 The FOR LIVING / Left To Pay money sensors (via ``collect_metrics``), the dedicated
 "Monthly Plan" progress sensor on its own retained topic, and the overdue-bills
-alert — all read-only, mirroring the Phase 18 update-sensor wiring.
+alert — all read-only, mirroring the update-sensor wiring.
 """
 
 import json
@@ -25,12 +25,14 @@ def test_plan_sensor_config_is_a_text_sensor_with_attributes() -> None:
     assert config["state_topic"] == "expense_analyzer/plan"
     assert config["value_template"] == "{{ value_json.progress }}"
     assert config["json_attributes_topic"] == "expense_analyzer/plan"
+
     # A plain text sensor — no monetary device_class/unit (unlike the money sensors).
     assert "device_class" not in config and "unit_of_measurement" not in config
 
 
 def test_plan_payload_shape() -> None:
     payload = json.loads(discovery.plan_payload(paid=8, total=14, overdue=2))
+
     assert payload == {"progress": "8/14", "paid": 8, "total": 14, "overdue": 2}
 
 
@@ -81,5 +83,6 @@ def test_publish_snapshot_overdue_alert(
         and "overdue" in json.loads(p.payload)["title"].lower()
     ]
     assert bool(overdue) == (today.day > 1)
+
     if overdue:
         assert overdue[0].retain is False  # events must not replay

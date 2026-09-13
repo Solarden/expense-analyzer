@@ -49,6 +49,7 @@ def test_loan_schedule_recomputes_for_variable_rate(
     schedule = lq.loan_schedule(db_session, loan.id)
     assert schedule is not None
     assert schedule.rows[-1].balance_after == 0
+
     # The installment after the base-rate hike is larger than the first one.
     assert schedule.rows[-1].payment > schedule.rows[0].payment
 
@@ -118,6 +119,7 @@ def test_delete_loan_unlinks_payments_and_removes_rate_changes(
     assert lq.get_loan(db_session, loan.id) is None
     assert lq.list_rate_changes(db_session, loan.id) == []
     db_session.refresh(tx)
+
     assert tx.loan_id is None  # payment kept, just unlinked
 
 
@@ -235,6 +237,7 @@ def test_update_loan_reseeds_start_observation_when_moved_past_a_later_one(
     assert changes == {date(2026, 7, 1): 600, date(2026, 8, 1): 420}  # later kept, seed moved
     # The user's later observation row is the same one, untouched.
     db_session.refresh(later)
+
     assert later.base_rate_bp == 600
 
 
@@ -263,6 +266,7 @@ def test_update_loan_seeds_rate_when_switching_to_variable(
     )
 
     [seed] = lq.list_rate_changes(db_session, loan.id)
+
     assert (seed.effective_date, seed.base_rate_bp) == (loan.start_date, 500)
 
 
@@ -279,6 +283,7 @@ def test_update_loan_missing_returns_none(
         start_date=date(2026, 1, 15),
         term_months=12,
     )
+
     assert lq.update_loan(db_session, 9999, data) is None
 
 
@@ -317,7 +322,7 @@ def test_create_loan_with_contract_number(
     db_session: Session,
     make_account: Callable[..., Account],
 ):
-    """Phase 19a: the contract number is stored and surfaced on the detail page."""
+    """The contract number is stored and surfaced on the detail page."""
     acc = make_account(name="Mortgage", type=AccountType.loan)
     resp = auth_client.post(
         "/dashboard/loans",
@@ -338,6 +343,7 @@ def test_create_loan_with_contract_number(
     loan = lq.list_loans(db_session)[0]
     assert loan.contract_number == "BLP0068094260"
     detail = auth_client.get(f"/dashboard/loans/{loan.id}")
+
     assert "BLP0068094260" in detail.text
 
 
@@ -447,6 +453,7 @@ def test_link_payment_over_http_then_unlink(
     )
     assert resp.status_code == status.HTTP_303_SEE_OTHER
     db_session.refresh(tx)
+
     assert tx.loan_id is None
 
 
@@ -462,6 +469,7 @@ def test_delete_loan_over_http(
     resp = auth_client.post(f"/dashboard/loans/{loan_id}/delete", follow_redirects=False)
     assert resp.status_code == status.HTTP_303_SEE_OTHER
     db_session.expire_all()  # drop the cached instance so get reloads from the DB
+
     assert lq.get_loan(db_session, loan_id) is None
 
 
@@ -508,6 +516,7 @@ def test_edit_fixed_loan_updates_and_redirects(
     assert resp.headers["location"] == f"/dashboard/loans/{loan.id}"
     db_session.expire_all()
     updated = lq.get_loan(db_session, loan.id)
+
     assert (updated.principal, updated.rate_bp, updated.term_months) == (25_000_000, 650, 300)
 
 
@@ -538,6 +547,7 @@ def test_edit_variable_loan_missing_base_rate_flashes_not_500(
     assert "base rate" in resp.text.lower()
     db_session.expire_all()
     unchanged = lq.get_loan(db_session, loan.id)
+
     assert unchanged.rate_type is RateType.fixed  # the bad edit didn't persist
 
 

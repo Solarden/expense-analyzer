@@ -1,4 +1,4 @@
-"""Natural-language spending queries (PR 4).
+"""Natural-language spending queries.
 
 The owner types a question ("how much did I spend on groceries last month?"); the
 LLM turns it into a *structured filter* — never SQL, never code — and this module
@@ -73,6 +73,7 @@ class QueryResult:
 def _parse_date(value: object) -> date | None:
     if not isinstance(value, str):
         return None
+
     try:
         return date.fromisoformat(value)
     except ValueError:
@@ -86,6 +87,7 @@ def _parse_amount(value: object) -> int | None:
     """
     if value is None or isinstance(value, bool):
         return None
+
     try:
         # json.loads accepts Infinity/NaN by default, so a hostile reply can reach
         # here: NaN -> ValueError, Infinity -> OverflowError. Both drop to None
@@ -124,19 +126,26 @@ def build_spec(raw: dict, categories: list[Category], accounts: list[Account]) -
 def _matches(tx: Transaction, spec: QuerySpec) -> bool:
     if spec.start is not None and tx.booked_date < spec.start:
         return False
+
     if spec.end is not None and tx.booked_date > spec.end:
         return False
     magnitude = abs(tx.amount)
+
     if spec.min_amount is not None and magnitude < spec.min_amount:
         return False
+
     if spec.max_amount is not None and magnitude > spec.max_amount:
         return False
+
     if spec.category_id is not None and tx.category_id != spec.category_id:
         return False
+
     if spec.account_id is not None and tx.account_id != spec.account_id:
         return False
+
     if spec.direction == "expense" and tx.amount >= 0:
         return False
+
     if spec.direction == "income" and tx.amount <= 0:
         return False
 
@@ -151,6 +160,7 @@ def _breakdown(
     if group_by == "category":
         names = {c.id: c.name for c in list_categories(session) if c.id is not None}
         totals: dict[int | None, int] = defaultdict(int)
+
         for tx in txns:
             totals[tx.category_id] += abs(tx.amount)
         rows = [
@@ -168,12 +178,15 @@ def _breakdown(
     if group_by == "month":
         spending: dict[str, int] = defaultdict(int)
         income: dict[str, int] = defaultdict(int)
+
         for tx in txns:
             key = tx.booked_date.strftime("%Y-%m")
+
             if tx.amount < 0:
                 spending[key] -= tx.amount
             elif tx.amount > 0:
                 income[key] += tx.amount
+
         months = sorted(set(spending) | set(income))
 
         return [MonthTotals(month=m, spending=spending[m], income=income[m]) for m in months]
@@ -227,12 +240,14 @@ def answer(
     """Orchestrate: gate on ``llm_enabled``, parse → validate → run. Never raises —
     a down Ollama host or an uninterpretable question returns an ``ok=False`` result."""
     settings = settings or get_settings()
+
     if not settings.llm_enabled:
         return _failed("Natural-language queries are disabled.")
 
     categories = list_categories(session)
     accounts = list_accounts(session)
     client = client or OllamaClient.from_settings(settings)
+
     try:
         raw = client.parse_query(
             question,
@@ -244,6 +259,7 @@ def answer(
         return _failed(_COULDNT_INTERPRET)
 
     interpretation = raw.get("interpretation")
+
     if not isinstance(interpretation, str) or not interpretation.strip():
         return _failed(_COULDNT_INTERPRET)
 

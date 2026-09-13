@@ -1,7 +1,7 @@
 """mBank CSV parser.
 
 mBank "Lista operacji" exports differ from PKO in every way that matters, which
-is exactly why each bank gets its own parser (design §6):
+is exactly why each bank gets its own parser:
 
 - **Encoding** is UTF-8 with a BOM in current exports; older ones were
   ``windows-1250``. We decode UTF-8 first (stripping the BOM) and fall back to
@@ -90,11 +90,14 @@ class MBankCsvImporter:
             if first == _TOTALS_HEADER_FIRST_CELL:
                 expect_totals = True
                 continue
+
             if expect_totals:
                 expect_totals = False
+
                 if len(row) >= 3:
                     declared_inflow = _parse_total(row[1])
                     declared_outflow = _parse_total(row[2])
+
                 continue
 
             if first == _COLUMN_HEADER_FIRST_CELL:
@@ -105,6 +108,7 @@ class MBankCsvImporter:
             # date are transactions; everything else is preamble/footer noise.
             if not in_table or not _ISO_DATE.match(first):
                 continue
+
             if len(row) <= _AMOUNT:
                 continue  # truncated row, missing the amount column
 

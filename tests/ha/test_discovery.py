@@ -1,4 +1,4 @@
-"""MQTT topic layout and HA discovery payloads (Phase 7) — pure, no broker."""
+"""MQTT topic layout and HA discovery payloads — pure, no broker."""
 
 import json
 
@@ -36,6 +36,7 @@ def test_discovery_config_is_a_monetary_sensor_on_the_shared_state_topic() -> No
     assert config["device_class"] == "monetary"
     assert config["state_class"] == "total"
     assert config["unit_of_measurement"] == "PLN"
+
     # Every sensor hangs off the one device so HA groups them together.
     assert config["device"]["identifiers"] == ["expense_analyzer"]
 

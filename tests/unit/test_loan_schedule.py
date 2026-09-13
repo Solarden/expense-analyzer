@@ -40,6 +40,7 @@ def test_add_months_basic() -> None:
 def test_add_months_clamps_to_shorter_month() -> None:
     # Jan 31 + 1 month has no Feb 31 -> clamp to end of February.
     assert _add_months(date(2026, 1, 31), 1) == date(2026, 2, 28)
+
     # Leap year February has 29 days.
     assert _add_months(date(2024, 1, 31), 1) == date(2024, 2, 29)
 
@@ -140,6 +141,7 @@ def test_variable_rate_jump_recomputes_upward_without_negative_amortization() ->
     )
     assert all(r.principal_paid >= 0 for r in schedule.rows)
     assert schedule.rows[-1].balance_after == 0
+
     # Payment after the rate jump is higher than before it.
     assert schedule.rows[6].payment > schedule.rows[0].payment
 
@@ -177,6 +179,7 @@ def test_expand_fixed_is_flat() -> None:
         start_date=START,
         base_rate_changes=[],
     )
+
     assert rates == [725, 725, 725, 725]
 
 
@@ -190,6 +193,7 @@ def test_expand_variable_steps_with_base_rate_plus_margin() -> None:
         start_date=START,
         base_rate_changes=[(date(2026, 1, 15), 500), (date(2026, 4, 1), 700)],
     )
+
     assert rates == [650, 650, 850, 850]
 
 

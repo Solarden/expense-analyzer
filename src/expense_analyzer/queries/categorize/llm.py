@@ -1,9 +1,8 @@
 """LLM categorization (Ollama host) — primary categorizer, classifier fallback.
 
-The owner's decision (PR 2): the LLM is the *primary* categorizer for the
-review-queue "classify now" action; the local classifier (layer 2) is the
-fallback used only when the Ollama host is unreachable. Import stays rules-only — the LLM
-never runs inline on upload.
+The LLM is the *primary* categorizer for the review-queue "classify now" action;
+the local classifier (layer 2) is the fallback used only when the Ollama host is
+unreachable. Import stays rules-only — the LLM never runs inline on upload.
 
 Precedence and eligibility mirror the classifier exactly:
 
@@ -56,6 +55,7 @@ def classify_llm(
     settings = settings or get_settings()
     candidates = list(session.exec(_candidate_filter(select(Transaction))).all())
     categories = _learnable_categories(session)
+
     if not candidates or not categories:
         return ClassifyResult(
             categorized=0, queued=len(candidates), candidates=len(candidates), trained=True
@@ -68,6 +68,7 @@ def classify_llm(
 
     categorized = 0
     queued = 0
+
     try:
         for tx in candidates:
             verdict = client.categorize(
@@ -76,9 +77,11 @@ def classify_llm(
                 amount=tx.amount,
                 categories=cat_pairs,
             )
+
             if verdict.category_id not in valid_ids or verdict.confidence < threshold:
                 queued += 1
                 continue
+
             tx.category_id = verdict.category_id
             tx.source = TxSource.llm
             tx.confidence = verdict.confidence
@@ -105,6 +108,7 @@ def categorize_uncategorized(
     With the LLM off, this is just the classifier — the pre-PR-2 behaviour.
     """
     settings = settings or get_settings()
+
     if settings.llm_enabled and settings.llm_base_url:
         try:
             return classify_llm(session, settings=settings, client=client)

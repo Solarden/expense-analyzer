@@ -1,4 +1,4 @@
-"""Investments page (design §7.3): portfolio holdings, allocation, and import.
+"""Investments page: portfolio holdings, allocation, and import.
 
 Two sources feed it (both upsert a dated snapshot via ``import_positions``):
 - **Fetch from myFund** — pulls the configured portfolio over the network. Hidden
@@ -60,6 +60,7 @@ def _context(session: Session, user: Owner, **extra) -> dict:
         ),
         {"labels": [], "data": []},
     )
+
     return {
         "user": user,
         "portfolios": portfolios,
@@ -77,6 +78,7 @@ def investments_page(request: Request, user: CurrentUser, session: DbSession) ->
 
 def _require_portfolio(session: Session, account_id: int) -> Account | None:
     account = accounts.get_account(session, account_id)
+
     if account is None or account.type != AccountType.portfolio:
         return None
 
@@ -141,12 +143,14 @@ async def upload_xtb(
         # Read at most one byte past the cap so an oversized upload is rejected
         # without ever loading the whole (potentially huge) file into memory.
         data = await file.read(MAX_XLSX_BYTES + 1)
+
         try:
             if len(data) > MAX_XLSX_BYTES:
                 raise ImporterError(
                     f"file is too large; an XTB export is well under "
                     f"{MAX_XLSX_BYTES // (1024 * 1024)} MiB"
                 )
+
             result = XTBImporter().parse(data)
             summary = import_positions(
                 session,

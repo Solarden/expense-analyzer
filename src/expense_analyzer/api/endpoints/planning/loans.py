@@ -1,5 +1,5 @@
 """Loans page: define loans, view amortization schedules, and link real
-installment payments to the plan (design §7.4).
+installment payments to the plan.
 
 Handlers stay thin: the schedule math is pure (:mod:`expense_analyzer.loans`) and
 all DB access goes through :mod:`expense_analyzer.queries.planning.loans`. Bad form input
@@ -66,10 +66,13 @@ def _parse_loan_form(session: Session, form: LoanForm) -> tuple[str | None, Loan
     red flash, never a 500. The amounts/rate arrive as PLN/percent text and are
     parsed into minor units / basis points here (``"7,25"`` -> ``725`` bp)."""
     account = accounts.get_account(session, form.account_id)
+
     if account is None or account.type != AccountType.loan:
         return "Pick a loan account (create one of type 'loan' first).", None
+
     if form.term_months < 1:
         return "Term must be at least one month.", None
+
     try:
         principal_minor = parse_pln(form.principal)
         rate_bp = parse_pln(form.rate_percent)  # "7,25" -> 725 basis points
@@ -78,8 +81,10 @@ def _parse_loan_form(session: Session, form: LoanForm) -> tuple[str | None, Loan
         )
     except MoneyParseError as exc:
         return f"Could not read the amounts/rate: {exc}", None
+
     if principal_minor <= 0:
         return "Principal must be a positive amount.", None
+
     if form.rate_type is RateType.variable and initial_base_rate_bp is None:
         return "A variable-rate loan needs an initial base rate (e.g. current WIBOR).", None
 
@@ -162,6 +167,7 @@ def create_loan(
     session: DbSession,
 ) -> Response:
     error, data = _parse_loan_form(session, form)
+
     if error is not None:
         return templates.TemplateResponse(
             request,
@@ -185,6 +191,7 @@ def loan_detail(
     error: str | None = None,
 ) -> HTMLResponse:
     loan = loan_queries.get_loan(session, loan_id)
+
     if loan is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"loan {loan_id} not found"
@@ -195,6 +202,7 @@ def loan_detail(
     schedule_error: str | None = None
     reconciliation = None
     suggestions: list = []
+
     try:
         # Compute the schedule once and feed both the reconciliation and the
         # payment suggestions (it's the expensive bit for a long-term loan).
@@ -243,6 +251,7 @@ def loan_edit_form(
     session: DbSession,
 ) -> HTMLResponse:
     loan = loan_queries.get_loan(session, loan_id)
+
     if loan is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"loan {loan_id} not found"
@@ -264,12 +273,14 @@ def edit_loan(
     session: DbSession,
 ) -> Response:
     loan = loan_queries.get_loan(session, loan_id)
+
     if loan is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"loan {loan_id} not found"
         )
 
     error, data = _parse_loan_form(session, form)
+
     if error is not None:
         # Re-render with what the user typed (echo `form`), not the stored loan.
         return templates.TemplateResponse(
@@ -291,10 +302,12 @@ def add_rate_change(
     session: DbSession,
 ) -> RedirectResponse:
     loan = loan_queries.get_loan(session, loan_id)
+
     if loan is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"loan {loan_id} not found"
         )
+
     try:
         base_rate_bp = parse_pln(form.base_rate_percent)
     except MoneyParseError as exc:
@@ -347,12 +360,14 @@ async def upload_loan_document(
     bytes (not the browser's declared type) and it must be within the size limit;
     a bad upload becomes a red flash on the detail page, never a 500."""
     loan = loan_queries.get_loan(session, loan_id)
+
     if loan is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"loan {loan_id} not found"
         )
 
     settings = get_settings()
+
     # Cap documents per loan — checked before reading the body so a rejected
     # upload does no work.
     if len(doc_queries.list_documents(session, loan_id)) >= settings.attachment_max_per_loan:
@@ -364,18 +379,22 @@ async def upload_loan_document(
 
     max_bytes = settings.attachment_max_bytes
     max_mb = max_bytes // (1024 * 1024)
+
     # Cheap pre-read guard on the declared part size, so a huge body isn't read
     # fully into memory before we reject it; len(data) below is authoritative.
     if file.size is not None and file.size > max_bytes:
         return _redirect_detail(loan_id, error=f"File too large (max {max_mb} MB).")
 
     data = await file.read()
+
     if not data:
         return _redirect_detail(loan_id, error="The file is empty.")
+
     if len(data) > max_bytes:
         return _redirect_detail(loan_id, error=f"File too large (max {max_mb} MB).")
 
     content_type = attachments.sniff_content_type(data)
+
     if content_type is None:
         return _redirect_detail(
             loan_id,
@@ -404,12 +423,14 @@ async def upload_loan_document(
 def download_loan_document(loan_id: int, doc_id: int, session: DbSession) -> FileResponse:
     """Serve a stored document as a download (always an attachment, never inline)."""
     doc = doc_queries.get_document(session, doc_id)
+
     # Check the document belongs to this loan so the URL path is self-consistent
     # (a doc id from another loan 404s rather than leaking across loans).
     if doc is None or doc.loan_id != loan_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")
 
     path = attachments.document_path(get_settings().attachments_path, loan_id, doc.stored_name)
+
     if not path.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="file missing")
 
@@ -424,6 +445,7 @@ def download_loan_document(loan_id: int, doc_id: int, session: DbSession) -> Fil
 @router.post("/{loan_id}/documents/{doc_id}/delete")
 def delete_loan_document(loan_id: int, doc_id: int, session: DbSession) -> RedirectResponse:
     doc = doc_queries.get_document(session, doc_id)
+
     if doc is None or doc.loan_id != loan_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")
 

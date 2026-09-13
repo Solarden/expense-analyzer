@@ -8,11 +8,11 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 WORKDIR /app
 
-# pg_dump/pg_restore for backup.py against the shared /opt/stack PostgreSQL
-# (backups run inside this image — the Pi host needs only docker). From PGDG:
+# pg_dump/pg_restore for backup.py against the PostgreSQL server (backups run
+# inside this image — the host needs only docker). From PGDG:
 # bookworm ships only v15, and pg_dump refuses a server NEWER than itself, so
 # pin the newest stable major — it dumps any server up to its own version.
-# Bump the pin if the /opt/stack server ever moves past it. (DL3008 ignored:
+# Bump the pin if your server ever moves past it. (DL3008 ignored:
 # the major IS pinned; exact deb revisions would rot on every PGDG point release.)
 # hadolint ignore=DL3008
 RUN apt-get update \
@@ -38,7 +38,7 @@ RUN uv sync --no-install-project --no-dev
 
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Categorization layer 3 (Phase 12): bake the sentence-transformers model into the
+# Categorization layer 3: bake the sentence-transformers model into the
 # image at build time so the running Pi never reaches the network for it (the
 # Chart.js-vendoring principle — fetch once at build, zero egress at runtime). The
 # build is the only step allowed to download it; HF_HUB_OFFLINE below makes a

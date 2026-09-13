@@ -1,4 +1,4 @@
-"""MQTT topic layout and Home Assistant discovery payloads (design §9).
+"""MQTT topic layout and Home Assistant discovery payloads.
 
 Pure functions — no MQTT, no DB — so the exact wire format is unit-testable on
 its own.
@@ -83,7 +83,7 @@ def discovery_config(metric: Metric, *, base: str) -> dict:
 
 
 def update_sensor_config(*, base: str) -> dict:
-    """HA discovery config for the "deploy update available" sensor (Phase 18).
+    """HA discovery config for the "deploy update available" sensor.
 
     A plain text sensor (no ``device_class``/``unit``) whose state is the latest
     available release tag; ``current``/``update_available`` ride along as
@@ -105,7 +105,7 @@ def update_sensor_config(*, base: str) -> dict:
 
 
 def plan_sensor_config(*, base: str) -> dict:
-    """HA discovery config for the monthly-plan progress sensor (Phase 19c).
+    """HA discovery config for the monthly-plan progress sensor.
 
     A plain text sensor whose state is the paid progress (``"8/14"``); the paid /
     total / overdue counts ride along as attributes from the same retained topic,

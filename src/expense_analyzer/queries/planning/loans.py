@@ -83,10 +83,12 @@ def update_loan(session: Session, loan_id: int, data: LoanCreate) -> Loan | None
     if the loan doesn't exist.
     """
     loan = session.get(Loan, loan_id)
+
     if loan is None:
         return None
 
     old_start = loan.start_date  # the start-date observation sits here (pre-edit)
+
     # initial_base_rate_bp is not a Loan column — it seeds/updates a rate change.
     for field, value in data.model_dump(exclude={"initial_base_rate_bp"}).items():
         setattr(loan, field, value)
@@ -98,6 +100,7 @@ def update_loan(session: Session, loan_id: int, data: LoanCreate) -> Loan | None
         # earliest if it's gone (e.g. hand-edited history).
         seed = next((c for c in changes if c.effective_date == old_start), None)
         seed = seed or (changes[0] if changes else None)
+
         if seed is not None:
             seed.effective_date = data.start_date
             seed.base_rate_bp = data.initial_base_rate_bp
@@ -110,6 +113,7 @@ def update_loan(session: Session, loan_id: int, data: LoanCreate) -> Loan | None
                     base_rate_bp=data.initial_base_rate_bp,
                 )
             )
+
     session.commit()
     session.refresh(loan)
 
@@ -126,20 +130,24 @@ def delete_loan(session: Session, loan_id: int) -> bool:
     foreign_keys=ON); the route removes the files on disk (the query layer never
     touches the filesystem)."""
     loan = session.get(Loan, loan_id)
+
     if loan is None:
         return False
 
     for change in list_rate_changes(session, loan_id):
         session.delete(change)
+
     for doc in session.exec(select(LoanDocument).where(LoanDocument.loan_id == loan_id)).all():
         session.delete(doc)
     # Clear the link on *every* referencing transaction, including soft-deleted
     # ones — a payment can be linked and then soft-deleted by a batch rollback,
     # and with foreign_keys=ON a lingering loan_id would block the loan delete.
     referencing = session.exec(select(Transaction).where(Transaction.loan_id == loan_id)).all()
+
     for tx in referencing:
         tx.loan_id = None
         tx.loan_installment_index = None
+
     session.add_all(referencing)
     session.delete(loan)
     session.commit()
@@ -173,6 +181,7 @@ def list_rate_changes(session: Session, loan_id: int) -> list[LoanRateChange]:
 def loan_schedule(session: Session, loan_id: int) -> Schedule | None:
     """Recompute the amortization schedule for a loan, or None if it's missing."""
     loan = session.get(Loan, loan_id)
+
     if loan is None:
         return None
 
@@ -209,6 +218,7 @@ def outstanding_principal(
 
     schedule = loan_schedule(session, loan_id)
     loan = session.get(Loan, loan_id)
+
     if schedule is None or loan is None:
         return None
 
@@ -250,6 +260,7 @@ def loan_reconciliation(
     page also needs it for payment suggestions); omit it and it's loaded here."""
     if schedule is None:
         schedule = loan_schedule(session, loan_id)
+
     if schedule is None:
         return None
 
@@ -270,8 +281,10 @@ def link_payment(
     # Viewer-scoped (IDOR gate): another member's private tx reads as absent here,
     # so it can't be pinned; the viewer's own private tx can.
     tx = _get_visible(session, tx_id, viewer_id=viewer_id)
+
     if loan is None or tx is None:
         return False
+
     if tx.loan_id is not None:
         return False
 
@@ -286,6 +299,7 @@ def link_payment(
 def unlink_payment(session: Session, tx_id: int, *, viewer_id: int | None = None) -> bool:
     """Unpin a transaction from its loan installment."""
     tx = _get_visible(session, tx_id, viewer_id=viewer_id)
+
     if tx is None or tx.loan_id is None:
         return False
 
@@ -345,15 +359,19 @@ def suggest_payments(
     ).all()
 
     suggestions: list[PaymentSuggestion] = []
+
     for row in schedule.rows:
         if row.index in paid_indexes:
             continue
         tolerance = row.payment * tolerance_pct // 100
+
         for tx in candidates:
             gap = abs((tx.booked_date - row.due_date).days)
+
             if gap > window_days:
                 continue
             amount_diff = abs(tx.amount) - row.payment
+
             if abs(amount_diff) > tolerance:
                 continue
             suggestions.append(

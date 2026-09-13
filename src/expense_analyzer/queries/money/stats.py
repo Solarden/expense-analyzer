@@ -1,21 +1,21 @@
-"""Spending / income statistics for the dashboard overview (Phase 4).
+"""Spending / income statistics for the dashboard overview.
 
 **Transfers are excluded from every figure here.** Moving money between your own
-accounts is neither spending nor income (design §6), so leaving it in would show
+accounts is neither spending nor income, so leaving it in would show
 a fake expense on one account and a fake inflow on the other. A row counts as a
 transfer if it carries a ``transfer_group_id`` *or* sits in a ``kind=transfer``
-category — the two signals Phase 3 writes on a confirmed transfer (the second
+category — the two signals written on a confirmed transfer (the second
 also catches a leg a human manually tagged ``Transfer`` without auto-linking).
 
-**Loan installment payments are also excluded** (Phase 8). A real installment is
-an outflow on the checking account linked to a loan (``loan_id`` set, Phase 5);
+**Loan installment payments are also excluded**. A real installment is
+an outflow on the checking account linked to a loan (``loan_id`` set);
 it's debt repayment tracked in the loan view, not consumption spending, so
 counting it would inflate the month's spending and any category budget it landed
 in. It still reduces the account balance (that's a separate, correct concern —
 the money did leave the account), only the spending/income/budget figures skip
-it. This was the seam left open through Phases 5–7, closed here.
+it.
 
-Money stays integer minor units throughout (never float; design §5). Spending
+Money stays integer minor units throughout (never float). Spending
 and income are reported as positive magnitudes; ``net = income - spending``.
 
 Bucketing is by the bank's local ``booked_date`` — already a local calendar date
@@ -156,6 +156,7 @@ def month_summary(
     for tx in transactions:
         if tx.booked_date.strftime("%Y-%m") != month:
             continue
+
         if tx.amount < 0:
             spending -= tx.amount  # magnitude
             by_category[tx.category_id] += -tx.amount
@@ -191,6 +192,7 @@ def spend_by_owner(
     for tx in transactions:
         if tx.booked_date.strftime("%Y-%m") != month:
             continue
+
         if tx.amount < 0:
             by_owner[tx.owner_id] += -tx.amount  # magnitude
 
@@ -218,6 +220,7 @@ def spending_trend(transactions: list[Transaction], *, months: int) -> list[Mont
 
     for tx in transactions:
         key = tx.booked_date.strftime("%Y-%m")
+
         if tx.amount < 0:
             spending[key] -= tx.amount
         elif tx.amount > 0:

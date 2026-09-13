@@ -1,4 +1,4 @@
-"""Update notifier (Phase 18) — pure version logic + the HA publish path."""
+"""Update notifier — pure version logic + the HA publish path."""
 
 import json
 from datetime import UTC, datetime
@@ -49,6 +49,7 @@ class TestSelectUpdate:
 
     def test_current_ahead_of_any_tag_is_not_an_update(self):
         status = select_update("v2.0.0", ["v1.9.0"])
+
         assert status.update_available is False
 
     def test_no_release_tags_means_no_update(self):
@@ -63,6 +64,7 @@ class TestSelectUpdate:
 
     def test_non_release_tags_are_ignored_when_picking_latest(self):
         status = select_update("v1.0.0", ["v1.1.0", "v2.0.0-rc1", "garbage"])
+
         assert status.latest == "v1.1.0"  # the rc and garbage don't win
 
     def test_semantic_not_lexicographic_ordering(self):
@@ -102,6 +104,7 @@ class TestPublishUpdate:
         state = json.loads(
             next(p for p in client.published if p.topic == "expense_analyzer/update").payload
         )
+
         assert state["update_available"] is False
 
     def test_unknown_versions_render_as_unknown(self):
@@ -111,6 +114,7 @@ class TestPublishUpdate:
         state = json.loads(
             next(p for p in client.published if p.topic == "expense_analyzer/update").payload
         )
+
         assert state == {"current": "unknown", "latest": "unknown", "update_available": False}
 
     def test_from_settings_refuses_when_not_configured(self):
@@ -136,4 +140,5 @@ class TestPersistStatus:
     def test_corrupt_file_loads_as_none(self, tmp_path: Path):
         path = tmp_path / "bad.json"
         path.write_text("{ not valid json")
+
         assert load_status(path) is None

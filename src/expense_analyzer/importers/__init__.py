@@ -1,4 +1,4 @@
-"""Import pipeline — the heart of the app (design §6).
+"""Import pipeline — the heart of the app.
 
 The design principle is to build around the importer, not around an API: the
 data source is swappable, so when a bank changes its CSV format (it will), you

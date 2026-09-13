@@ -1,6 +1,6 @@
 """Money handling.
 
-Policy (design §5): money is stored as **integer minor units**, never float.
+Policy: money is stored as **integer minor units**, never float.
 100 PLN == ``10000``. Summing hundreds of floats drifts by a minor unit and
 balances stop reconciling — so we parse to :class:`~decimal.Decimal` only at the
 edges (CSV in, display out) and keep ``int`` minor units everywhere in between.
@@ -46,8 +46,10 @@ def parse_pln(text: str) -> int:
         .replace(",", ".")
         .strip()
     )
+
     if not cleaned:
         raise MoneyParseError(f"empty money value: {text!r}")
+
     try:
         return to_minor_units(Decimal(cleaned))
     except (InvalidOperation, ArithmeticError) as exc:
@@ -73,6 +75,7 @@ def _clean_numeric(text: str) -> str | None:
         .replace("PLN", "")
         .lstrip("+")
     )
+
     if cleaned in ("", "-", "--", "---", "—"):
         return None
 
@@ -102,16 +105,21 @@ def parse_loose_amount(value: str | int | float | None) -> int | None:
     """
     if value is None:
         return None
+
     if isinstance(value, bool):  # bool is an int subclass — reject it explicitly
         raise MoneyParseError(f"not a numeric amount: {value!r}")
+
     if isinstance(value, int):
         return to_minor_units(value)
+
     if isinstance(value, float):
         return to_minor_units(Decimal(str(value)))
 
     cleaned = _clean_numeric(value)
+
     if cleaned is None:
         return None
+
     try:
         return to_minor_units(Decimal(cleaned))
     except (InvalidOperation, ArithmeticError) as exc:
@@ -127,14 +135,18 @@ def parse_loose_decimal(value: str | int | float | None) -> Decimal | None:
     """
     if value is None:
         return None
+
     if isinstance(value, bool):
         raise MoneyParseError(f"not a numeric quantity: {value!r}")
+
     if isinstance(value, int | float):
         return Decimal(str(value))
 
     cleaned = _clean_numeric(value)
+
     if cleaned is None:
         return None
+
     try:
         return Decimal(cleaned)
     except (InvalidOperation, ArithmeticError) as exc:

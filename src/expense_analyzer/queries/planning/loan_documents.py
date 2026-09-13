@@ -1,4 +1,4 @@
-"""Loan-document metadata queries — the DB side of loan attachments (Phase 21).
+"""Loan-document metadata queries — the DB side of loan attachments.
 
 Plain ``Session``-in, model-out functions like the rest of the query layer. The
 *files* live on disk and are handled in :mod:`expense_analyzer.attachments`; this
