@@ -1,9 +1,9 @@
 """Transaction queries — the read/write side of the transaction list.
 
-The list is filtered and paginated (Phase 4): the old unpaginated 500-row cap is
-gone, replaced by ``page_size`` windows so an old, large DB renders one cheap
-page at a time. Filters and pagination share one ``_apply_filters`` builder so
-the page query and its ``COUNT`` can never drift apart.
+The list is filtered and paginated in ``page_size`` windows, so even a large
+database renders one cheap page at a time. Filters and pagination share one
+``_apply_filters`` builder so the page query and its ``COUNT`` can never drift
+apart.
 """
 
 import re
@@ -56,6 +56,7 @@ class TransactionPage:
     @property
     def pages(self) -> int:
         size = max(1, self.page_size)  # guard against a 0 page size (no div-by-zero)
+
         return max(1, -(-self.total // size))  # ceil div, never 0
 
     @property
@@ -77,6 +78,7 @@ def _month_bounds(month: str) -> tuple[date, date] | None:
     if not _MONTH_RE.match(month):
         return None
     year, mon = int(month[:4]), int(month[5:7])
+
     if not 1 <= mon <= 12:
         return None
     start = date(year, mon, 1)
@@ -96,17 +98,22 @@ def _apply_filters(
     # Per-viewer visibility — applied here (not in list_transactions) so the page
     # query and its COUNT share the exact clause and can never drift.
     query = visible_to(query, viewer_id=viewer_id, lens=lens)
+
     if filters.account_id is not None:
         query = query.where(Transaction.account_id == filters.account_id)
+
     if filters.month is not None:
         bounds = _month_bounds(filters.month)
+
         if bounds is not None:  # invalid month string -> no date filter, not a crash
             start, end = bounds
             query = query.where(Transaction.booked_date >= start, Transaction.booked_date < end)
+
     if filters.uncategorized:
         query = query.where(col(Transaction.category_id).is_(None))
     elif filters.category_id is not None:
         query = query.where(Transaction.category_id == filters.category_id)
+
     # "Added by" filter — mirrors the category/uncategorized pair. Applied AFTER
     # visible_to, so it can only narrow the already-visible set: a crafted
     # ?added_by=<other member> can never surface that member's private rows.
@@ -114,8 +121,10 @@ def _apply_filters(
         query = query.where(col(Transaction.owner_id).is_(None))
     elif filters.owner_id is not None:
         query = query.where(Transaction.owner_id == filters.owner_id)
+
     if filters.scope is not None:
         query = query.where(Transaction.scope == filters.scope)
+
     if filters.search and filters.search.strip():
         # Escape LIKE wildcards so a literal % or _ in the search box doesn't
         # silently widen the match. NOTE: case-insensitivity is dialect-bound —
@@ -176,8 +185,10 @@ def _get_visible(session: Session, tx_id: int, *, viewer_id: int | None) -> Tran
     member's private row (IDOR).
     """
     tx = session.get(Transaction, tx_id)
+
     if tx is None or tx.deleted_at is not None:
         return None
+
     if tx.scope == Scope.private and tx.owner_id != viewer_id:
         return None
 
@@ -200,10 +211,12 @@ def set_category(
     would hide it from everyone).
     """
     tx = _get_visible(session, tx_id, viewer_id=viewer_id)
+
     if tx is None:
         return None
     tx.category_id = category_id
     tx.scope = scope
+
     if scope == Scope.private and viewer_id is not None:
         tx.owner_id = viewer_id
     tx.source = TxSource.manual
@@ -228,6 +241,7 @@ def ensure_manual_batch(session: Session) -> ImportBatch:
             ImportBatch.status == ImportStatus.active,
         )
     ).first()
+
     if batch is None:
         batch = ImportBatch(
             source=MANUAL_BATCH_SOURCE,
@@ -327,8 +341,10 @@ def update_transaction(
     import fingerprint. A human touched it, so ``source = manual``.
     """
     tx = _get_visible(session, tx_id, viewer_id=viewer_id)
+
     if tx is None:
         return None
+
     # Flag a human (re)categorization only when the category or scope actually
     # changed — editing just the note must not flip ``source`` to manual, which
     # would wrongly shield the row from future rule re-categorization.
@@ -336,18 +352,24 @@ def update_transaction(
         tx.source = TxSource.manual
     tx.category_id = category_id
     tx.scope = scope
+
     if scope == Scope.private and viewer_id is not None:
         tx.owner_id = viewer_id
     tx.note = note
+
     if account_id is not None:
         tx.account_id = account_id
+
     if booked_date is not None:
         tx.booked_date = booked_date
+
     if amount is not None:
         tx.amount = amount
+
     if description is not None:
         tx.raw_description = description
         tx.merchant_normalized = normalize_merchant(description)
+
     session.add(tx)
     session.commit()
     session.refresh(tx)
@@ -366,6 +388,7 @@ def set_note(
     works on any row, imported or manual.
     """
     tx = _get_visible(session, tx_id, viewer_id=viewer_id)
+
     if tx is None:
         return None
     tx.note = note
@@ -383,6 +406,7 @@ def soft_delete_transaction(
     absent / already deleted. Caller gates this to manual entries — imported rows
     are removed by rolling back their import batch, not one at a time."""
     tx = _get_visible(session, tx_id, viewer_id=viewer_id)
+
     if tx is None:
         return None
     tx.deleted_at = utc_now()
@@ -390,9 +414,11 @@ def soft_delete_transaction(
     # Keep the owning batch's record_count (the home page's "Records" column, and
     # what a rollback would remove) in step with the soft delete.
     batch = session.get(ImportBatch, tx.import_batch_id)
+
     if batch is not None and batch.record_count > 0:
         batch.record_count -= 1
         session.add(batch)
+
     session.commit()
 
     return tx

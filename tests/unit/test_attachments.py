@@ -1,4 +1,4 @@
-"""Loan-attachment storage helpers (Phase 21): type sniffing and on-disk layout.
+"""Loan-attachment storage helpers: type sniffing and on-disk layout.
 
 Pure filesystem helpers, exercised against a ``tmp_path``. The two things that
 matter for safety: the type is decided by the bytes (not a declared name), and the
@@ -29,6 +29,7 @@ def test_sniff_rejects_unsupported_or_disguised_content():
     assert attachments.sniff_content_type(b"<html><body>hi</body></html>") is None
     assert attachments.sniff_content_type(b"PK\x03\x04") is None  # zip/docx container
     assert attachments.sniff_content_type(b"") is None
+
     # "RIFF...." that isn't WebP (e.g. a WAV) is not accepted as an image.
     assert attachments.sniff_content_type(b"RIFF\x24\x00\x00\x00WAVEfmt ") is None
 
@@ -41,6 +42,7 @@ def test_store_generates_name_with_canonical_extension(tmp_path: Path):
     assert len(stored) == len("0123456789abcdef0123456789abcdef.pdf")
     path = attachments.document_path(tmp_path, 7, stored)
     assert path.read_bytes() == PDF
+
     # Lands inside the per-loan subdirectory, under the base.
     assert path.parent == tmp_path / "loan" / "7"
 
@@ -67,6 +69,7 @@ def test_safe_display_name_strips_path_and_control_chars():
     # Path components are dropped (basename only).
     assert attachments.safe_display_name("../../etc/passwd", "fb.pdf") == "passwd"
     assert attachments.safe_display_name("a/b/c/contract.pdf", "fb.pdf") == "contract.pdf"
+
     # Control characters (incl. CR/LF that could fray a header) are removed.
     assert attachments.safe_display_name("c\r\nontract\t.pdf", "fb.pdf") == "contract.pdf"
 
@@ -74,6 +77,7 @@ def test_safe_display_name_strips_path_and_control_chars():
 def test_safe_display_name_falls_back_when_empty():
     assert attachments.safe_display_name("", "generated.pdf") == "generated.pdf"
     assert attachments.safe_display_name("   ", "generated.pdf") == "generated.pdf"
+
     # A name that is only path + control chars collapses to the fallback.
     assert attachments.safe_display_name("/\r\n", "generated.pdf") == "generated.pdf"
 
@@ -81,6 +85,7 @@ def test_safe_display_name_falls_back_when_empty():
 def test_safe_display_name_bounds_length():
     long = "x" * 1000 + ".pdf"
     out = attachments.safe_display_name(long, "fb.pdf")
+
     assert len(out) == attachments.MAX_DISPLAY_NAME_LEN
 
 

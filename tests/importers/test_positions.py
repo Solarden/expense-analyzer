@@ -64,6 +64,7 @@ def test_different_snapshot_dates_coexist(
     rows = db_session.exec(
         select(InvestmentPosition).where(InvestmentPosition.account_id == acc.id)
     ).all()
+
     assert len(rows) == 2  # one row per snapshot date
 
 

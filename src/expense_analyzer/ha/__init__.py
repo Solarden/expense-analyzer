@@ -1,4 +1,4 @@
-"""Home Assistant integration (design §9).
+"""Home Assistant integration.
 
 A one-directional, opt-in push of glanceable household metrics to Home Assistant
 over MQTT: the app publishes auto-discovered sensors (net worth, monthly spend,

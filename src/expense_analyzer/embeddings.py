@@ -1,4 +1,4 @@
-"""Categorization neighbours — layer 3, the embeddings fallback (design §7.7 point 3).
+"""Categorization neighbours — layer 3, the embeddings fallback.
 
 Pure logic, zero DB (mirrors :mod:`expense_analyzer.classifier` /
 :mod:`expense_analyzer.rules`). Where layer 1 (rules) and layer 2 (the TF-IDF +
@@ -107,17 +107,20 @@ class NeighborModel:
         neighbours = min(k, self._matrix.shape[0])
 
         results: list[NeighborSuggestion | None] = []
+
         for row in sims:
             # Indices of the top-`neighbours` samples, most similar first. argpartition
             # finds the k best in O(N) (no full sort of every sample); then we sort
             # just those k descending — k is tiny, so this is cheaper than argsort(N).
             part = np.argpartition(row, -neighbours)[-neighbours:]
             top = part[np.argsort(row[part])[::-1]]
+
             if row[top[0]] < min_similarity:
                 results.append(None)
                 continue
 
             votes: dict[int, int] = defaultdict(int)
+
             for idx in top:
                 votes[self._labels[idx]] += 1
             # Winning category: most votes, ties broken by the closest neighbour
@@ -159,8 +162,10 @@ def build(
     suggestions", leaving rows in the queue, identical to the classifier's contract.
     """
     usable = [s for s in samples if s.text.strip()]
+
     if len(usable) < max(min_samples, MIN_DISTINCT_CATEGORIES):
         return None
+
     if len({s.category_id for s in usable}) < MIN_DISTINCT_CATEGORIES:
         return None
 
@@ -180,7 +185,7 @@ def load_embedder(model: str, revision: str | None = None) -> Embedder:
     that never reaches the review queue never imports it. Encoding L2-normalizes, so
     :class:`NeighborModel` can treat a dot product as the cosine similarity.
 
-    With ``HF_HUB_OFFLINE=1`` set at runtime (the Pi never touches the network), a
+    With ``HF_HUB_OFFLINE=1`` set at runtime (the host never touches the network), a
     missing model raises here rather than triggering a download — the DB layer
     catches that and falls back to no suggestions. ``revision`` must match what the
     build bundled: a commit-hash download leaves no ``main`` ref, so the offline load

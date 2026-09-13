@@ -1,4 +1,4 @@
-"""Plan dashboard page (Phase 19a): define items, the monthly view, mark paid.
+"""Plan dashboard page: define items, the monthly view, mark paid.
 
 HTTP tests use ``auth_client`` (logged in) and share the temp engine with
 ``db_session`` so a row created over HTTP is visible to a query-layer assertion.
@@ -51,6 +51,7 @@ def test_create_income_item(auth_client: TestClient, db_session: Session) -> Non
     )
 
     [item] = pq.list_planned_items(db_session)
+
     assert item.expected_amount == 8000_00  # income -> positive
 
 
@@ -62,6 +63,7 @@ def test_create_variable_item_has_no_amount(auth_client: TestClient, db_session:
     )
 
     [item] = pq.list_planned_items(db_session)
+
     assert item.expected_amount is None  # blank amount -> unestimated
 
 
@@ -128,6 +130,7 @@ def test_edit_prefills_and_updates(
     assert resp.status_code == status.HTTP_303_SEE_OTHER
     db_session.expire_all()  # the app committed in its own session
     [updated] = pq.list_planned_items(db_session)
+
     assert updated.expected_amount == -3200_00
 
 
@@ -151,6 +154,7 @@ def test_mark_paid_and_unpaid_over_http(
         follow_redirects=False,
     )
     db_session.expire_all()
+
     assert pq.plan_overview(db_session, "2026-06").rows[0].paid is False
 
 
@@ -163,6 +167,7 @@ def test_toggle_active_over_http(
 
     auth_client.post(f"/dashboard/plan/{item.id}/toggle-active", data={"month": "2026-06"})
     db_session.expire_all()
+
     assert pq.list_planned_items(db_session)[0].active is False
 
 
@@ -201,11 +206,13 @@ def test_malformed_month_does_not_500(
     make_planned_item(name="Rent", expected_amount=-3000_00, due_day=10)
 
     resp = auth_client.get("/dashboard/plan?month=not-a-month")
+
     assert resp.status_code == status.HTTP_200_OK
 
 
 def test_edit_missing_item_is_404(auth_client: TestClient) -> None:
     resp = auth_client.post("/dashboard/plan/9999/edit", data={"name": "X", "amount": "1"})
+
     assert resp.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -222,10 +229,11 @@ def test_create_with_category(
     )
 
     [item] = pq.list_planned_items(db_session)
+
     assert item.category_id == cat.id
 
 
-# --- Phase 19b: linking, loan-backed, payment card --------------------------
+# --- Linking, loan-backed, payment card ------------------------------------
 
 
 def test_link_transaction_over_http(
@@ -266,6 +274,7 @@ def test_unlink_transaction_over_http(
         f"/dashboard/plan/{item.id}/unlink", data={"month": "2026-06"}, follow_redirects=False
     )
     db_session.expire_all()
+
     assert pq.plan_overview(db_session, "2026-06").rows[0].paid is False
 
 
@@ -285,6 +294,7 @@ def test_create_loan_backed_item(
     )
 
     [item] = pq.list_planned_items(db_session)
+
     assert item.loan_id == loan.id
 
 
@@ -321,6 +331,7 @@ def test_payment_card_has_copy_buttons(
 
 def test_for_living_chart_hidden_on_empty_plan(auth_client: TestClient) -> None:
     resp = auth_client.get("/dashboard/plan")
+
     assert "For living trend" not in resp.text  # no flat-zero chart with no items
 
 

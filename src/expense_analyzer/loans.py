@@ -1,6 +1,6 @@
 """Loan amortization — the schedule math, kept pure (no DB).
 
-A loan (design §5, §7.4) is repaid over ``term_months`` installments. Two styles:
+A loan is repaid over ``term_months`` installments. Two styles:
 
 - **equal** (annuity): the total installment is constant; each month interest is
   taken on the outstanding balance and the rest pays down principal.
@@ -149,8 +149,10 @@ def generate_schedule(
         raise LoanScheduleError(
             f"term_months ({term_months}) != number of monthly rates ({len(monthly_rates_bp)})"
         )
+
     if term_months <= 0:
         raise LoanScheduleError(f"term_months must be positive, got {term_months}")
+
     if principal <= 0:
         raise LoanScheduleError(f"principal must be positive, got {principal}")
 
@@ -227,14 +229,17 @@ def expand_monthly_rates(
 
     changes = sorted(base_rate_changes)
     rates: list[int] = []
+
     for i in range(1, term_months + 1):
         due = _add_months(start_date, i)
         base = _latest_base_rate(changes, due)
+
         if base is None:
             raise LoanScheduleError(
                 f"variable loan has no base rate effective by installment {i} "
                 f"(due {due.isoformat()}); add a rate change on or before the start date"
             )
+
         rates.append(base + rate_bp)
 
     return rates
@@ -243,6 +248,7 @@ def expand_monthly_rates(
 def _latest_base_rate(changes: list[tuple[date, int]], on: date) -> int | None:
     """Base rate (bp) in effect on ``on``, from sorted ``changes``, or None."""
     base: int | None = None
+
     for effective_date, base_rate_bp in changes:
         if effective_date <= on:
             base = base_rate_bp
@@ -264,16 +270,20 @@ def reconcile(schedule: Schedule, payments: list[Transaction]) -> Reconciliation
     by_index: dict[int, Transaction] = {}
     unmatched: list[Transaction] = []
     valid_indexes = {row.index for row in schedule.rows}
+
     for payment in payments:
         idx = payment.loan_installment_index
+
         if idx is not None and idx in valid_indexes and idx not in by_index:
             by_index[idx] = payment
         else:
             unmatched.append(payment)
 
     rows: list[ReconciledRow] = []
+
     for row in schedule.rows:
         payment = by_index.get(row.index)
+
         if payment is None:
             rows.append(
                 ReconciledRow(scheduled=row, payment=None, amount_diff=None, date_gap_days=None)

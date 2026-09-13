@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# One-command deploy for the Raspberry Pi (Phase 18).
+# One-command deploy for the app host.
 #
 #   1. (optional) git pull --ff-only from OUR OWN repo            [--pull]
 #   2. build the new images
-#   3. back up the database  ── BEFORE any migration ──           (design §10)
+#   3. back up the database  ── BEFORE any migration ──
 #   4. docker compose up -d  → the app runs `alembic upgrade head` on boot
 #   5. wait for the app to report healthy
 #   6. on failure: ROLL BACK — restore the DB backup and re-tag the previous image
 #
 # Idempotent and safe to re-run. The only network egress is the optional git
 # pull from our own repo and the docker build fetching base layers — no
-# Watchtower, no registry auto-pull (keep-pi-fully-local).
+# Watchtower, no registry auto-pull.
 #
 # Usage:
 #   scripts/deploy.sh [--pull] [--keep N] [--dry-run]
@@ -34,7 +34,7 @@ warn() { printf '\033[33m[deploy] WARNING:\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[31m[deploy] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
 # Read KEY=value from .env (ignoring comments); empty if absent. This shell
-# script, unlike docker compose, doesn't auto-load .env, so the Phase 18 ops
+# script, unlike docker compose, doesn't auto-load .env, so the ops
 # knobs wouldn't take effect from .env without this. Env vars / flags win.
 dotenv_get() { [ -f .env ] && sed -n "s/^$1=//p" .env | tail -n1 || true; }
 
@@ -100,7 +100,7 @@ $COMPOSE build
 
 # --- 3. backup the DB (before the new app container migrates it) ------------
 # One run inside the freshly built image (the host needs only docker — pg_dump
-# is in the image and the DB server is the shared /opt/stack Postgres). Backups
+# is in the image and the DB server is external). Backups
 # land in /data/backups, i.e. ./data/backups on the host via the bind mount. We
 # invoke the backup module directly, so this does NOT trigger a migration.
 # --if-exists turns a first deploy with no database into a clean skip (empty

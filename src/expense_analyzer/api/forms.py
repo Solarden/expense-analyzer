@@ -18,10 +18,10 @@ from pydantic import BaseModel, SecretStr
 from expense_analyzer.models import AccountType, CategoryKind, InstallmentType, RateType, Scope
 
 
+# The user types a positive magnitude and picks a direction, rather than typing a
+# minus: a forgotten sign would silently record a cash expense as income.
 class TxDirection(StrEnum):
-    """How a manually-entered amount maps to a signed amount. The user types a
-    positive magnitude and picks a direction — clearer than a hand-typed minus,
-    where a forgotten sign would record a cash expense as income."""
+    """Whether a manually-entered amount is an expense or income."""
 
     expense = "expense"  # -> negative amount
     income = "income"  # -> positive amount
@@ -46,10 +46,9 @@ class CategoryForm(BaseModel):
     color: str = ""  # "#rrggbb" from <input type="color">, or "" for no colour
 
 
+# `clear` is a present-only submit button; when present it wins over `color`.
 class CategoryEditForm(BaseModel):
-    """Edit a category in place (Phase 20b): rename, change kind, and set/clear the
-    colour. ``color`` is a "#rrggbb" string; ``clear`` (a present submit button)
-    wins and resets it to none."""
+    """Rename a category, change its kind, and set or clear its colour."""
 
     name: str
     kind: CategoryKind
@@ -64,13 +63,13 @@ class UserForm(BaseModel):
 
 
 class PasswordResetForm(BaseModel):
-    """Admin resets a user's password from the Users page (Phase 20a)."""
+    """A new password for a user, set by an administrator."""
 
     password: SecretStr  # masked in repr/logs; read via .get_secret_value()
 
 
 class CategorizeForm(BaseModel):
-    """A digit string selects that category; "" clears it (uncategorized)."""
+    """The category to file a transaction under. Empty leaves it uncategorized."""
 
     category_id: str = ""
     scope: Scope
@@ -78,8 +77,8 @@ class CategorizeForm(BaseModel):
 
 
 class ManualTransactionForm(BaseModel):
-    """Hand-entered transaction (mainly cash). ``amount`` is a positive PLN string;
-    ``direction`` gives it a sign. ``category_id`` is a digit string or "" (none)."""
+    """A transaction entered by hand, typically cash. The amount is a positive
+    figure in PLN; the direction decides whether it counts as an expense or income."""
 
     account_id: int
     booked_date: date  # ISO date from <input type="date">; Pydantic parses it
@@ -93,16 +92,17 @@ class ManualTransactionForm(BaseModel):
 
 
 class NoteForm(BaseModel):
-    """The note-modal form: just the free-text note plus where to return."""
+    """A free-text note attached to a transaction."""
 
     note: str = ""
     return_to: str = ""
 
 
+# An imported row's amount/date/description are the bank's source of truth, so the
+# money fields are read only for manual entries.
 class EditTransactionForm(BaseModel):
-    """Edit form. Category/scope/note apply to every row; the money fields are only
-    read for manual entries (an imported row's amount/date/description are the
-    bank's source of truth — the handler ignores them there)."""
+    """Changes to a transaction. Category, scope and note apply to any row; the
+    amount, date, account and description apply only to manually-entered ones."""
 
     category_id: str = ""
     scope: Scope
@@ -122,7 +122,7 @@ class TransferConfirmForm(BaseModel):
 
 
 class FetchPositionsForm(BaseModel):
-    """Pick the portfolio account to import investment positions into."""
+    """The portfolio account to import investment positions into."""
 
     account_id: int
 
@@ -138,9 +138,8 @@ class PaymentLinkForm(BaseModel):
 
 
 class BudgetForm(BaseModel):
-    """Raw budget form fields. ``limit_amount`` arrives as a PLN string the
-    handler parses into minor units; ``month`` is ``""`` for the recurring default
-    or a ``"YYYY-MM"`` override (validated in the handler)."""
+    """A spending limit for a category: either the recurring default, or an
+    override for a single month."""
 
     category_id: int
     month: str = ""  # "" -> recurring default; else "YYYY-MM" override
@@ -149,25 +148,27 @@ class BudgetForm(BaseModel):
 
 
 class SubscriptionVerdictForm(BaseModel):
-    """The merchant whose detected subscription a confirm/dismiss/restore acts on
-    (the grouping key — see :class:`~expense_analyzer.models.Subscription`)."""
+    """The merchant whose detected subscription is being confirmed, dismissed or
+    restored."""
 
     merchant: str
 
 
 class RuleForm(BaseModel):
-    """Raw categorization-rule form fields. ``pattern`` is matched case-insensitively
-    as a substring; ``priority`` orders the rules (higher wins)."""
+    """A rule that files matching transactions under a category. The pattern
+    matches anywhere in the description, ignoring case; where several rules match,
+    the highest priority wins."""
 
     pattern: str
     category_id: int
     priority: int = 0
 
 
+# Amounts and rates arrive as the user typed them (PLN / percent strings) and are
+# parsed and validated into a LoanCreate before anything is stored.
 class LoanForm(BaseModel):
-    """Raw loan-creation form fields. Amounts/rates arrive as the user typed them
-    (PLN / percent strings) and the date as ISO text; the handler parses and
-    validates them into a :class:`~expense_analyzer.models.LoanCreate`."""
+    """A new loan: its principal, interest rate, instalment style, start date and
+    term."""
 
     account_id: int
     principal: str  # PLN, e.g. "300000"
@@ -182,10 +183,8 @@ class LoanForm(BaseModel):
 
 
 class PlannedItemForm(BaseModel):
-    """Raw planned-item form fields (Phase 19). ``amount`` is a positive PLN string
-    with ``direction`` giving its sign (income/expense), or ``""`` for a variable
-    item with no fixed figure. ``category_id``/``due_day`` are digit strings or
-    ``""`` (none), parsed and range-checked in the handler."""
+    """A recurring planned income or expense. Leave the amount empty for a
+    variable item with no fixed figure."""
 
     name: str
     amount: str = ""  # positive PLN magnitude; "" -> unestimated (variable)
@@ -198,7 +197,7 @@ class PlannedItemForm(BaseModel):
 
 
 class PlannedLinkForm(BaseModel):
-    """Link a real transaction to a non-loan planned item for a month (Phase 19b)."""
+    """Links a real transaction to a planned item for a given month."""
 
     tx_id: int
     month: str = ""

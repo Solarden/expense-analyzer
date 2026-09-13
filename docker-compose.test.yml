@@ -1,5 +1,5 @@
-# Throwaway PostgreSQL for the test suite — prod runs on Postgres (the shared
-# /opt/stack server), so tests exercise the same dialect. NOT part of the app
+# Throwaway PostgreSQL for the test suite — prod runs on Postgres, so tests
+# exercise the same dialect. NOT part of the app
 # stack: data lives on tmpfs and dies with the container.
 #
 #   make test-db-up    # start (make test does this for you)
@@ -14,7 +14,7 @@ name: expense-analyzer-test
 
 services:
   test-db:
-    # Major matches the /opt/stack production server (and the Dockerfile's
+    # Major matches the production server (and the Dockerfile's
     # postgresql-client pin) — bump all three together.
     image: postgres:18-alpine
     environment:

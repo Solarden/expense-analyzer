@@ -1,4 +1,4 @@
-// Copy-to-clipboard for the plan's "how to pay" card (Phase 19b).
+// Copy-to-clipboard for the plan's "how to pay" card.
 //
 // Delegated click handler on any [data-copy] element: copies its attribute value
 // (the transfer title, amount, or payee IBAN) and flashes brief feedback. Offline,

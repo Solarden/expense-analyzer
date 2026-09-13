@@ -22,9 +22,11 @@ def test_local_month_buckets_by_local_tz():
     # 2026-06-30 23:30 UTC is already 2026-07-01 01:30 in Warsaw, so it buckets
     # into July locally — the kind of edge a UTC-only bucketing would get wrong.
     instant = datetime(2026, 6, 30, 23, 30, tzinfo=UTC)
+
     assert clock.local_month(instant) == "2026-07"
 
 
 def test_naive_datetime_assumed_utc():
     naive = datetime(2026, 6, 2, 0, 30)
+
     assert clock.to_local(naive).day == 2

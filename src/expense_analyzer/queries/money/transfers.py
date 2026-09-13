@@ -49,6 +49,7 @@ def ensure_transfer_category(session: Session) -> Category:
     creates can't race. If the worker ever writes, revisit with a unique index.
     """
     category = session.exec(select(Category).where(Category.kind == CategoryKind.transfer)).first()
+
     if category is None:
         category = Category(name=TRANSFER_CATEGORY_NAME, kind=CategoryKind.transfer)
         session.add(category)
@@ -78,18 +79,23 @@ def link_transfer(
     # (another member's private row) reads as absent, so it can't be linked (IDOR).
     a = _get_visible(session, tx_a_id, viewer_id=viewer_id)
     b = _get_visible(session, tx_b_id, viewer_id=viewer_id)
+
     if a is None or b is None:
         return None
+
     if a.transfer_group_id is not None or b.transfer_group_id is not None:
         return None
+
     if a.account_id == b.account_id or a.amount != -b.amount or a.amount == 0:
         return None
 
     category = ensure_transfer_category(session)
     group_id = uuid4().hex
+
     for tx in (a, b):
         tx.transfer_group_id = group_id
         tx.category_id = category.id
+
     session.add_all([a, b])
     session.commit()
 
@@ -106,6 +112,7 @@ def unlink_transfer(session: Session, group_id: str, *, viewer_id: int | None = 
             viewer_id=viewer_id,
         )
     ).all()
+
     if not rows:
         return 0
 
@@ -113,10 +120,13 @@ def unlink_transfer(session: Session, group_id: str, *, viewer_id: int | None = 
         select(Category).where(Category.kind == CategoryKind.transfer)
     ).first()
     transfer_category_id = transfer_category.id if transfer_category else None
+
     for tx in rows:
         tx.transfer_group_id = None
+
         if tx.category_id == transfer_category_id:
             tx.category_id = None
+
     session.add_all(rows)
     session.commit()
 
@@ -157,10 +167,12 @@ def detect_and_autolink(
     )
 
     linked = 0
+
     for pair in result.auto:
         group = link_transfer(
             session, tx_a_id=pair.outflow.id, tx_b_id=pair.inflow.id, viewer_id=viewer_id
         )
+
         if group is not None:
             linked += 1
 

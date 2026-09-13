@@ -1,4 +1,4 @@
-"""Planned-item query layer (Phase 19a): the derived monthly cashflow view.
+"""Planned-item query layer: the derived monthly cashflow view.
 
 The view is computed live from the active items and their per-month paid status —
 income/charge totals, the FOR LIVING remainder, unestimated variable items and the
@@ -106,6 +106,7 @@ def test_mark_unpaid_removes_tick(
 
     assert pq.mark_unpaid(db_session, planned_item_id=rent.id, month="2026-06") is True
     assert pq.plan_overview(db_session, "2026-06").rows[0].paid is False
+
     # Nothing to clear the second time.
     assert pq.mark_unpaid(db_session, planned_item_id=rent.id, month="2026-06") is False
 
@@ -128,6 +129,7 @@ def test_overdue_flag(db_session: Session, make_planned_item: Callable[..., Plan
     # Paid -> never overdue, even past the due day.
     pq.mark_paid(db_session, planned_item_id=rent.id, month="2026-06")
     paid = pq.plan_overview(db_session, "2026-06", today=date(2026, 6, 15))
+
     assert paid.rows[0].overdue is False
 
 
@@ -137,6 +139,7 @@ def test_no_due_day_is_never_overdue(
     make_planned_item(name="Rent", expected_amount=-3000_00, due_day=None)
 
     overview = pq.plan_overview(db_session, "2026-06", today=date(2026, 12, 31))
+
     assert overview.rows[0].overdue is False
 
 
@@ -160,6 +163,7 @@ def test_move_item_reorders(
     assert [i.name for i in pq.list_planned_items(db_session)] == ["A", "B"]
     assert pq.move_item(db_session, b.id, up=True) is True
     assert [i.name for i in pq.list_planned_items(db_session)] == ["B", "A"]
+
     # B is already first — can't move up further.
     assert pq.move_item(db_session, b.id, up=True) is False
 

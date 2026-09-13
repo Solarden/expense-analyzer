@@ -1,7 +1,7 @@
 """Shared test fixtures.
 
-The suite runs against a real PostgreSQL by default (prod parity — production
-is the shared /opt/stack server): the throwaway container from
+The suite runs against a real PostgreSQL by default (prod parity): the
+throwaway container from
 ``docker-compose.test.yml``, started by ``make test-db-up``. Set
 ``EA_TEST_DATABASE_URL`` (e.g. a sqlite URL) for a quick docker-less run.
 
@@ -53,10 +53,10 @@ os.environ["EA_DATABASE_URL"] = os.environ.get(
     "EA_TEST_DATABASE_URL",
     "postgresql+psycopg://ea_test:ea_test@localhost:55432/ea_test",
 )
-# Loan attachments (Phase 21) land in a throwaway temp dir, never the real data/.
+# Loan attachments land in a throwaway temp dir, never the real data/.
 os.environ["EA_ATTACHMENTS_PATH"] = str(_TEST_DATA_DIR / "attachments")
 os.environ.setdefault("EA_SECRET_KEY", "test-secret-not-for-production")  # app refuses default
-# Layer 3 (Phase 12) off by default in the suite: its logic is tested directly with
+# Layer 3 off by default in the suite: its logic is tested directly with
 # an injected fake embedder, so the real path must never load the heavy
 # sentence-transformers model (slow, and would reach the network for the weights).
 # Endpoint tests then exercise the fail-safe render (no suggestions, page still OK).
@@ -83,6 +83,7 @@ def _database() -> Iterator[Engine]:
     from expense_analyzer.db import get_engine
 
     engine = get_engine()
+
     try:
         with engine.connect():
             pass
@@ -95,6 +96,7 @@ def _database() -> Iterator[Engine]:
 
     SQLModel.metadata.drop_all(engine)  # leftovers from an aborted earlier run
     SQLModel.metadata.create_all(engine)
+
     try:
         yield engine
     finally:
@@ -110,6 +112,7 @@ def _reset_all_tables(engine: Engine) -> None:
     numbering restarts by itself once a table is empty.
     """
     tables = SQLModel.metadata.sorted_tables
+
     with engine.begin() as conn:
         if engine.dialect.name == "postgresql":
             names = ", ".join(f'"{t.name}"' for t in tables)
@@ -120,6 +123,7 @@ def _reset_all_tables(engine: Engine) -> None:
             # parents before children inside one table would trip foreign_keys=ON.
             # Deferring validates at commit, when everything is already gone.
             conn.execute(text("PRAGMA defer_foreign_keys=ON"))
+
             for table in reversed(tables):
                 conn.execute(table.delete())
 
@@ -131,6 +135,7 @@ def _fast_bcrypt() -> Iterator[None]:
 
     original = bcrypt.gensalt
     bcrypt.gensalt = lambda rounds=4, prefix=b"2b": original(rounds=4, prefix=prefix)
+
     try:
         yield
     finally:
@@ -194,7 +199,7 @@ def db_session(_database: Engine) -> Iterator[Session]:
 # needs several varied instances just calls it again. This covers the case that
 # would otherwise tempt factory_boy — without a new dependency or session wiring
 # (factory_boy is deferred until the model count/complexity actually grows, e.g.
-# Loan/Budget/InvestmentPosition in Phase 5-6; see internal_docs/PROGRESS.md).
+# Loan/Budget/InvestmentPosition).
 
 
 class FakeImporter:
@@ -237,6 +242,7 @@ def make_account(db_session: Session) -> Callable[..., Account]:
         db_session.add(acc)
         db_session.commit()
         db_session.refresh(acc)
+
         return acc
 
     return _make
@@ -255,6 +261,7 @@ def make_category(db_session: Session) -> Callable[..., Category]:
         db_session.add(cat)
         db_session.commit()
         db_session.refresh(cat)
+
         return cat
 
     return _make
@@ -267,6 +274,7 @@ def make_batch(db_session: Session) -> Callable[..., ImportBatch]:
         db_session.add(batch)
         db_session.commit()
         db_session.refresh(batch)
+
         return batch
 
     return _make
@@ -308,6 +316,7 @@ def make_transaction(
         db_session.add(tx)
         db_session.commit()
         db_session.refresh(tx)
+
         return tx
 
     return _make
@@ -322,6 +331,7 @@ def make_budget(db_session: Session) -> Callable[..., Budget]:
         db_session.add(budget)
         db_session.commit()
         db_session.refresh(budget)
+
         return budget
 
     return _make
@@ -336,6 +346,7 @@ def make_subscription(db_session: Session) -> Callable[..., Subscription]:
         db_session.add(subscription)
         db_session.commit()
         db_session.refresh(subscription)
+
         return subscription
 
     return _make
@@ -348,6 +359,7 @@ def make_rule(db_session: Session) -> Callable[..., Rule]:
         db_session.add(rule)
         db_session.commit()
         db_session.refresh(rule)
+
         return rule
 
     return _make
@@ -360,6 +372,7 @@ def make_planned_item(db_session: Session) -> Callable[..., PlannedItem]:
         db_session.add(item)
         db_session.commit()
         db_session.refresh(item)
+
         return item
 
     return _make
@@ -391,6 +404,7 @@ def make_loan(db_session: Session) -> Callable[..., Loan]:
         db_session.add(loan)
         db_session.commit()
         db_session.refresh(loan)
+
         return loan
 
     return _make
@@ -505,6 +519,7 @@ def _build_xtb_xlsx(
             16: ("Comment", T),
         },
     )
+
     for i, lot in enumerate(lots):
         emit(
             10 + i,
@@ -561,9 +576,11 @@ def _build_xtb_xlsx(
     )
 
     buf = io.BytesIO()
+
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("xl/workbook.xml", workbook)
         zf.writestr("xl/_rels/workbook.xml.rels", rels)
+
         for _name, f, x in sheet_defs:
             zf.writestr(f"xl/worksheets/{f}", x)
 
@@ -601,6 +618,7 @@ def make_investment(db_session: Session) -> Callable[..., InvestmentPosition]:
         db_session.add(pos)
         db_session.commit()
         db_session.refresh(pos)
+
         return pos
 
     return _make
@@ -637,6 +655,7 @@ def fake_importer() -> Iterator[str]:
             ]
         ),
     )
+
     try:
         yield "fake"
     finally:

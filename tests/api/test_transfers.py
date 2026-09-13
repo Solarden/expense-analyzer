@@ -68,6 +68,7 @@ def test_detect_and_autolink_links_unambiguous(
     linked, result = tq.detect_and_autolink(db_session, window_days=3)
     assert linked == 1
     assert not result.ambiguous
+
     # Both legs now matched -> no remaining candidates.
     assert tq.unmatched_candidates(db_session) == []
 
@@ -164,6 +165,7 @@ def test_confirm_route_404_on_invalid_pair(
         data={"tx_a_id": out.id, "tx_b_id": same_acct.id},
         follow_redirects=False,
     )
+
     assert resp.status_code == status.HTTP_404_NOT_FOUND
 
 

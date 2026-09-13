@@ -1,4 +1,4 @@
-/* Tailwind CSS source for the dashboard (the working surface, design §8).
+/* Tailwind CSS source for the dashboard (the working surface).
  *
  * Build with the standalone CLI (no Node needed) -> committed, vendored output
  * served offline via StaticFiles, exactly like chart.min.js:
@@ -9,8 +9,7 @@
  * Approach: the existing hand-rolled design system is recreated as @theme tokens
  * + component classes (@apply), so the 12 templates keep their class names and
  * only the genuinely-responsive bits change. New markup can use the palette as
- * plain utilities (bg-panel, text-muted, border-line, ...). See
- * internal_docs/PROGRESS.md (Tailwind adoption).
+ * plain utilities (bg-panel, text-muted, border-line, ...).
  */
 @import "tailwindcss";
 
@@ -222,8 +221,8 @@
     @apply whitespace-nowrap text-right tabular-nums;
   }
 
-  /* Per-category colour chip before a category name / on the colour picker row
-   * (Phase 16). The colour itself is set inline (data-driven); this only carries
+  /* Per-category colour chip before a category name / on the colour picker row.
+   * The colour itself is set inline (data-driven); this only carries
    * the size, shape and a faint border so light chips stay visible on the panel. */
   .swatch {
     @apply mr-1.5 inline-block h-3 w-3 shrink-0 rounded-[3px] border border-line align-middle;

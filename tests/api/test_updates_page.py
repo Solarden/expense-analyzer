@@ -31,6 +31,7 @@ def test_no_check_yet(auth_client: TestClient):
 
 def test_update_available_nudges_to_deploy(auth_client: TestClient):
     _write_status(current="v1.2.0", latest="v1.3.0", update_available=True)
+
     try:
         resp = auth_client.get("/dashboard/updates")
         assert resp.status_code == http.HTTP_200_OK
@@ -38,6 +39,7 @@ def test_update_available_nudges_to_deploy(auth_client: TestClient):
         assert "new version is available" in body
         assert "v1.3.0" in body
         assert "make deploy" in body  # notify-only nudge, not an in-app deploy button
+
         # Changelog is a plain outbound link to the release; the app fetches nothing.
         assert "/releases/tag/v1.3.0" in body
     finally:
@@ -46,6 +48,7 @@ def test_update_available_nudges_to_deploy(auth_client: TestClient):
 
 def test_up_to_date(auth_client: TestClient):
     _write_status(current="v1.3.0", latest="v1.3.0", update_available=False)
+
     try:
         resp = auth_client.get("/dashboard/updates")
         assert resp.status_code == http.HTTP_200_OK

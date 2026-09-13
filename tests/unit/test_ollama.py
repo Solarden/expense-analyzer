@@ -32,6 +32,7 @@ def _categorize(client: OllamaClient) -> LlmVerdict:
 def test_parses_structured_verdict() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         content = json.dumps({"category_id": 2, "confidence": 0.83})
+
         return httpx.Response(200, json={"message": {"content": content}})
 
     assert _categorize(_client(handler)) == LlmVerdict(category_id=2, confidence=0.83)
@@ -44,6 +45,7 @@ def test_sends_chat_request_with_model_and_schema() -> None:
         seen["url"] = str(request.url)
         seen["body"] = json.loads(request.content)
         content = json.dumps({"category_id": 1, "confidence": 0.9})
+
         return httpx.Response(200, json={"message": {"content": content}})
 
     _categorize(_client(handler))
@@ -54,35 +56,32 @@ def test_sends_chat_request_with_model_and_schema() -> None:
     assert seen["body"]["format"]["required"] == ["category_id", "confidence"]
 
 
-def test_http_error_raises_ollama_error() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(500, text="down")
-
-    with pytest.raises(OllamaError):
-        _categorize(_client(handler))
+def _http_500(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(500, text="down")
 
 
-def test_non_json_content_raises_ollama_error() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"message": {"content": "not json at all"}})
-
-    with pytest.raises(OllamaError):
-        _categorize(_client(handler))
+def _not_json(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(200, json={"message": {"content": "not json at all"}})
 
 
-def test_missing_fields_raise_ollama_error() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        # Well-formed JSON but no category_id -> KeyError -> OllamaError.
-        return httpx.Response(200, json={"message": {"content": json.dumps({"confidence": 0.5})}})
-
-    with pytest.raises(OllamaError):
-        _categorize(_client(handler))
+def _missing_category_id(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(200, json={"message": {"content": json.dumps({"confidence": 0.5})}})
 
 
-def test_timeout_raises_ollama_error() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectTimeout("Ollama host is slow")
+def _timeout(request: httpx.Request) -> httpx.Response:
+    raise httpx.ConnectTimeout("Ollama host is slow")
 
+
+@pytest.mark.parametrize(
+    "handler",
+    [
+        pytest.param(_http_500, id="http-error"),
+        pytest.param(_not_json, id="non-json-content"),
+        pytest.param(_missing_category_id, id="missing-fields"),
+        pytest.param(_timeout, id="timeout"),
+    ],
+)
+def test_bad_reply_raises_ollama_error(handler: Handler) -> None:
     with pytest.raises(OllamaError):
         _categorize(_client(handler))
 
@@ -174,6 +173,7 @@ def test_parse_query_sends_the_query_schema() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["body"] = json.loads(request.content)
+
         return httpx.Response(
             200, json={"message": {"content": json.dumps({"interpretation": "ok"})}}
         )

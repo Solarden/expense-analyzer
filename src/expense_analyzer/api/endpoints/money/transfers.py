@@ -1,4 +1,4 @@
-"""Transfers page: review, confirm and unlink internal transfers (design §7.2).
+"""Transfers page: review, confirm and unlink internal transfers.
 
 GET is read-only — suggestions are recomputed live, so it never mutates state;
 auto-linking happens only on import or an explicit rescan.

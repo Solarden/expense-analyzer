@@ -1,13 +1,15 @@
-# Reverse proxy in front of the FastAPI app. LAN only, but now with a trusted
-# public cert (Let's Encrypt via the ACME DNS-01 challenge over the GoDaddy API)
-# instead of a self-signed CA — no more per-device root-CA install, no browser
-# warnings. Still zero inbound: DNS-01 proves domain control with a TXT record,
-# it does NOT require the Pi to be reachable from the internet.
+# Reverse proxy in front of the FastAPI app. LAN only, but with a trusted public
+# cert (Let's Encrypt via the ACME DNS-01 challenge) instead of a self-signed CA —
+# no per-device root-CA install, no browser warnings. Still zero inbound: DNS-01
+# proves domain control with a TXT record, it does NOT require the host to be
+# reachable from the internet.
 #
-# Set CADDY_SITE_ADDRESS to the domain (e.g. expense.szawel.com) and make it
-# resolve to the Pi's LAN IP on your network (router DNS / Pi-hole / hosts).
-# GODADDY_API_TOKEN ("<KEY>:<SECRET>", a GoDaddy *Production* key) is needed only
-# to issue/renew the cert. The @notlan filter stays as defense-in-depth.
+# Set CADDY_SITE_ADDRESS to your domain (e.g. expense.example.com) and make it
+# resolve to the host's LAN IP on your network (local DNS / hosts file).
+# The DNS plugin is provider-specific: this image builds in GoDaddy, so
+# GODADDY_API_TOKEN ("<KEY>:<SECRET>", a *Production* key) issues and renews the
+# cert. Swap the plugin in Dockerfile.caddy for a different provider.
+# The @notlan filter stays as defense-in-depth.
 {$CADDY_SITE_ADDRESS:expense.local} {
 	# Trusted cert via Let's Encrypt, DNS-01 over GoDaddy. Caddy creates a TXT
 	# record through the GoDaddy API to prove control, then deletes it. The cert
@@ -21,9 +23,25 @@
 		# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
 	}
 
-	# Restrict to private LAN ranges and Tailscale's CGNAT range.
+	# Restrict to private LAN ranges and the CGNAT range used by mesh VPNs.
 	@notlan not remote_ip 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12 100.64.0.0/10 127.0.0.1/8
 	respond @notlan "Forbidden" 403
+
+	header {
+		# The app is all same-origin HTML forms, so framing is never legitimate —
+		# and SameSite=Lax does not help inside a frame, where a POST is same-site.
+		X-Frame-Options DENY
+		# 'unsafe-inline' is required, not lazy: the chart pages inline their data in
+		# a <script> block and 23 templates use inline style= attributes. The value
+		# here is frame-ancestors/base-uri/form-action; script-src is defence in depth
+		# on top of Jinja autoescaping (every <script> interpolation goes via tojson).
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+		# Caddy does not send HSTS on its own.
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
 
 	reverse_proxy app:8000
 }

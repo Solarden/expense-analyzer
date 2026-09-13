@@ -106,6 +106,7 @@ def test_malformed_amount_raises_importer_error():
         '"2026-05-31","2026-05-31","Płatność kartą","not-a-number","PLN","+325.76",'
         '"Tytuł: x","","","","","",""\n'
     ).encode("cp1250")
+
     with pytest.raises(ImporterError, match="line 2"):
         PKOCsvImporter().parse(bad)
 
@@ -163,5 +164,6 @@ def test_malformed_date_raises_importer_error():
         '"2026-13-99","2026-05-31","Płatność kartą","-1.00","PLN","+1.00",'
         '"Tytuł: x","","","","","",""\n'
     ).encode("cp1250")
+
     with pytest.raises(ImporterError):
         PKOCsvImporter().parse(bad)

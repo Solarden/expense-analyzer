@@ -11,11 +11,13 @@ from expense_analyzer.importers.merchant import normalize_merchant
 
 def test_pko_card_payment_uses_address_field():
     raw = "Płatność kartą | Lokalizacja: Adres: Testowy Sklep Miasto: Łódź Kraj: POLSKA"
+
     assert normalize_merchant(raw) == "TESTOWY SKLEP"
 
 
 def test_pko_transfer_uses_counterparty_name():
     raw = "Przelew na konto | Nazwa nadawcy: JAN KOWALSKI | Tytuł: PRZELEW"
+
     assert normalize_merchant(raw) == "JAN KOWALSKI"
 
 

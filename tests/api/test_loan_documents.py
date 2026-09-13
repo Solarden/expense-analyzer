@@ -1,4 +1,4 @@
-"""Loan attachments (Phase 21): query layer + the upload/download/delete routes.
+"""Loan attachments: query layer + the upload/download/delete routes.
 
 Query-layer tests run on ``db_session``; HTTP tests use ``auth_client`` (both share
 the temp engine, and the attachments dir is redirected to a temp path in conftest).
@@ -50,6 +50,7 @@ def test_create_list_get_document(
 
     assert dq.get_document(db_session, doc.id).filename == "contract.pdf"
     assert [d.id for d in dq.list_documents(db_session, loan.id)] == [doc.id]
+
     # Another loan's list doesn't see it.
     assert dq.list_documents(db_session, loan.id + 999) == []
 
@@ -100,6 +101,7 @@ def test_upload_stores_file_and_lists_it(
     assert docs[0].size_bytes == len(PDF)
     # The bytes really landed on disk under the generated name.
     assert _store_path(loan.id, docs[0].stored_name).read_bytes() == PDF
+
     # The document shows on the detail page.
     assert "contract.pdf" in auth_client.get(f"/dashboard/loans/{loan.id}").text
 
@@ -196,13 +198,14 @@ def test_upload_sanitizes_stored_filename(
     loan = make_loan(account_id=acc.id)
 
     # A filename carrying path components is reduced to a clean basename (control
-    # chars are stripped too — covered directly in tests/unit/test_attachments.py,
+    # chars are stripped too, covered directly by the attachment unit tests,
     # since an HTTP client percent-encodes them in the multipart header in transit).
     auth_client.post(
         f"/dashboard/loans/{loan.id}/documents",
         files={"file": ("../../etc/contract.pdf", PDF, "application/pdf")},
     )
     doc = dq.list_documents(db_session, loan.id)[0]
+
     assert doc.filename == "contract.pdf"
 
 
@@ -231,6 +234,7 @@ def test_upload_rejects_when_loan_at_document_cap(
     )
     assert second.status_code == status.HTTP_303_SEE_OTHER
     assert "error=" in second.headers["location"]
+
     # The second upload was rejected — still exactly one document.
     assert len(dq.list_documents(db_session, loan.id)) == 1
 
@@ -241,6 +245,7 @@ def test_upload_404_for_missing_loan(auth_client: TestClient):
         files={"file": ("c.pdf", PDF, "application/pdf")},
         follow_redirects=False,
     )
+
     assert resp.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -286,6 +291,7 @@ def test_download_404_for_wrong_loan(
 
     # The doc exists, but under `loan`, not `other` — the mismatched path 404s.
     resp = auth_client.get(f"/dashboard/loans/{other.id}/documents/{doc.id}")
+
     assert resp.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -296,6 +302,7 @@ def test_download_404_for_missing_doc(
 ):
     acc = make_account(name="Mortgage", type=AccountType.loan)
     loan = make_loan(account_id=acc.id)
+
     assert (
         auth_client.get(f"/dashboard/loans/{loan.id}/documents/9999").status_code
         == status.HTTP_404_NOT_FOUND
@@ -346,6 +353,7 @@ def test_delete_loan_over_http_removes_files(
     assert path.exists()
 
     auth_client.post(f"/dashboard/loans/{loan.id}/delete", follow_redirects=False)
+
     assert not path.exists()
 
 

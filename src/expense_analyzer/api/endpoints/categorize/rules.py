@@ -1,10 +1,9 @@
-"""Rules page: categorization layer 1 (design §7.7).
+"""Rules page: categorization layer 1.
 
 A rule is a case-insensitive substring matched against a transaction's merchant
 (or, when absent, its raw description) that assigns a category. Rules run
 automatically on import and on demand here ("Apply rules now"): they fill
-uncategorized rows and refresh rule-set ones, but never overwrite a manual
-categorization.
+uncategorized rows and refresh rule-set ones.
 
 Handlers stay thin — all DB access goes through
 :mod:`expense_analyzer.queries.categorize.rules`. Bad input (blank pattern, a missing or
@@ -53,6 +52,7 @@ def _applied_flash(applied: int | None) -> str | None:
     ``None`` means no apply happened (a plain page load)."""
     if applied is None:
         return None
+
     if applied == 0:
         return "Applied rules — nothing to categorize."
 
@@ -84,6 +84,7 @@ def create_rule(
     category = category_queries.get_category(session, form.category_id)
 
     error: str | None = None
+
     if not pattern:
         error = "Rule pattern can't be empty."
     elif category is None or category.kind not in _ASSIGNABLE_KINDS:
@@ -112,8 +113,8 @@ def delete_rule(rule_id: int, session: DbSession) -> RedirectResponse:
 
 
 @router.post("/apply")
-def apply_rules(session: DbSession) -> RedirectResponse:
-    changed = rule_queries.apply_rules(session)
+def apply_rules(user: CurrentUser, session: DbSession) -> RedirectResponse:
+    changed = rule_queries.apply_rules(session, viewer_id=user.id)
 
     return RedirectResponse(
         f"/dashboard/rules?applied={changed}", status_code=status.HTTP_303_SEE_OTHER

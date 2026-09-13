@@ -17,9 +17,11 @@ def test_all_endpoint_routers_are_registered() -> None:
     registered = {id(r) for r in api.routers}
 
     missing = []
+
     for mod in pkgutil.iter_modules(endpoints.__path__):
         module = importlib.import_module(f"{endpoints.__name__}.{mod.name}")
         router = getattr(module, "router", None)
+
         if router is not None and id(router) not in registered:
             missing.append(mod.name)
 

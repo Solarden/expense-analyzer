@@ -1,11 +1,16 @@
 # Expense Analyzer — runs alongside Home Assistant on the Raspberry Pi.
-# See internal_docs/expense-analyzer-design.md §3.
 services:
   app:
     build: .
     restart: unless-stopped
+    # A Python web server needs no Linux capabilities, and nothing here ever wants
+    # to gain privileges through a setuid binary.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
-      # The shared /opt/stack PostgreSQL on the Pi (NOT a service of this
+      # An existing PostgreSQL server on your LAN (NOT a service of this
       # compose). Full URL incl. credentials, e.g.
       #   postgresql+psycopg://expense_analyzer:...@192.168.1.x:5432/expense_analyzer
       # Must be set (no silent dev fallback for a finance app).
@@ -15,7 +20,7 @@ services:
       # which inside the container would be /app/data — ephemeral, lost on
       # rebuild. Uploaded loan documents must live on the mounted volume.
       EA_ATTACHMENTS_PATH: /data/attachments
-      # Backup retention for `make backup` / the §10 cron (deploy.sh reads the
+      # Backup retention for `make backup` / the nightly cron (deploy.sh reads the
       # same variable from .env itself). Interpolated here because the host
       # .env never reaches the container (it's dockerignored).
       EA_BACKUP_KEEP: ${EA_BACKUP_KEEP:-14}
@@ -24,7 +29,7 @@ services:
       EA_SECRET_KEY: ${EA_SECRET_KEY:?set EA_SECRET_KEY in your environment or .env}
       # Session cookie is Secure — the browser only sends it over HTTPS (Caddy).
       EA_SECURE_COOKIES: "true"
-      # Home Assistant MQTT push (Phase 7). OFF unless EA_MQTT_HOST is set; the
+      # Home Assistant MQTT push. OFF unless EA_MQTT_HOST is set; the
       # broker is your HA broker on the LAN (not internet egress). The app uses
       # these for the manual "Publish now" button; the worker auto-publishes.
       EA_MQTT_HOST: ${EA_MQTT_HOST:-}
@@ -54,12 +59,18 @@ services:
   worker:
     build: .
     restart: unless-stopped
+    # A Python web server needs no Linux capabilities, and nothing here ever wants
+    # to gain privileges through a setuid binary.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
-      # Same shared /opt/stack PostgreSQL as the app (see above).
+      # Same PostgreSQL server as the app (see above).
       EA_DATABASE_URL: ${EA_DATABASE_URL:?set EA_DATABASE_URL in your environment or .env}
       EA_DATA_PATH: /data
       EA_ATTACHMENTS_PATH: /data/attachments
-      # Home Assistant MQTT push (Phase 7). The worker publishes household metrics
+      # Home Assistant MQTT push. The worker publishes household metrics
       # every EA_MQTT_PUBLISH_INTERVAL_MINUTES. OFF unless both the host and a
       # positive interval are set; the broker is your HA broker on the LAN.
       EA_MQTT_HOST: ${EA_MQTT_HOST:-}
@@ -84,10 +95,17 @@ services:
       context: .
       dockerfile: Dockerfile.caddy
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # The only capability it needs: binding :80/:443.
+      - NET_BIND_SERVICE
     environment:
-      # The domain you reach the app at (e.g. expense.domain.com); Caddy issues a
-      # trusted Let's Encrypt cert for it via DNS-01. Must resolve to the Pi's LAN
-      # IP on your network (router DNS / Pi-hole / hosts).
+      # The domain you reach the app at (e.g. expense.example.com); Caddy issues
+      # a trusted Let's Encrypt cert for it via DNS-01. Must resolve to the host's
+      # LAN IP on your network (local DNS / hosts file).
       CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:-expense.local}
       # GoDaddy API credentials ("<KEY>:<SECRET>", a Production key) for the
       # DNS-01 challenge. Required — without it Caddy can't obtain the cert.

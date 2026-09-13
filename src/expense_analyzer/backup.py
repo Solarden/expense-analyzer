@@ -2,7 +2,7 @@
 
 Dialect-aware, driven by ``EA_DATABASE_URL``:
 
-* **PostgreSQL** (production — the shared /opt/stack server): ``pg_dump
+* **PostgreSQL** (production): ``pg_dump
   --format=custom`` to a timestamped ``.dump``; restore validates the archive,
   resets the ``public`` schema, then runs ``pg_restore`` into the same
   database. The client binaries come from the Docker image (see the
@@ -11,8 +11,8 @@ Dialect-aware, driven by ``EA_DATABASE_URL``:
 * **SQLite** (local dev): SQLite's online backup API, safe to run while the
   app is live (WAL writers included) — always a single consistent ``.db`` file.
 
-Doubles as the design §10 cron backup and as the pre-migration safety copy
-taken by ``scripts/deploy.sh`` (Phase 18), which also calls ``--restore`` on
+Doubles as the cron backup and as the pre-migration safety copy
+taken by ``scripts/deploy.sh``, which also calls ``--restore`` on
 rollback.
 
     python -m expense_analyzer.backup                 # back up the configured DB
@@ -109,6 +109,7 @@ def create_pg_backup(
         capture_output=True,
         text=True,
     )
+
     if result.returncode != 0:
         dest.unlink(missing_ok=True)
         raise BackupError(result.stderr.strip() or "pg_dump failed")
@@ -163,6 +164,7 @@ def restore_backup(url: URL, backup_file: Path) -> None:
         capture_output=True,
         text=True,
     )
+
     if result.returncode != 0:
         raise BackupError(result.stderr.strip() or "pg_restore failed")
 
@@ -174,6 +176,7 @@ def _validate_pg_archive(backup_file: Path) -> None:
         capture_output=True,
         text=True,
     )
+
     if result.returncode != 0:
         raise BackupError(f"not a pg_restore archive: {backup_file} ({result.stderr.strip()})")
 
@@ -187,6 +190,7 @@ def _reset_pg_schema(url: URL) -> None:
     CREATE, a re-run must heal the state, not trip over the missing schema.
     """
     engine = create_engine(url, isolation_level="AUTOCOMMIT", poolclass=NullPool)
+
     try:
         with engine.connect() as conn:
             conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
@@ -208,6 +212,7 @@ def prune_backups(dest_dir: Path, keep: int, *, suffix: str = BACKUP_SUFFIX) -> 
 
     backups = sorted(p for p in dest_dir.glob(f"{BACKUP_PREFIX}*{suffix}") if p.is_file())
     removed = backups[:-keep] if len(backups) > keep else []
+
     for old in removed:
         old.unlink()
         print(f"pruned old backup: {old}", file=sys.stderr)
@@ -222,6 +227,7 @@ def _next_backup_path(dest_dir: Path, suffix: str, now: datetime | None) -> Path
     dest = dest_dir / f"{BACKUP_PREFIX}{stamp}{suffix}"
     # Guard against two backups landing in the same second (deploy + manual cron).
     counter = 1
+
     while dest.exists():
         dest = dest_dir / f"{BACKUP_PREFIX}{stamp}-{counter}{suffix}"
         counter += 1
@@ -299,6 +305,7 @@ def main() -> None:
             restore_backup(url, args.restore)
         except (FileNotFoundError, BackupError) as exc:
             sys.exit(f"error: {exc}")
+
         print(f"restored database from {args.restore}", file=sys.stderr)
 
         return
@@ -312,32 +319,37 @@ def main() -> None:
     if is_sqlite:
         src = args.database or _configured_sqlite_path()
         dest_dir = args.dest or (src.parent / BACKUP_DIR_NAME)
+
         if args.if_exists and not src.exists():
             print(f"no database at {src} — nothing to back up", file=sys.stderr)
+
             return
+
         try:
             backup = create_backup(src, dest_dir, keep=keep)
         except FileNotFoundError as exc:
             sys.exit(f"error: {exc}")
+
         print(f"backed up {src} -> {backup}", file=sys.stderr)
     else:
         dest_dir = args.dest or (get_settings().data_path / BACKUP_DIR_NAME)
+
         try:
             backup = create_pg_backup(url, dest_dir, keep=keep)
         except BackupError as exc:
-            # Anchored to the MISSING-DATABASE error specifically: a bare
-            # "does not exist" would also match e.g. a mistyped role
-            # (FATAL: role "..." does not exist) and silently skip the one
-            # safety backup of a database that very much exists.
-            # The FATAL text comes from the SERVER, so a non-English
-            # lc_messages would break the match — failing SAFE (deploy aborts
-            # instead of proceeding backup-less).
+            # Anchored to the missing-database error: a bare "does not exist" would
+            # also match a mistyped role and silently skip the safety backup. The
+            # text comes from the server, so a non-English lc_messages fails SAFE
+            # (deploy aborts rather than proceeding backup-less).
             if args.if_exists and f'database "{url.database}" does not exist' in str(exc):
                 print(f"no database on the server yet — nothing to back up: {exc}", file=sys.stderr)
+
                 return
+
             sys.exit(f"error: {exc}")
         except FileNotFoundError:
             sys.exit("error: pg_dump not found — install postgresql-client (see Dockerfile)")
+
         print(f"backed up {url.host}/{url.database} -> {backup}", file=sys.stderr)
 
     print(backup)

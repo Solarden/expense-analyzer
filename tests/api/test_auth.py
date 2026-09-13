@@ -34,6 +34,7 @@ def test_login_success_sets_session(client: TestClient, db_session: Session):
     )
     assert resp.status_code == status.HTTP_303_SEE_OTHER
     assert resp.headers["location"] == "/dashboard"
+
     # Now the protected page is reachable.
     assert client.get("/dashboard").status_code == status.HTTP_200_OK
 
@@ -48,6 +49,7 @@ def test_login_wrong_password_401(client: TestClient, db_session: Session):
     )
     assert resp.status_code == status.HTTP_401_UNAUTHORIZED
     assert "Invalid username or password" in resp.text
+
     # Still locked out.
     assert client.get("/dashboard", follow_redirects=False).status_code == status.HTTP_303_SEE_OTHER
 
@@ -58,6 +60,7 @@ def test_login_unknown_user_401(client: TestClient, db_session: Session):
         data={"username": "ghost", "password": "x"},
         follow_redirects=False,
     )
+
     assert resp.status_code == status.HTTP_401_UNAUTHORIZED
 
 
@@ -67,6 +70,7 @@ def test_logout_clears_session(auth_client: TestClient, db_session: Session):
     resp = auth_client.post("/logout", follow_redirects=False)
     assert resp.status_code == status.HTTP_303_SEE_OTHER
     assert resp.headers["location"] == "/login"
+
     # After logout the dashboard redirects to login again.
     assert (
         auth_client.get("/dashboard", follow_redirects=False).status_code
@@ -113,7 +117,7 @@ def test_users_page_rejects_duplicate_username(auth_client: TestClient, db_sessi
     assert len(db_session.exec(select(Owner).where(Owner.username == "tester")).all()) == 1
 
 
-# --- Admin role + user management (Phase 15) -------------------------------
+# --- Admin role + user management -------------------------------
 
 
 def test_first_user_is_admin_rest_are_not(db_session: Session):
@@ -132,6 +136,7 @@ def test_user_added_via_ui_is_not_admin(auth_client: TestClient, db_session: Ses
         follow_redirects=False,
     )
     bob = users.get_by_username(db_session, "bob")
+
     assert bob.is_admin is False
 
 
@@ -139,6 +144,7 @@ def _login_as(client: TestClient, username: str, password: str) -> None:
     resp = client.post(
         "/login", data={"username": username, "password": password}, follow_redirects=False
     )
+
     assert resp.status_code == status.HTTP_303_SEE_OTHER
 
 
@@ -149,6 +155,7 @@ def test_non_admin_cannot_manage_users(client: TestClient, db_session: Session):
 
     resp = client.post(f"/dashboard/users/{admin.id}/delete", follow_redirects=False)
     assert resp.status_code == status.HTTP_403_FORBIDDEN
+
     # The admin is untouched.
     assert users.get(db_session, admin.id) is not None
 
@@ -164,6 +171,7 @@ def test_admin_can_deactivate_and_reactivate_member(client: TestClient, db_sessi
 
     client.post(f"/dashboard/users/{member.id}/toggle-active", follow_redirects=False)
     db_session.refresh(member)
+
     assert member.is_active is True
 
 
@@ -185,6 +193,7 @@ def test_admin_can_delete_member_keeping_their_data(client: TestClient, db_sessi
     assert users.get(db_session, member_id) is None
     # The imported data survives; only the "who imported" tag is cleared.
     db_session.refresh(account)
+
     assert account.owner_id is None
 
 
@@ -230,6 +239,7 @@ def test_admin_cannot_deactivate_self(client: TestClient, db_session: Session):
     resp = client.post(f"/dashboard/users/{admin.id}/toggle-active", follow_redirects=False)
     assert resp.status_code == status.HTTP_400_BAD_REQUEST
     db_session.refresh(admin)
+
     assert admin.is_active is True
 
 
@@ -242,10 +252,11 @@ def test_users_page_shows_manage_only_for_admin(client: TestClient, db_session: 
 
     client.post("/logout")
     _login_as(client, "plain", "pw")
+
     assert "Deactivate" not in client.get("/dashboard/users").text
 
 
-# --- Phase 20a: password reset + admin toggle from the UI ---
+# --- Password reset + admin toggle from the UI ---
 
 
 def test_admin_can_reset_member_password(client: TestClient, db_session: Session):
@@ -278,6 +289,7 @@ def test_reset_password_rejects_empty(client: TestClient, db_session: Session):
     assert resp.status_code == status.HTTP_400_BAD_REQUEST
     # Password is untouched.
     db_session.refresh(member)
+
     assert verify_password("oldpw", member.password_hash)
 
 
@@ -293,6 +305,7 @@ def test_non_admin_cannot_reset_password(client: TestClient, db_session: Session
     )
     assert resp.status_code == status.HTTP_403_FORBIDDEN
     db_session.refresh(admin)
+
     assert not verify_password("hijack", admin.password_hash)
 
 
@@ -307,6 +320,7 @@ def test_admin_can_grant_and_revoke_admin(client: TestClient, db_session: Sessio
 
     client.post(f"/dashboard/users/{member.id}/toggle-admin", follow_redirects=False)
     db_session.refresh(member)
+
     assert member.is_admin is False
 
 
@@ -318,6 +332,7 @@ def test_cannot_revoke_last_active_admin(client: TestClient, db_session: Session
     resp = client.post(f"/dashboard/users/{admin.id}/toggle-admin", follow_redirects=False)
     assert resp.status_code == status.HTTP_400_BAD_REQUEST
     db_session.refresh(admin)
+
     assert admin.is_admin is True
 
 
@@ -330,6 +345,7 @@ def test_admin_can_step_down_when_another_admin_exists(client: TestClient, db_se
     resp = client.post(f"/dashboard/users/{admin.id}/toggle-admin", follow_redirects=False)
     assert resp.status_code == status.HTTP_303_SEE_OTHER
     db_session.refresh(admin)
+
     assert admin.is_admin is False
 
 
@@ -341,6 +357,7 @@ def test_non_admin_cannot_toggle_admin(client: TestClient, db_session: Session):
     resp = client.post(f"/dashboard/users/{admin.id}/toggle-admin", follow_redirects=False)
     assert resp.status_code == status.HTTP_403_FORBIDDEN
     db_session.refresh(admin)
+
     assert admin.is_admin is True
 
 
@@ -370,6 +387,7 @@ def test_member_cannot_see_another_members_private_transaction(
 
     # ...and can't reach it directly by id (IDOR closed).
     edit = client.get(f"/dashboard/transactions/{alice_private.id}/edit", follow_redirects=False)
+
     assert edit.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -401,6 +419,7 @@ def test_lens_switcher_scopes_the_list_and_persists(
 
     # No ?lens= this time: the session remembers the last choice (private).
     persisted = auth_client.get("/dashboard/transactions").text
+
     assert "MY-PRIVATE" in persisted and "THE-HOUSEHOLD" not in persisted
 
 

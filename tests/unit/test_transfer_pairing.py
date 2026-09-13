@@ -2,6 +2,8 @@
 
 from datetime import date
 
+import pytest
+
 from expense_analyzer.models import Transaction
 from expense_analyzer.transfers import find_transfer_pairs
 
@@ -39,30 +41,20 @@ def test_clean_opposite_pair_auto_links():
     assert pair.date_gap_days == 1
 
 
-def test_same_sign_does_not_pair():
-    # Two outflows of equal magnitude are not a transfer.
+@pytest.mark.parametrize(
+    ("account_b", "amount_b"),
+    [
+        # Two outflows of equal magnitude are not a transfer.
+        pytest.param(2, -200000, id="same-sign"),
+        pytest.param(1, 200000, id="same-account"),
+        pytest.param(2, 199999, id="unequal-amount"),
+    ],
+)
+def test_does_not_pair(account_b: int, amount_b: int):
     a = _tx(1, account_id=1, amount=-200000, day=1)
-    b = _tx(2, account_id=2, amount=-200000, day=1)
+    b = _tx(2, account_id=account_b, amount=amount_b, day=1)
 
     result = find_transfer_pairs([a, b], window_days=3)
-
-    assert not result.auto and not result.ambiguous
-
-
-def test_same_account_does_not_pair():
-    out = _tx(1, account_id=1, amount=-200000, day=1)
-    inn = _tx(2, account_id=1, amount=200000, day=1)
-
-    result = find_transfer_pairs([out, inn], window_days=3)
-
-    assert not result.auto and not result.ambiguous
-
-
-def test_unequal_amount_does_not_pair():
-    out = _tx(1, account_id=1, amount=-200000, day=1)
-    inn = _tx(2, account_id=2, amount=199999, day=1)
-
-    result = find_transfer_pairs([out, inn], window_days=3)
 
     assert not result.auto and not result.ambiguous
 
@@ -76,6 +68,7 @@ def test_window_boundary_inclusive_then_excluded():
     assert len(within.auto) == 1
 
     outside = find_transfer_pairs([out, inn_far], window_days=3)
+
     assert not outside.auto and not outside.ambiguous
 
 

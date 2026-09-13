@@ -1,8 +1,8 @@
-"""Merchant normalization (design §5).
+"""Merchant normalization.
 
 A shared, bank-agnostic heuristic that turns a raw bank description into a short,
 stable merchant label. It is deliberately **best-effort**: the categorization
-rules layer (roadmap §10) will lean on ``merchant_normalized``, but nothing today
+rules layer will lean on ``merchant_normalized``, but nothing today
 depends on it being perfect, and it never affects the import fingerprint (which
 hashes ``raw_description``). Returns ``None`` when no meaningful merchant survives.
 
@@ -34,11 +34,13 @@ _NOISE = [
 
 def normalize_merchant(raw_description: str) -> str | None:
     text = raw_description.strip()
+
     if not text:
         return None
 
     address = _PKO_ADDRESS.search(text)
     party = _PKO_PARTY.search(text)
+
     if address:
         candidate = address.group(1)
     elif party:
@@ -52,6 +54,7 @@ def normalize_merchant(raw_description: str) -> str | None:
         candidate = pattern.sub(" ", candidate)
 
     candidate = " ".join(candidate.split()).strip(" -,/.").upper()
+
     if len(candidate) < 2:
         return None
 

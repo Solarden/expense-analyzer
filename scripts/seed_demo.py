@@ -76,6 +76,7 @@ def wipe(session: Session) -> None:
         Account,
     ):
         session.exec(delete(model))
+
     # Categories last (transactions FK them).
     from expense_analyzer.models import Category
 
@@ -85,6 +86,7 @@ def wipe(session: Session) -> None:
 
 def ensure_login(session: Session) -> Owner:
     user = users.get_by_username(session, DEMO_USERNAME)
+
     if user is None:
         user = users.create_user(
             session, username=DEMO_USERNAME, name="Demo Admin", password=DEMO_PASSWORD
@@ -98,6 +100,7 @@ def ensure_login(session: Session) -> Owner:
 
 def main() -> None:
     engine = get_engine()
+
     if engine.dialect.name != "sqlite":
         raise SystemExit(
             f"refusing to seed a non-sqlite database ({engine.dialect.name}) — "
@@ -177,6 +180,7 @@ def main() -> None:
             return row
 
         months = [(2026, 3), (2026, 4), (2026, 5), (2026, 6)]
+
         for yr, mo in months:
             # Income
             tx(
@@ -275,6 +279,7 @@ def main() -> None:
             ("SNT.PL", Decimal("40"), z(6_240), z(140_00 / 100), z(156_00 / 100), "PLN"),
             ("CSPX.UK", Decimal("3.1980"), z(7_910), z(2_300_00 / 100), z(2_473_00 / 100), "USD"),
         ]
+
         for ticker, qty, value, avg, cur, ccy in positions:
             session.add(
                 InvestmentPosition(
@@ -289,6 +294,7 @@ def main() -> None:
                     source="xtb",
                 )
             )
+
         session.commit()
 
         # --- Budgets (recurring monthly limits) ----------------------------
@@ -330,6 +336,7 @@ def main() -> None:
 
         # Mark a couple of this month's manual items paid so the checklist isn't blank.
         this_month = "2026-06"
+
         for item in planned.list_planned_items(session):
             if item.name in {"Netflix", "Spotify"}:
                 planned.mark_paid(session, planned_item_id=item.id, month=this_month)

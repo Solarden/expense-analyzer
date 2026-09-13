@@ -36,6 +36,7 @@ def update_account(
     Returns the updated account, or ``None`` if the id doesn't exist (the handler
     404s). The ``number`` arrives already normalised from the handler."""
     account = session.get(Account, account_id)
+
     if account is None:
         return None
 

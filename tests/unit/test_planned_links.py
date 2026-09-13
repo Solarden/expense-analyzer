@@ -1,4 +1,4 @@
-"""Planned-item Phase 19b query logic: transaction linking, auto-suggestions,
+"""Planned-item query logic: transaction linking, auto-suggestions,
 loan-backed derivation and the last-month hint.
 
 All over the same model 19a created (no migration). ``plan_overview`` takes an
@@ -49,6 +49,7 @@ def test_link_rejects_tx_already_linked_elsewhere(
     assert pq.link_transaction(db_session, planned_item_id=a.id, month="2026-06", tx_id=tx.id)
     # Same transaction can't pay a second line.
     assert not pq.link_transaction(db_session, planned_item_id=b.id, month="2026-06", tx_id=tx.id)
+
     # Re-linking the same (item, month) is fine (idempotent).
     assert pq.link_transaction(db_session, planned_item_id=a.id, month="2026-06", tx_id=tx.id)
 
@@ -213,7 +214,7 @@ def test_loan_backed_paid_from_reconciliation(
     assert row.paid_date == date(2026, 2, 15)
 
 
-# --- FOR LIVING trend (Phase 19c) -------------------------------------------
+# --- FOR LIVING trend -------------------------------------------
 
 
 def test_for_living_trend(
@@ -226,6 +227,7 @@ def test_for_living_trend(
 
     # Last 3 months ending at the current one, oldest first.
     assert [m for m, _ in trend] == ["2026-04", "2026-05", "2026-06"]
+
     # Recurring items -> the same remainder every month.
     assert [v for _, v in trend] == [5000_00, 5000_00, 5000_00]
 

@@ -28,7 +28,16 @@ def create_app() -> FastAPI:
             'print(secrets.token_urlsafe(48))"`.'
         )
 
-    app = FastAPI(title=settings.app_name, version=__version__)
+    # FastAPI registers /docs, /redoc and /openapi.json itself, outside the routers
+    # that carry require_user — so on a shared LAN they hand any device the full
+    # route map pre-login. Keep them for local debugging only.
+    app = FastAPI(
+        title=settings.app_name,
+        version=__version__,
+        docs_url="/docs" if settings.debug else None,
+        redoc_url="/redoc" if settings.debug else None,
+        openapi_url="/openapi.json" if settings.debug else None,
+    )
     # Signed-cookie sessions. SameSite=Lax keeps the cookie off cross-site POSTs
     # (baseline CSRF protection); https_only stays off for plain-HTTP LAN use.
     app.add_middleware(
@@ -39,7 +48,7 @@ def create_app() -> FastAPI:
     )
 
     # Vendored static assets (Chart.js for the overview charts) — served locally
-    # so the Pi never reaches out to a CDN (design: stays fully offline).
+    # so the host never reaches out to a CDN (design: stays fully offline).
     app.mount(
         "/static",
         StaticFiles(directory=str(Path(__file__).parent / "static")),

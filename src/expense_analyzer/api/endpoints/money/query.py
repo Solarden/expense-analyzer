@@ -1,4 +1,4 @@
-"""Natural-language query page (PR 4): ``/dashboard/ask``.
+"""Natural-language query page: ``/dashboard/ask``.
 
 A single GET handler behind ``require_user``. A ``<form method="get">`` — a
 shareable URL, no CSRF concern, mirroring the transactions filter bar. Empty ``q``

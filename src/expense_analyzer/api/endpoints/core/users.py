@@ -1,6 +1,5 @@
 """Users page: list login identities, add new ones, and (admins only) manage
-them — delete, toggle active, grant/revoke admin, or reset a password
-(design §10, Phase 15; admin toggle + password reset added in Phase 20a).
+them — delete, toggle active, grant/revoke admin, or reset a password.
 
 No public registration. Data stays a single shared household view with no roles
 for *viewing*; ``is_admin`` is a soft management role. The first user created
@@ -76,6 +75,7 @@ def toggle_active(
     session: DbSession,
 ) -> Response:
     target = user_queries.get(session, user_id)
+
     if target is None:
         return templates.TemplateResponse(
             request,
@@ -85,10 +85,12 @@ def toggle_active(
         )
 
     error: str | None = None
+
     if target.id == admin.id:
         error = "You can't deactivate your own account."
     elif target.is_active and _last_active_admin(session, target):
         error = "Can't deactivate the last active admin."
+
     if error is not None:
         return templates.TemplateResponse(
             request,
@@ -110,6 +112,7 @@ def delete_user(
     session: DbSession,
 ) -> Response:
     target = user_queries.get(session, user_id)
+
     if target is None:
         return templates.TemplateResponse(
             request,
@@ -119,10 +122,12 @@ def delete_user(
         )
 
     error: str | None = None
+
     if target.id == admin.id:
         error = "You can't delete your own account."
     elif _last_active_admin(session, target):
         error = "Can't delete the last active admin."
+
     if error is not None:
         return templates.TemplateResponse(
             request,
@@ -146,6 +151,7 @@ def toggle_admin(
     """Grant or revoke the admin role. Self is allowed (an admin may step down),
     which is exactly when the "last active admin" guard earns its keep."""
     target = user_queries.get(session, user_id)
+
     if target is None:
         return templates.TemplateResponse(
             request,
@@ -179,6 +185,7 @@ def reset_password(
     """Set a new password for any user (including yourself). No lockout risk, so
     no self-guard — it is also the only in-app way to change your own password."""
     target = user_queries.get(session, user_id)
+
     if target is None:
         return templates.TemplateResponse(
             request,
@@ -188,6 +195,7 @@ def reset_password(
         )
 
     password = form.password.get_secret_value()
+
     if not password.strip():
         return templates.TemplateResponse(
             request,

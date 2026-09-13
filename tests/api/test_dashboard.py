@@ -1,4 +1,4 @@
-"""HTTP tests for the minimal Phase 1 dashboard.
+"""HTTP tests for the minimal dashboard.
 
 Dashboard routes require login, so these use the ``auth_client`` fixture (a
 TestClient already logged in as a freshly-created user). ``db_session`` creates
@@ -24,14 +24,12 @@ def test_index_renders(auth_client: TestClient, db_session: Session):
 
 
 def test_dashboard_home_is_overview(auth_client: TestClient, db_session: Session):
-    # /dashboard now lands on the Overview, not the account/category setup page.
     body = auth_client.get("/dashboard").text
     assert "Overview" in body
     assert "Add account" not in body
 
 
 def test_settings_page_is_config(auth_client: TestClient, db_session: Session):
-    # The setup page (accounts & categories) moved to /dashboard/settings.
     body = auth_client.get("/dashboard/settings").text
     assert "Add account" in body
     assert "Add category" in body
@@ -65,6 +63,7 @@ def test_create_account_number_normalization(
     auth_client: TestClient, db_session: Session, typed: str, stored: str | None
 ):
     auth_client.post("/dashboard/accounts", data={"name": "Acc", "type": "bank", "number": typed})
+
     assert db_session.exec(select(Account)).one().number == stored
 
 
@@ -72,6 +71,7 @@ def test_create_account_number_shown_on_settings(auth_client: TestClient, db_ses
     # A stored IBAN is displayed (canonicalised) on the settings page.
     typed = "pl61 1090 1014 0000 0712 1981 2874"
     auth_client.post("/dashboard/accounts", data={"name": "PKO", "type": "bank", "number": typed})
+
     assert VALID_IBAN in auth_client.get("/dashboard/settings").text
 
 
@@ -110,6 +110,7 @@ def test_edit_account_unknown_404(auth_client: TestClient, db_session: Session):
         data={"name": "PKO checking", "type": "bank"},
         follow_redirects=False,
     )
+
     assert resp.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -123,6 +124,7 @@ def test_edit_account_empty_name_rejected(
     )
     assert resp.status_code == status.HTTP_400_BAD_REQUEST
     db_session.refresh(acc)
+
     assert acc.name == "PKO checking"  # unchanged
 
 
@@ -151,6 +153,7 @@ def test_edit_account_error_preserves_input(
     assert 'value="Edited"' in resp.text  # the attempted name is kept, not reset to "Orig"
     assert 'value="PL00109010140000071219812874"' in resp.text
     db_session.refresh(acc)
+
     assert acc.name == "Orig"  # DB unchanged
 
 
@@ -161,7 +164,7 @@ def test_create_category(auth_client: TestClient, db_session: Session):
     assert cats[0].kind == CategoryKind.expense
 
 
-# --- Phase 16: per-category colour ---
+# --- Per-category colour ---
 
 
 def test_create_category_with_colour(auth_client: TestClient, db_session: Session):
@@ -170,11 +173,13 @@ def test_create_category_with_colour(auth_client: TestClient, db_session: Sessio
         data={"name": "Food", "kind": "expense", "color": "#FF8800"},
     )
     cat = db_session.exec(select(Category)).one()
+
     assert cat.color == "#ff8800"  # normalised to lower-case
 
 
 def test_create_category_blank_colour_is_none(auth_client: TestClient, db_session: Session):
     auth_client.post("/dashboard/categories", data={"name": "Food", "kind": "expense", "color": ""})
+
     assert db_session.exec(select(Category)).one().color is None
 
 
@@ -187,7 +192,7 @@ def test_create_category_invalid_colour_rejected(auth_client: TestClient, db_ses
     assert db_session.exec(select(Category)).all() == []  # nothing created on bad input
 
 
-# --- Phase 20b: full category edit (rename / change kind / set-clear colour) ---
+# --- Full category edit (rename / change kind / set-clear colour) ---
 
 
 def test_edit_category_sets_colour(
@@ -201,6 +206,7 @@ def test_edit_category_sets_colour(
     )
     assert resp.status_code == status.HTTP_303_SEE_OTHER
     db_session.refresh(cat)
+
     assert cat.color == "#3fb950"
 
 
@@ -215,6 +221,7 @@ def test_edit_category_clears_colour(
         follow_redirects=False,
     )
     db_session.refresh(cat)
+
     assert cat.color is None
 
 
@@ -228,6 +235,7 @@ def test_edit_category_invalid_colour_rejected(
     )
     assert resp.status_code == status.HTTP_400_BAD_REQUEST
     db_session.refresh(cat)
+
     assert cat.color is None
 
 
@@ -237,6 +245,7 @@ def test_edit_category_unknown_404(auth_client: TestClient, db_session: Session)
         data={"name": "Food", "kind": "expense", "color": "#3fb950"},
         follow_redirects=False,
     )
+
     assert resp.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -250,6 +259,7 @@ def test_edit_category_renames(
         follow_redirects=False,
     )
     db_session.refresh(cat)
+
     assert cat.name == "Groceries"
 
 
@@ -263,6 +273,7 @@ def test_edit_category_changes_kind(
         follow_redirects=False,
     )
     db_session.refresh(cat)
+
     assert cat.kind == CategoryKind.income
 
 
@@ -276,6 +287,7 @@ def test_edit_category_empty_name_rejected(
     )
     assert resp.status_code == status.HTTP_400_BAD_REQUEST
     db_session.refresh(cat)
+
     assert cat.name == "Food"  # unchanged
 
 
@@ -289,6 +301,7 @@ def test_edit_category_empty_name_wins_over_bad_colour(
         data={"name": "", "kind": "expense", "color": "nope"},
     )
     assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
     # Autoescape turns the apostrophe into "&#39;", so match the unambiguous tail.
     assert "name can" in resp.text and "be empty" in resp.text
 
@@ -297,6 +310,7 @@ def test_swatch_renders_for_coloured_category(
     auth_client: TestClient, db_session: Session, make_category: Callable[..., Category]
 ):
     make_category(name="Food", kind=CategoryKind.expense, color="#abcdef")
+
     # The index Categories table renders the swatch for every coloured category.
     assert "background:#abcdef" in auth_client.get("/dashboard/settings").text
 
@@ -305,6 +319,7 @@ def test_no_swatch_for_colourless_category(
     auth_client: TestClient, db_session: Session, make_category: Callable[..., Category]
 ):
     make_category(name="Food", kind=CategoryKind.expense)
+
     # Colourless categories render no swatch span (the picker still defaults to one).
     assert 'class="swatch"' not in auth_client.get("/dashboard/settings").text
 
@@ -398,6 +413,7 @@ def test_filter_params_tolerate_empty_and_garbage(auth_client: TestClient) -> No
         "/dashboard/transactions",
         params={"account_id": "abc", "scope": "nonsense", "page": ""},
     )
+
     assert garbage.status_code == status.HTTP_200_OK
 
 
@@ -440,6 +456,7 @@ def test_upload_unparseable_file_shows_error(
             raise ImporterError("line 7: bad amount")
 
     importer_registry.register("boom", BoomImporter())
+
     try:
         resp = auth_client.post(
             "/dashboard/upload",
@@ -460,6 +477,7 @@ def test_categorize_rejects_non_numeric_category(auth_client: TestClient, db_ses
         data={"category_id": "abc", "scope": "private"},
         follow_redirects=False,
     )
+
     assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
 
@@ -480,6 +498,7 @@ def test_categorize_rejects_unknown_category(
         data={"category_id": "9999", "scope": "private"},
         follow_redirects=False,
     )
+
     assert resp.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -489,4 +508,5 @@ def test_categorize_unknown_transaction_404(auth_client: TestClient, db_session:
         data={"category_id": "", "scope": "private"},
         follow_redirects=False,
     )
+
     assert resp.status_code == status.HTTP_404_NOT_FOUND

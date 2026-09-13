@@ -1,10 +1,10 @@
 """Updates page (/dashboard/updates): show whether a newer release is waiting.
 
 Read-only and offline by design. The network egress lives entirely in the cron
-check on the Pi host (``scripts/check_update.sh`` → ``ha.update_notify``), which
+check on the host (``scripts/check_update.sh`` → ``ha.update_notify``), which
 writes its verdict to ``settings.update_status_path``. This page only *reads* that
 file — it never fetches anything and never deploys (notify-only; the owner runs
-``make deploy`` by hand). See keep-pi-fully-local + updater-notify-only.
+``make deploy`` by hand).
 """
 
 from fastapi import APIRouter, Depends, Request
@@ -30,6 +30,7 @@ def updates_page(request: Request, user: CurrentUser) -> HTMLResponse:
     # actually points at GitHub; a fork on another host just gets no release link
     # (the page handles release_url being None) rather than a wrong one.
     release_url = None
+
     if status is not None and status.latest and "github.com" in settings.source_url:
         release_url = f"{settings.source_url.rstrip('/')}/releases/tag/{status.latest}"
 

@@ -1,4 +1,4 @@
-"""Transaction list queries — pagination and the Phase 4 filters."""
+"""Transaction list queries — pagination and filters."""
 
 from collections.abc import Callable
 from datetime import date
@@ -83,6 +83,7 @@ def test_invalid_month_filter_is_ignored_not_fatal(
         page = transactions.list_transactions(
             db_session, TransactionFilters(month=bad), page=1, page_size=10
         )
+
         assert page.total == 1  # filter silently skipped, no crash
 
 
@@ -237,6 +238,7 @@ def test_filter_search_matches_description_and_merchant(
     by_merchant = transactions.list_transactions(
         db_session, TransactionFilters(search="lidl"), page=1, page_size=10
     )
+
     assert by_merchant.total == 1
 
 

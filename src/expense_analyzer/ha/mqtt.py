@@ -1,11 +1,11 @@
-"""MQTT publisher for the Home Assistant push (design §9).
+"""MQTT publisher for the Home Assistant push.
 
 Opt-in and gated by config (``EA_MQTT_HOST``), like the myFund pull — but the
 broker is on the LAN (your HA broker), so this is **not** internet egress.
 
 Connection lifecycle is **per publish** (connect → publish → disconnect): a
 metrics push runs every few minutes, so a short-lived connection is simpler and
-more robust than holding one open on a Pi for days. The retained Last Will
+more robust than holding one open for days. The retained Last Will
 (``"offline"``) covers a crash *while connected*; on a clean disconnect the
 retained ``"online"`` we publish stays, so HA keeps the sensors available between
 cycles — the real freshness signal is the state value itself, not availability.
@@ -84,6 +84,7 @@ class MqttPublisher:
     ) -> "MqttPublisher":
         if not settings.mqtt_configured:
             raise MqttError("MQTT is not configured — set EA_MQTT_HOST.")
+
         return cls(
             host=settings.mqtt_host,
             port=settings.mqtt_port,
@@ -115,12 +116,14 @@ class MqttPublisher:
 
         def body(client: MqttClient) -> list[object]:
             infos = [client.publish(avail, discovery.ONLINE, qos=_QOS, retain=True)]
+
             for metric in metrics:
                 topic = discovery.discovery_topic(
                     self._discovery_prefix, self._base_topic, metric.key
                 )
                 config = json.dumps(discovery.discovery_config(metric, base=self._base_topic))
                 infos.append(client.publish(topic, config, qos=_QOS, retain=True))
+
             infos.append(
                 client.publish(
                     discovery.state_topic(self._base_topic),
@@ -129,6 +132,7 @@ class MqttPublisher:
                     retain=True,
                 )
             )
+
             return infos
 
         self._with_connection(body, will=(avail, discovery.OFFLINE))
@@ -136,7 +140,7 @@ class MqttPublisher:
     def publish_update(
         self, *, current: str | None, latest: str | None, update_available: bool
     ) -> None:
-        """Publish the retained "update available" sensor (Phase 18).
+        """Publish the retained "update available" sensor.
 
         Mirrors :meth:`publish_metrics` (availability + retained discovery +
         retained state) but on its own ``<base>/update`` topic, so it never
@@ -167,7 +171,7 @@ class MqttPublisher:
         self._with_connection(body, will=(avail, discovery.OFFLINE))
 
     def publish_plan(self, *, paid: int, total: int, overdue: int) -> None:
-        """Publish the retained monthly-plan progress sensor (Phase 19c).
+        """Publish the retained monthly-plan progress sensor.
 
         Mirrors :meth:`publish_update` (availability + retained discovery + retained
         state) on its own ``<base>/plan`` topic, so it never clobbers the money
@@ -197,8 +201,8 @@ class MqttPublisher:
     def publish_alert(self, title: str, message: str, *, severity: str = "warning") -> None:
         """Publish a one-off alert event (not retained) for an HA automation.
 
-        The Phase 7 primitive that later phases call: budget-exceeded (Phase 8)
-        and new-subscription (Phase 9) alerts just invoke this.
+        The shared primitive: budget-exceeded and new-subscription alerts
+        both invoke this.
         """
 
         def body(client: MqttClient) -> list[object]:
@@ -220,9 +224,11 @@ class MqttPublisher:
         will: tuple[str, str] | None = None,
     ) -> None:
         client = self._client or self._build_client()
+
         try:
             if self._username:
                 client.username_pw_set(self._username, self._password or None)
+
             if will is not None:
                 client.will_set(will[0], will[1], qos=_QOS, retain=True)
             client.connect(self._host, self._port, _KEEPALIVE_SECONDS)
@@ -250,11 +256,14 @@ def _wait_for_publish(infos: list[object]) -> None:
     :meth:`MqttPublisher._with_connection` and becomes an :class:`MqttError`.
     """
     deadline = time.monotonic() + _PUBLISH_TIMEOUT_SECONDS
+
     for info in infos:
         wait = getattr(info, "wait_for_publish", None)
+
         if not callable(wait):
             continue
         remaining = deadline - time.monotonic()
+
         if remaining <= 0:
             break
         wait(timeout=remaining)
@@ -281,11 +290,10 @@ def publish_snapshot(
 
     The single entry point shared by the worker (periodic) and the dashboard's
     "Publish now" button. After the metrics, fires one alert per over-budget
-    category (Phase 8), per newly-detected subscription, and per subscription
-    whose price went up (Phase 9) — the wiring of the Phase 7
-    :meth:`MqttPublisher.publish_alert` primitive.
+    category, per newly-detected subscription, and per subscription
+    whose price went up, all through :meth:`MqttPublisher.publish_alert`.
 
-    Alerts are fired statelessly every cycle: per design §9 the app emits the
+    Alerts are fired statelessly every cycle: the app emits the
     event and an HA automation decides when to actually notify (HA's throttle /
     "fire once" semantics live there, not here). A household has few categories
     and subscriptions, so this is a handful of small events at most.
@@ -304,13 +312,14 @@ def publish_snapshot(
     today = local_today()
     month = today.strftime("%Y-%m")
 
-    # Monthly plan progress sensor + overdue alert (Phase 19c). The plan sensor is
+    # Monthly plan progress sensor + overdue alert. The plan sensor is
     # its own retained topic; the alert is fired statelessly every cycle (HA's
     # throttle decides when to notify), like the budget/subscription alerts below.
     plan = planned_queries.plan_overview(session, month, today=today)
     paid = sum(1 for row in plan.rows if row.paid)
     overdue = sum(1 for row in plan.rows if row.overdue)
     publisher.publish_plan(paid=paid, total=len(plan.rows), overdue=overdue)
+
     if overdue:
         publisher.publish_alert(
             title="Bills overdue",
@@ -320,6 +329,7 @@ def publish_snapshot(
             ),
             severity="warning",
         )
+
     for status in budget_queries.budget_overview(session, month):
         if status.over:
             publisher.publish_alert(
@@ -332,12 +342,13 @@ def publish_snapshot(
                 severity="warning",
             )
 
-    # Subscription alerts (Phase 9). Dismissed false positives never alert; a
+    # Subscription alerts. Dismissed false positives never alert; a
     # "new" alert stops once the user confirms the subscription (acknowledged).
     for view in subscription_queries.subscription_overview(session, get_settings(), today=today):
         if view.is_dismissed:
             continue
         sub = view.detected
+
         if sub.price_rise is not None:
             publisher.publish_alert(
                 title=f"Subscription price went up: {sub.merchant}",
@@ -348,6 +359,7 @@ def publish_snapshot(
                 ),
                 severity="warning",
             )
+
         if sub.is_new and not view.is_confirmed:
             publisher.publish_alert(
                 title=f"New subscription detected: {sub.merchant}",

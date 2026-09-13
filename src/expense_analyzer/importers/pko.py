@@ -56,13 +56,16 @@ class PKOCsvImporter:
         reader = csv.reader(io.StringIO(_decode(data)), delimiter=",", quotechar='"')
 
         out: list[NormalizedTransaction] = []
+
         for row in reader:
             if len(row) <= _BALANCE or not any(cell.strip() for cell in row):
                 continue  # blank or truncated line
+
             if row[_OP_DATE].strip() == _HEADER_FIRST_CELL:
                 continue  # header
 
             op_date = row[_OP_DATE].strip()
+
             if not op_date:
                 continue  # pending "Blokada" — no booking date yet
 

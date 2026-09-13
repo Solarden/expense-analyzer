@@ -1,7 +1,7 @@
-"""Jinja2 setup for the dashboard (the working surface, design §8).
+"""Jinja2 setup for the dashboard (the working surface).
 
 Server-rendered and deliberately plain — the pretty, glanceable layer lives in
-Home Assistant, so this surface stays cheap to build and light on the Pi.
+Home Assistant, so this surface stays cheap to build and light on the host.
 """
 
 from datetime import date
@@ -27,6 +27,7 @@ def _lens_context(request: Request) -> dict:
     separate to avoid a templating -> api import cycle.
     """
     raw = request.query_params.get("lens")
+
     if raw is not None and "session" in request.scope:
         request.session["lens"] = resolve_lens(raw).value
     stored = request.session.get("lens") if "session" in request.scope else None

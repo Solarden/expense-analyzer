@@ -1,6 +1,6 @@
-"""Overview page: monthly spending/income summary and trend charts (design §8).
+"""Overview page: monthly spending/income summary and trend charts.
 
-Charts use Chart.js served from vendored static assets so the Pi stays offline.
+Charts use Chart.js served from vendored static assets so the host stays offline.
 Amounts stay integer minor units; the template divides by 100 for display so
 money never round-trips as a float.
 """
@@ -23,7 +23,7 @@ TREND_MONTHS = 12
 DEFAULT_CATEGORY_COLOR = "#4f8cff"
 
 # A small qualitative palette so categories *without* an explicit colour still get
-# distinct bars instead of all sharing one hue (Phase 20b auto-palette). Keyed by
+# distinct bars instead of all sharing one hue (auto-palette). Keyed by
 # category id (modulo), so a category keeps the same auto-colour across months.
 AUTO_PALETTE = (
     "#4f8cff",
@@ -44,6 +44,7 @@ def _bar_color(category_id: int | None, explicit: str | None) -> str:
     slot keyed by id (auto-palette); the uncategorized bucket gets the neutral default."""
     if explicit:
         return explicit
+
     if category_id is None:
         return DEFAULT_CATEGORY_COLOR
 
@@ -93,8 +94,8 @@ def stats_page(
             "category_chart": {
                 "labels": [c.name for c in summary.by_category],
                 "data": [c.total for c in summary.by_category],
-                # Per-bar colours: each category's own colour, else an auto-palette
-                # slot (colourless categories no longer share one hue).
+                # Per-bar colours: each category's own colour, else an
+                # auto-palette slot, so no two bars share a hue by accident.
                 "colors": [
                     _bar_color(c.category_id, category_colors.get(c.category_id))
                     for c in summary.by_category

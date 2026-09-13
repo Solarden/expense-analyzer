@@ -13,8 +13,8 @@ dependencies = [
     "uvicorn[standard]>=0.50.0",
     "sqlmodel>=0.0.22",
     "alembic>=1.14",
-    # PostgreSQL driver (the production database lives in the owner's separate
-    # /opt/stack compose on the Pi — see docker-compose.yml). SQLite needs no
+    # PostgreSQL driver (the production database lives on a separate PostgreSQL
+    # server — see docker-compose.yml). SQLite needs no
     # driver and remains the zero-setup default for local dev.
     "psycopg[binary]>=3.2",
     "pydantic-settings>=2.6",
@@ -22,22 +22,22 @@ dependencies = [
     "python-multipart>=0.0.18",
     "bcrypt>=4.2",
     "itsdangerous>=2.2",
-    # Outbound HTTP client for the opt-in myFund.pl investment pull (Phase 6).
+    # Outbound HTTP client for the opt-in myFund.pl investment pull.
     # Off by default (no API key -> no calls); also what the test client uses.
     "httpx>=0.28",
-    # MQTT client for the opt-in Home Assistant push (Phase 7). Off by default
+    # MQTT client for the opt-in Home Assistant push. Off by default
     # (no EA_MQTT_HOST -> the worker never connects); the broker lives on the LAN
     # (your HA broker), so this is not internet egress.
     "paho-mqtt>=2.1",
-    # Text classifier for categorization layer 2 (Phase 11): TF-IDF + logistic
-    # regression (design §7.7). A local library, not a service — no egress, nothing
-    # leaves the Pi. Pulls numpy/scipy; the owner OK'd the footprint (external SSD).
+    # Text classifier for categorization layer 2: TF-IDF + logistic
+    # regression. A local library, not a service — no egress, nothing
+    # leaves the host. Pulls numpy/scipy — a sizeable install, but entirely local.
     "scikit-learn>=1.5",
-    # Embeddings for categorization layer 3 (Phase 12): sentence-transformers powers
-    # the "similar past transaction" hint in the review queue (design §7.7 point 3).
+    # Embeddings for categorization layer 3: sentence-transformers powers
+    # the "similar past transaction" hint in the review queue.
     # Pulls torch — heavy, but a *local* library, not a service. The model weights
     # are baked into the Docker image at build time and read offline at runtime
-    # (HF_HUB_OFFLINE=1), so nothing leaves the Pi. Footprint OK'd (external SSD).
+    # (HF_HUB_OFFLINE=1), so nothing leaves the host.
     "sentence-transformers>=3.0",
 ]
 

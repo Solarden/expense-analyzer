@@ -1,4 +1,4 @@
-"""XTB investment export parser (design §7.3) — the offline positions source.
+"""XTB investment export parser — the offline positions source.
 
 XTB exports an account as an **.xlsx** workbook (not CSV) with four sheets:
 ``CLOSED POSITION HISTORY``, ``OPEN POSITION <DDMMYYYY>``, ``PENDING ORDERS
@@ -47,15 +47,28 @@ _COL_MARKET_PRICE = "Market price"
 _COL_PURCHASE_VALUE = "Purchase value"
 _COL_GROSS_PL = "Gross P/L"
 
-# Size guards (defense-in-depth against a malicious/corrupt upload). A real XTB
-# IKE export is a few KB to well under 1 MB even with embedded logos, and the
-# largest worksheet XML is a fraction of a MB — so these caps leave a huge margin
-# while bounding memory and refusing a zip bomb (which expands to GBs):
-#   * MAX_XLSX_BYTES      — the raw uploaded file (also enforced at the endpoint).
-#   * MAX_PART_BYTES      — any single *uncompressed* zip member we read, checked
-#                           against the zip directory before decompressing it.
+# Size guards against a zip bomb: a real XTB export is well under 1 MB, so these
+# caps leave a huge margin while bounding memory. MAX_PART_BYTES is checked against
+# the zip directory before decompressing any member.
 MAX_XLSX_BYTES = 10 * 1024 * 1024  # 10 MiB
-MAX_PART_BYTES = 50 * 1024 * 1024  # 50 MiB
+MAX_PART_BYTES = 5 * 1024 * 1024  # 5 MiB
+
+
+class _DoctypeFound(Exception):
+    """Raised out of the DTD callback; translated to an ImporterError below."""
+
+
+class _NoDoctypeBuilder(ET.TreeBuilder):
+    """Tree builder that refuses a document type declaration.
+
+    A real .xlsx part never carries a DTD, and internal entity expansion is the one
+    amplification ElementTree performs. The parser calls this hook from the parsed
+    grammar, so it catches a DTD at any offset and in any encoding — which a byte
+    scan for "<!DOCTYPE" would not (pad it past the window, or encode UTF-16).
+    """
+
+    def doctype(self, name: str, pubid: str | None, system: str | None) -> None:
+        raise _DoctypeFound
 
 
 class XTBImporter:
@@ -69,6 +82,7 @@ class XTBImporter:
                 f"file is too large ({len(data)} bytes); an XTB export is well under "
                 f"{MAX_XLSX_BYTES // (1024 * 1024)} MiB"
             )
+
         try:
             zf = zipfile.ZipFile(io.BytesIO(data))
         except zipfile.BadZipFile as exc:
@@ -100,13 +114,17 @@ class XTBImporter:
         target_by_id = {
             r.get("Id"): r.get("Target") for r in rels.findall(f"{_NS_PKG_REL}Relationship")
         }
+
         for sheet in workbook.iter(f"{_NS_MAIN}sheet"):
             name = sheet.get("name") or ""
+
             if name.strip().upper().startswith("OPEN POSITION"):
                 rid = sheet.get(f"{_NS_REL}id")
                 target = target_by_id.get(rid)
+
                 if target is None:
                     break
+
                 return name, f"xl/{target.lstrip('/')}"
 
         raise ImporterError("no 'OPEN POSITION' sheet found — is this an XTB account export?")
@@ -120,12 +138,15 @@ class XTBImporter:
         shared = _read_shared_strings(zf)
         root = _parse_xml(_read_part(zf, path))
         sheet_data = root.find(f"{_NS_MAIN}sheetData")
+
         if sheet_data is None:
             return []
 
         rows: list[list[str]] = []
+
         for row_el in sheet_data.findall(f"{_NS_MAIN}row"):
             cells: dict[int, str] = {}
+
             for cell in row_el.findall(f"{_NS_MAIN}c"):
                 cells[_col_index(cell.get("r", "A1"))] = _cell_text(cell, shared)
             width = max(cells) + 1 if cells else 0
@@ -137,6 +158,7 @@ class XTBImporter:
 
     def _extract_positions(self, rows: list[list[str]], snapshot: date) -> list[NormalizedPosition]:
         header_idx, columns = _find_table_header(rows)
+
         if header_idx is None:
             raise ImporterError("OPEN POSITION sheet has no positions table header")
 
@@ -149,6 +171,7 @@ class XTBImporter:
 
         for line_no, row in enumerate(rows[header_idx + 1 :], start=header_idx + 2):
             symbol = _cell(row, columns, _COL_SYMBOL).strip()
+
             if not symbol:
                 break  # first blank row ends the table (a totals row, if any, is skipped)
 
@@ -159,6 +182,7 @@ class XTBImporter:
                 price = parse_loose_amount(_cell(row, columns, _COL_MARKET_PRICE))
             except (InvalidOperation, ValueError) as exc:
                 raise ImporterError(f"row {line_no}: cannot parse a number ({exc})") from exc
+
             if vol is None or purchase is None:
                 raise ImporterError(f"row {line_no}: missing volume or purchase value for {symbol}")
 
@@ -170,6 +194,7 @@ class XTBImporter:
             last_price[symbol] = price  # same across a symbol's lots; keep the last seen
 
         positions: list[NormalizedPosition] = []
+
         for symbol in order:
             qty = quantity[symbol]
             # Average purchase price per unit, rounded half-up to minor units to
@@ -199,6 +224,7 @@ def _read_shared_strings(zf: zipfile.ZipFile) -> list[str]:
         raw = _read_part(zf, "xl/sharedStrings.xml")
     except KeyError:
         return []
+
     root = _parse_xml(raw)
 
     return ["".join(t.text or "" for t in si.iter(f"{_NS_MAIN}t")) for si in root]
@@ -213,6 +239,7 @@ def _read_part(zf: zipfile.ZipFile, name: str) -> bytes:
     expanded into memory. Raises ``KeyError`` if the member is absent (callers that
     treat a part as optional, e.g. sharedStrings, catch it)."""
     info = zf.getinfo(name)  # KeyError if missing
+
     if info.file_size > MAX_PART_BYTES:
         raise ImporterError(
             f"{name} is implausibly large ({info.file_size} bytes uncompressed) "
@@ -225,25 +252,33 @@ def _read_part(zf: zipfile.ZipFile, name: str) -> bytes:
 def _parse_xml(raw: bytes) -> ET.Element:
     """Parse an .xlsx XML part. Single point so the threat model is stated once.
 
-    The workbook is uploaded by the authenticated household user — single-user,
-    LAN-only, never publicly exposed (design §1/§10) — so the XML is not
-    attacker-controlled in this app's threat model. stdlib ElementTree (no new
-    dependency, in keeping with the project's minimalism) does not resolve
-    external entities; that plus the trust boundary is why B314 is suppressed here.
+    The uploader is an authenticated household member, not the public — but the app
+    is multi-user, so "trusted" does not stretch to "cannot be hostile". stdlib
+    ElementTree does not resolve *external* entities (no XXE, no SSRF), which is why
+    B314 is suppressed; it does expand *internal* ones, so a DTD is refused by
+    :class:`_NoDoctypeBuilder`.
     """
-    return ET.fromstring(raw)  # nosec B314 — see docstring (trusted, single-user upload)
+    try:
+        # nosec B314 — external entities are never resolved; a DTD is refused above
+        return ET.fromstring(raw, parser=ET.XMLParser(target=_NoDoctypeBuilder()))  # nosec B314
+    except _DoctypeFound:
+        raise ImporterError("the file contains an XML document type declaration") from None
 
 
 def _cell_text(cell: ET.Element, shared: list[str]) -> str:
     """Text of one ``<c>`` cell, resolving inline / shared strings and raw values."""
     cell_type = cell.get("t")
+
     if cell_type == "inlineStr":
         is_el = cell.find(f"{_NS_MAIN}is")
+
         return (
             "".join(t.text or "" for t in is_el.iter(f"{_NS_MAIN}t")) if is_el is not None else ""
         )
+
     value = cell.find(f"{_NS_MAIN}v")
     text = value.text or "" if value is not None else ""
+
     if cell_type == "s":  # shared-string index
         try:
             return shared[int(text)]
@@ -257,6 +292,7 @@ def _col_index(ref: str) -> int:
     """Zero-based column index from a cell ref like ``"C12"`` -> ``2``."""
     letters = re.match(r"[A-Z]+", ref)
     n = 0
+
     for ch in letters.group(0) if letters else "A":
         n = n * 26 + (ord(ch) - ord("A") + 1)
 
@@ -267,8 +303,10 @@ def _find_table_header(rows: list[list[str]]) -> tuple[int | None, dict[str, int
     """Locate the positions table header row, mapping column name -> column index."""
     for idx, row in enumerate(rows):
         labels = {c.strip() for c in row}
+
         if "Position" in labels and _COL_SYMBOL in labels:
             columns = {c.strip(): i for i, c in enumerate(row) if c.strip()}
+
             return idx, columns
 
     return None, {}
@@ -277,6 +315,7 @@ def _find_table_header(rows: list[list[str]]) -> tuple[int | None, dict[str, int
 def _cell(row: list[str], columns: dict[str, int], name: str) -> str:
     """Value of column ``name`` in ``row`` (empty string if absent)."""
     idx = columns.get(name)
+
     if idx is None or idx >= len(row):
         return ""
 
@@ -293,6 +332,7 @@ def _labelled_value(rows: list[list[str]], label: str) -> int | None:
             if text.strip() == label:
                 below = rows[idx + 1]
                 raw = below[col] if col < len(below) else ""
+
                 return parse_loose_amount(raw)
 
     return None
@@ -301,9 +341,11 @@ def _labelled_value(rows: list[list[str]], label: str) -> int | None:
 def _snapshot_date_from_name(sheet_name: str) -> date:
     """Parse ``OPEN POSITION 15042026`` (DDMMYYYY) into a :class:`date`."""
     match = re.search(r"(\d{2})(\d{2})(\d{4})", sheet_name)
+
     if not match:
         raise ImporterError(f"could not read snapshot date from sheet name {sheet_name!r}")
     day, month, year = (int(g) for g in match.groups())
+
     try:
         return date(year, month, day)
     except ValueError as exc:

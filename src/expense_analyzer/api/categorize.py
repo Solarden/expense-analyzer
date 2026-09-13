@@ -27,11 +27,13 @@ def parse_category_id(session: Session, raw_category_id: str) -> int | None:
     if not raw_category_id:
         return None
     category_id = opt_int(raw_category_id)
+
     if category_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"invalid category id: {raw_category_id!r}",
         )
+
     if category_queries.get_category(session, category_id) is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

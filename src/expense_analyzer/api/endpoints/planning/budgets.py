@@ -1,5 +1,4 @@
-"""Budgets page: per-category monthly limits and how spending tracks against them
-(design §7.6).
+"""Budgets page: per-category monthly limits and how spending tracks against them.
 
 A recurring default applies every month; a ``"YYYY-MM"`` override replaces it for
 one month. The overview compares each effective limit to the month's actual
@@ -43,6 +42,7 @@ def _context(
     lens), the set form, and the defined-budgets list. ``months`` is fetched once by
     the handler and threaded in (it also resolves ``selected_month``)."""
     all_categories = category_queries.list_categories(session)
+
     # The lens picks which budget scope(s) to show: Home budget -> household only,
     # Private -> the viewer's private only, All -> both (stacked sections).
     if lens is Lens.private:
@@ -51,18 +51,19 @@ def _context(
         section_scopes = [Scope.household]
     else:
         section_scopes = [Scope.household, Scope.private]
-    # In the Home budget, break the month's shared spend down by the member who
-    # added each row (owner_id). Compute the household spendable scan once here and
-    # reuse it for both the by_member panel and the household section's overview
-    # (whose spend_lens is Lens.home too) — one scan per render, not two. Only
-    # meaningful under the household lens; empty/None elsewhere, so the block hides
-    # and each section self-scans with its own scope's lens.
+
+    # The by_member panel and the household section's overview want the same
+    # household spendable scan, so do it once per render rather than twice. Only
+    # meaningful under the household lens; None elsewhere, and each section then
+    # self-scans with its own lens.
     by_member = []
     spendable = None
+
     if lens is Lens.home:
         spendable = stats.spendable_transactions(session, viewer_id=user.id, lens=Lens.home)
         owner_names = {u.id: u.name for u in users.list_users(session)}
         by_member = stats.spend_by_owner(spendable, selected_month, owner_names)
+
     sections = [
         {
             "label": "Household budgets" if s is Scope.household else "My private budgets",
@@ -72,6 +73,7 @@ def _context(
         }
         for s in section_scopes
     ]
+
     return {
         "user": user,
         "months": months,
@@ -100,11 +102,9 @@ def budgets_page(
     months = stats.available_months(session, viewer_id=user.id, lens=lens)
     selected = stats.default_month(months, month)
 
-    # ``?edit=<id>`` prefills the form to change one budget's limit. Category and
-    # month are the budget's identity (the upsert key), so they're shown read-only
-    # — only the limit is editable, and the existing set_budget upsert hits the
-    # same row. A non-numeric or stale id just falls back to the create form (taken
-    # as a string so a malformed ``?edit=`` degrades gracefully, not a 422).
+    # Category and month are the budget's identity (the upsert key), so the edit
+    # form shows them read-only and only the limit is editable. Taken as a string,
+    # so a malformed ``?edit=`` degrades to the create form instead of a 422.
     edit_id = opt_int(edit)
     edit_budget = (
         budget_queries.get_budget(session, edit_id, viewer_id=user.id)
@@ -112,6 +112,7 @@ def budgets_page(
         else None
     )
     extra: dict = {}
+
     if edit_budget is not None:
         extra = {
             "edit_budget": edit_budget,
@@ -139,6 +140,7 @@ def set_budget(
 
     category = category_queries.get_category(session, form.category_id)
     error: str | None = None
+
     if category is None or category.kind != CategoryKind.expense:
         error = "Pick an expense category to budget."
     elif month is not None and not _MONTH_RE.match(month):

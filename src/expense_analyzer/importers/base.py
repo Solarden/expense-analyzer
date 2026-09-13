@@ -43,7 +43,7 @@ class ParseResult:
     """Everything a parser extracted from one export.
 
     More than a list of transactions: a bank statement also carries
-    statement-level metadata used for reconciliation (design §6). Different
+    statement-level metadata used for reconciliation. Different
     banks expose different signals — PKO puts a running balance on every row
     (``NormalizedTransaction.balance_after``), mBank instead prints declared
     period totals at the top — so both are optional and the reconciler uses

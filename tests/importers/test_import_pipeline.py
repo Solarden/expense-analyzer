@@ -68,6 +68,7 @@ def test_import_stamps_owner_id(
     )
 
     rows = db_session.exec(select(Transaction)).all()
+
     assert rows and all(tx.owner_id == alice.id for tx in rows)
 
 
@@ -193,6 +194,7 @@ def test_pipeline_fills_merchant_normalized(
     )
 
     tx = db_session.exec(select(Transaction)).one()
+
     assert tx.merchant_normalized == "TESTOWY SKLEP"
 
 
@@ -287,6 +289,7 @@ def test_reimport_with_nothing_new_skips_transfer_detection(
     assert summary.new == 0
     assert summary.transfers_auto_linked == 0
     db_session.refresh(counterpart)
+
     assert counterpart.transfer_group_id is None
 
 

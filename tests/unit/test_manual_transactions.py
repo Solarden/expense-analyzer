@@ -1,7 +1,6 @@
-"""Manual (cash) entry, edit and delete — the single-row edit layer (Phase 13).
+"""Manual (cash) entry, edit and delete — the single-row edit layer.
 
-These exercise the query layer directly; the endpoint wiring is covered in
-tests/api/test_transaction_edit.py.
+These exercise the query layer directly; the endpoint wiring has its own tests.
 """
 
 from collections.abc import Callable
@@ -56,6 +55,7 @@ def test_two_identical_cash_entries_both_persist(db_session: Session, account: A
     assert a.id != b.id
     assert a.fingerprint != b.fingerprint
     rows = db_session.exec(select(Transaction)).all()
+
     assert len(rows) == 2
 
 
@@ -150,6 +150,7 @@ def test_soft_delete_hides_row_and_is_idempotent(db_session: Session, account: A
     page = transactions.list_transactions(db_session, TransactionFilters(), page=1, page_size=10)
     assert page.total == 0
     assert transactions.get_transaction(db_session, tx.id) is None
+
     # Deleting again is a no-op (returns None, not a crash).
     assert transactions.soft_delete_transaction(db_session, tx_id=tx.id) is None
 
@@ -172,6 +173,7 @@ def test_set_note_sets_clears_and_leaves_source_untouched(
     assert noted.source is original_source  # untouched
 
     cleared = transactions.set_note(db_session, tx_id=tx.id, note=None)
+
     assert cleared.note is None
 
 
@@ -202,6 +204,7 @@ def test_update_note_only_does_not_flip_source(
     changed = transactions.update_transaction(
         db_session, tx_id=tx.id, category_id=None, scope=tx.scope, note="just a note"
     )
+
     assert changed.source is TxSource.manual
 
 
@@ -213,4 +216,5 @@ def test_soft_delete_decrements_batch_record_count(db_session: Session, account:
 
     transactions.soft_delete_transaction(db_session, tx_id=a.id)
     db_session.refresh(batch)
+
     assert batch.record_count == 1  # kept in step with the delete

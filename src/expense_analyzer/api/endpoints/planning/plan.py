@@ -1,11 +1,11 @@
-"""Plan page: the monthly cashflow checklist (design §11, Phase 19).
+"""Plan page: the monthly cashflow checklist.
 
-Replaces the old Google-Sheet — income at the top, every monthly obligation
-below, "FOR LIVING" as the remainder. The user defines each repeating line once
+Income at the top, every monthly obligation below, "FOR LIVING" as the
+remainder. The user defines each repeating line once
 (:class:`~expense_analyzer.models.PlannedItem`); the month view is derived per
 ``?month=YYYY-MM`` from the active items and their paid status, with no "generate"
-step. Phase 19a is expected amounts + a manual paid tick + the FOR LIVING / overdue
-read-out; linking real transactions and loan-backed lines arrive in 19b.
+step. A line carries an expected amount and a manual paid tick; real
+transactions can be linked, and loan-backed lines derive from the loan schedule.
 
 Handlers stay thin: all DB access goes through
 :mod:`expense_analyzer.queries.planning.planned`. Bad input (blank name, unparseable
@@ -73,6 +73,7 @@ def _context(
         tolerance_pct=settings.loan_match_amount_tolerance_pct,
         viewer_id=user.id,
     )
+
     return {
         "user": user,
         "months": months,
@@ -105,22 +106,27 @@ def _parse_item_form(form: PlannedItemForm) -> tuple[str | None, dict | None]:
     PLN magnitude that ``direction`` signs (income +, expense −); blank means a
     variable item with no fixed figure (``expected_amount`` stays None)."""
     name = form.name.strip()
+
     if not name:
         return "Name is required.", None
 
     expected_amount: int | None = None
+
     if form.amount.strip():
         try:
             magnitude = parse_pln(form.amount)
         except MoneyParseError as exc:
             return f"Could not read the amount: {exc}", None
+
         if magnitude <= 0:
             return "Amount must be positive (or leave it blank for a variable item).", None
         expected_amount = magnitude if form.direction is TxDirection.income else -magnitude
 
     due_day: int | None = None
+
     if form.due_day.strip():
         due_day = opt_int(form.due_day.strip())
+
         if due_day is None or not 1 <= due_day <= 31:
             return "Due day must be a day of the month (1–31), or left blank.", None
 
@@ -179,6 +185,7 @@ def plan_page(
     edit_id = opt_int(edit)
     edit_item = planned_queries.get_planned_item(session, edit_id) if edit_id is not None else None
     extra: dict = {}
+
     if edit_item is not None:
         extra = {"edit_item": edit_item, "form": _item_form_from(edit_item)}
 
@@ -199,6 +206,7 @@ def create_item(
     selected = _safe_month(month)
 
     error, kwargs = _parse_item_form(form)
+
     if error is not None:
         return templates.TemplateResponse(
             request,
@@ -222,6 +230,7 @@ def edit_item(
     month: str = "",
 ) -> Response:
     item = planned_queries.get_planned_item(session, item_id)
+
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"item {item_id} not found"
@@ -231,6 +240,7 @@ def edit_item(
     selected = _safe_month(month)
 
     error, kwargs = _parse_item_form(form)
+
     if error is not None:
         return templates.TemplateResponse(
             request,
@@ -254,6 +264,7 @@ def delete_item(item_id: int, session: DbSession, month: str = Form("")) -> Redi
 @router.post("/{item_id}/toggle-active")
 def toggle_active(item_id: int, session: DbSession, month: str = Form("")) -> RedirectResponse:
     item = planned_queries.get_planned_item(session, item_id)
+
     if item is not None:
         planned_queries.set_active(session, item_id, not item.active)
 

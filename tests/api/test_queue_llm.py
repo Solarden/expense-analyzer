@@ -1,8 +1,8 @@
-"""LLM categorization (PR 2): query layer + the "classify now" orchestrator.
+"""LLM categorization: query layer + the "classify now" orchestrator.
 
 The Ollama client is stubbed (no network): a fake returns a fixed verdict, or
 raises :class:`OllamaError` to simulate a down Ollama host. The real HTTP client is
-covered in ``tests/unit/test_ollama.py``.
+covered by its own unit tests.
 """
 
 from collections.abc import Callable
@@ -27,9 +27,11 @@ class _FakeClient:
 
     def categorize(self, **_kw: object) -> LlmVerdict:
         self.calls += 1
+
         if self._error:
             raise OllamaError("Ollama host down")
         assert self._verdict is not None
+
         return self._verdict
 
 

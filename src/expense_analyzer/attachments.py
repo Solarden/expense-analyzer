@@ -1,9 +1,9 @@
-"""Local file storage for loan attachments (Phase 21).
+"""Local file storage for loan attachments.
 
 Loan documents (contracts, repayment schedules, payment proofs) are stored as
 plain files in a directory on the app's ``data/`` volume
 (see :data:`~expense_analyzer.config.Settings.attachments_path`). Local-only —
-nothing leaves the LAN, no OCR (keep-pi-fully-local). This module is the only
+nothing leaves the LAN, no OCR. This module is the only
 place that touches that directory; the DB-side metadata lives in
 :class:`~expense_analyzer.models.LoanDocument` (queried via
 :mod:`expense_analyzer.queries.planning.loan_documents`).
@@ -71,10 +71,13 @@ def sniff_content_type(data: bytes) -> str | None:
     """
     if data.startswith(b"%PDF-"):
         return "application/pdf"
+
     if data.startswith(b"\xff\xd8\xff"):
         return "image/jpeg"
+
     if data.startswith(b"\x89PNG\r\n\x1a\n"):
         return "image/png"
+
     # WebP: "RIFF" <4-byte size> "WEBP".
     if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return "image/webp"

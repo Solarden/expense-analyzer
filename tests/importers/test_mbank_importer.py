@@ -76,6 +76,7 @@ def test_description_whitespace_collapsed(sample_bytes: bytes):
 def test_cp1250_fallback_decodes_polish_characters():
     # Older mBank exports were windows-1250; the UTF-8 path fails and we fall back.
     txns = MBankCsvImporter().parse(_SAMPLE.encode("cp1250")).transactions
+
     assert "ŁÓDŹ" in txns[0].raw_description
 
 
@@ -90,6 +91,7 @@ def test_malformed_amount_raises_with_line_number():
         "#Data operacji;#Opis operacji;#Rachunek;#Kategoria;#Kwota;\r\n"
         '2026-05-31;"x";"eKonto 0000 ... 0000";"Inne";not-a-number PLN;;\r\n'
     ).encode("utf-8-sig")
+
     with pytest.raises(ImporterError, match="line 2"):
         MBankCsvImporter().parse(bad)
 
@@ -112,6 +114,7 @@ def test_real_format_fixture_regression(fixtures_dir):
 
 def test_edge_cases_fixture_tolerates_blank_line_mid_table(fixtures_dir):
     result = MBankCsvImporter().parse((fixtures_dir / "mbank" / "edge_cases.csv").read_bytes())
+
     # Zero, a large amount, a positive refund, a messy-whitespace expense — the
     # blank line in the middle of the table is skipped, not treated as the end.
     assert [t.amount for t in result.transactions] == [0, 123456789, 9999, -1230]

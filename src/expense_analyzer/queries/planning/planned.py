@@ -1,4 +1,4 @@
-"""Planned-item queries — the DB side of the monthly cashflow checklist (Phase 19).
+"""Planned-item queries — the DB side of the monthly cashflow checklist.
 
 A :class:`~expense_analyzer.models.PlannedItem` is a recurring obligation the user
 defines once (salary, rent, ZUS, a subscription); the per-month view is **derived**
@@ -7,8 +7,8 @@ items and their :class:`~expense_analyzer.models.PlannedItemPayment` rows for th
 selected month to produce the list, the income/charge totals and the "FOR LIVING"
 remainder.
 
-Phase 19a covered manual status (``mark_paid``/``mark_unpaid`` set/clear ``paid_at``).
-Phase 19b adds, on top of the same model (no migration):
+Manual status is ``mark_paid``/``mark_unpaid`` (set/clear ``paid_at``). On top
+of the same model:
 
 - **Real-transaction linking** for non-loan items (``link_transaction``/
   ``unlink_transaction`` set/clear ``PlannedItemPayment.transaction_id``) plus
@@ -45,6 +45,7 @@ def list_planned_items(session: Session, *, active_only: bool = False) -> list[P
     list shows everything so a retired item can be reactivated.
     """
     stmt = select(PlannedItem)
+
     if active_only:
         stmt = stmt.where(col(PlannedItem.active).is_(True))
 
@@ -106,6 +107,7 @@ def update_planned_item(
     """Update a planned item's definition (not its order or active flag — those have
     their own actions). Returns None if it doesn't exist."""
     item = session.get(PlannedItem, item_id)
+
     if item is None:
         return None
 
@@ -131,6 +133,7 @@ def delete_planned_item(session: Session, item_id: int) -> bool:
     it; the real transactions a 19b link points at are untouched (the link lives on
     the payment row, which is what's deleted)."""
     item = session.get(PlannedItem, item_id)
+
     if item is None:
         return False
 
@@ -147,6 +150,7 @@ def set_active(session: Session, item_id: int, active: bool) -> bool:
     Retiring keeps the item and its history but drops it from the month view — the
     soft alternative to deleting a line that's simply no longer due."""
     item = session.get(PlannedItem, item_id)
+
     if item is None:
         return False
 
@@ -165,10 +169,12 @@ def move_item(session: Session, item_id: int, *, up: bool) -> bool:
     """
     items = list_planned_items(session)
     index = next((i for i, it in enumerate(items) if it.id == item_id), None)
+
     if index is None:
         return False
 
     swap_with = index - 1 if up else index + 1
+
     if swap_with < 0 or swap_with >= len(items):
         return False
 
@@ -194,12 +200,13 @@ def mark_paid(session: Session, *, planned_item_id: int, month: str) -> bool:
 
     Upserts the ``(item, month)`` status row with ``paid_at`` set. Idempotent — a
     second tick on an already-paid month is a no-op. Returns False if the item is
-    missing. (Linking a real transaction instead of a manual tick is Phase 19b.)
+    missing.
     """
     if session.get(PlannedItem, planned_item_id) is None:
         return False
 
     payment = _payment_for(session, planned_item_id, month)
+
     if payment is None:
         payment = PlannedItemPayment(
             planned_item_id=planned_item_id, month=month, paid_at=utc_now()
@@ -220,6 +227,7 @@ def mark_unpaid(session: Session, *, planned_item_id: int, month: str) -> bool:
     Only removes a manual tick (a row with no linked transaction); a 19b
     transaction link is unlinked through its own action, not here."""
     payment = _payment_for(session, planned_item_id, month)
+
     if payment is None or payment.transaction_id is not None:
         return False
 
@@ -244,14 +252,18 @@ def link_transaction(
     # Viewer-scoped (IDOR gate): another member's private tx reads as absent here,
     # so it can't be linked; the viewer's own private tx can.
     tx = _get_visible(session, tx_id, viewer_id=viewer_id)
+
     if item is None or item.loan_id is not None:
         return False
+
     if tx is None or tx.loan_id is not None:
         return False
+
     if _is_tx_linked(session, tx_id, exclude=(planned_item_id, month)):
         return False
 
     payment = _payment_for(session, planned_item_id, month)
+
     if payment is None:
         payment = PlannedItemPayment(
             planned_item_id=planned_item_id, month=month, transaction_id=tx_id
@@ -259,6 +271,7 @@ def link_transaction(
     else:
         payment.transaction_id = tx_id
         payment.paid_at = None  # a real link supersedes a manual tick
+
     session.add(payment)
     session.commit()
 
@@ -271,6 +284,7 @@ def unlink_transaction(session: Session, *, planned_item_id: int, month: str) ->
     Removes only a transaction link — a manual tick is cleared via :func:`mark_unpaid`.
     Returns False if there was no linked transaction."""
     payment = _payment_for(session, planned_item_id, month)
+
     if payment is None or payment.transaction_id is None:
         return False
 
@@ -309,6 +323,7 @@ def last_linked_amount(
         )
         .order_by(col(PlannedItemPayment.month).desc())
     ).first()
+
     if payment is None or payment.transaction_id is None:
         return None
 
@@ -354,11 +369,13 @@ class PlannedRow:
     @property
     def is_income(self) -> bool:
         amount = self.effective_amount
+
         return amount is not None and amount > 0
 
     @property
     def is_expense(self) -> bool:
         amount = self.effective_amount
+
         return amount is None or amount < 0
 
 
@@ -451,11 +468,13 @@ def plan_overview(
 
     schedules: dict[int, Schedule | None] = {}
     rows: list[PlannedRow] = []
+
     for item in items:
         schedule = _resolve_schedule(session, item.loan_id, schedules) if item.loan_id else None
 
         if schedule is not None:
             installment = _installment_for_month(schedule, month)
+
             if installment is None:
                 continue  # no installment due this month -> auto-expire from the view
             row = _loan_backed_row(
@@ -469,14 +488,17 @@ def plan_overview(
         rows.append(row)
 
     income_total = charges_total = left_to_pay = unestimated_count = 0
+
     for row in rows:
         amount = row.effective_amount
+
         if amount is None:
             unestimated_count += 1
         elif amount > 0:
             income_total += amount
         else:
             charges_total += -amount
+
             if not row.paid:
                 left_to_pay += -amount
 
@@ -511,6 +533,7 @@ def _loan_backed_row(
     expected = -installment.payment  # an installment is an outflow
     name = f"{item.name} rata {installment.index}/{loan.term_months}"
     title = name
+
     if loan.contract_number:
         title = f"{name} umowa nr {loan.contract_number}"
 
@@ -635,6 +658,7 @@ def suggest_links(
     ]
 
     out: dict[int, list[Transaction]] = {}
+
     for row in overview.rows:
         if row.paid or row.is_loan_backed:
             continue
@@ -678,10 +702,13 @@ def _match_candidates(
         )
     else:
         matches = [tx for tx in candidates if tx.amount < 0]  # variable -> treat as a charge
+
         if category_id is not None:
             same_category = [tx for tx in matches if tx.category_id == category_id]
+
             if same_category:
                 matches = same_category
+
         matches.sort(key=lambda tx: abs((tx.booked_date - due).days))
 
     return matches[:limit]
@@ -700,11 +727,14 @@ def for_living_trend(
     today = today or local_today()
     year, month = today.year, today.month
     keys: list[str] = []
+
     for _ in range(max(1, months)):
         keys.append(f"{year:04d}-{month:02d}")
         month -= 1
+
         if month == 0:
             month, year = 12, year - 1
+
     keys.reverse()
 
     return [

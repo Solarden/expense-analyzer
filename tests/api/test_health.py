@@ -14,6 +14,7 @@ def test_health_reports_ok_and_dialect(client: TestClient):
     body = resp.json()
     assert body["status"] == "ok"
     assert body["database"] == "ok"
+
     # Whatever engine the suite runs on, the dialect is reported for diagnostics.
     assert body["dialect"] in {"sqlite", "postgresql"}
 

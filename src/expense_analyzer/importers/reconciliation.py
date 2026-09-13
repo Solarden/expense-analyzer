@@ -1,4 +1,4 @@
-"""Reconciliation (design §6): free error detection on a parsed export.
+"""Reconciliation: free error detection on a parsed export.
 
 The job is to catch a dropped or double-counted row *at import time* rather than
 discovering weeks later that the dashboard stopped matching the bank. It is
@@ -42,6 +42,7 @@ def _check_declared_totals(result: ParseResult, details: list[str]) -> bool:
             details.append(
                 f"Inflow {format_pln(inflow)} ≠ declared {format_pln(result.declared_inflow)}."
             )
+
     if result.declared_outflow is not None:
         if outflow == result.declared_outflow:
             details.append(f"Outflow {format_pln(outflow)} matches declared total.")
@@ -63,15 +64,18 @@ def _check_balance_continuity(
     oldest-first; we accept either, since a genuine gap breaks both relations.
     """
     chain = [t for t in transactions if t.balance_after is not None]
+
     if len(chain) < 2:
         return True
 
     breaks = 0
+
     for prev, cur in zip(chain, chain[1:], strict=False):
         # newest-first: prev is the newer row, so prev.balance = cur.balance + prev.amount
         newest_first = prev.balance_after - prev.amount == cur.balance_after
         # oldest-first: cur is the newer row, so cur.balance = prev.balance + cur.amount
         oldest_first = prev.balance_after + cur.amount == cur.balance_after
+
         if not (newest_first or oldest_first):
             breaks += 1
 
@@ -80,9 +84,11 @@ def _check_balance_continuity(
             f"Running balance breaks at {breaks} of {len(chain) - 1} steps "
             "— a row may be missing or double-counted."
         )
+
         return False
 
     details.append(f"Running balance consistent across {len(chain)} rows.")
+
     return True
 
 

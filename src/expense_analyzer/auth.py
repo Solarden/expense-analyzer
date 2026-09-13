@@ -41,6 +41,10 @@ def verify_password(plain: str, password_hash: str) -> bool:
 
 
 def login_session(request: Request, user: Owner) -> None:
+    # Clear first: an anonymous visitor already carries a signed session (the lens is
+    # written into it before login), so authenticating into that same session would
+    # let a planted cookie survive the login as a fixated session.
+    request.session.clear()
     request.session[_SESSION_USER_KEY] = user.id
 
 
@@ -51,9 +55,11 @@ def logout_session(request: Request) -> None:
 def current_user(request: Request, session: Session = Depends(get_session)) -> Owner | None:
     """The logged-in user, or None. Inactive/unknown users count as logged out."""
     user_id = request.session.get(_SESSION_USER_KEY)
+
     if user_id is None:
         return None
     user = users.get(session, user_id)
+
     if user is None or not user.is_active:
         return None
 

@@ -1,7 +1,7 @@
-"""Pure-logic tests for the categorization classifier (Phase 11, layer 2).
+"""Pure-logic tests for the categorization classifier (layer 2).
 
 No DB, no session — just the TF-IDF + logistic-regression model and its
-cold-start guards (mirrors test_rules.py for the deterministic layer)."""
+cold-start guards."""
 
 from expense_analyzer.classifier import (
     MIN_DISTINCT_CATEGORIES,
@@ -36,6 +36,7 @@ def test_train_returns_none_below_min_samples():
 def test_train_returns_none_with_single_category():
     # Enough rows, but only one class -> nothing to discriminate.
     samples = [TrainingSample("BIEDRONKA", FOOD) for _ in range(10)]
+
     assert train(samples, min_samples=4) is None
 
 
@@ -45,6 +46,7 @@ def test_train_drops_blank_text_rows():
         TrainingSample("BIEDRONKA", FOOD),
         TrainingSample("NETFLIX", FUN),
     ]
+
     assert train(samples, min_samples=5) is None
 
 

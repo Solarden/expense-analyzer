@@ -1,4 +1,4 @@
-"""Net worth page (design §7.3, §9): assets minus debt across all accounts.
+"""Net worth page: assets minus debt across all accounts.
 
 A read-only summary — one headline number plus a per-account breakdown. The math
 lives in :mod:`expense_analyzer.queries.wealth.net_worth`; this handler just renders it.
@@ -20,7 +20,7 @@ router = APIRouter(
 
 @router.get("", response_class=HTMLResponse)
 def net_worth_page(request: Request, user: CurrentUser, session: DbSession) -> HTMLResponse:
-    balances = net_worth.account_balances(session)
+    balances = net_worth.account_balances(session, viewer_id=user.id)
 
     # A single chart axis lets a large mortgage squash every asset bar to a hair,
     # so split the figures: headline cards plus two independently-scaled charts.
@@ -28,13 +28,16 @@ def net_worth_page(request: Request, user: CurrentUser, session: DbSession) -> H
     total = assets = liabilities = net_worth_excl_loans = 0
     assets_chart: dict[str, list] = {"labels": [], "data": []}
     liabilities_chart: dict[str, list] = {"labels": [], "data": []}
+
     for b in balances:
         total += b.balance
+
         # "Net worth without the mortgage" — the number the household actually
         # steers by month to month. Excludes every loan account, not just the
         # largest.
         if b.type != AccountType.loan:
             net_worth_excl_loans += b.balance
+
         if b.balance > 0:
             assets += b.balance
             assets_chart["labels"].append(b.name)

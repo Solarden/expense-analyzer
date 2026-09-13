@@ -1,5 +1,4 @@
-"""Categorization rules: query layer, Rules page, and the import-time hook
-(Phase 10, design §7.7).
+"""Categorization rules: query layer, Rules page, and the import-time hook.
 
 HTTP tests use ``auth_client`` (logged in), sharing the temp engine with
 ``db_session`` so a rule created over HTTP is visible to a query-layer assertion.
@@ -23,6 +22,7 @@ from expense_analyzer.models import (
     TxSource,
 )
 from expense_analyzer.queries.categorize import rules as rq
+from expense_analyzer.queries.core import users
 
 # --- query layer ----------------------------------------------------------
 
@@ -37,6 +37,7 @@ def test_create_and_list_rules_in_evaluation_order(
     rq.create_rule(db_session, pattern="B", category_id=fun.id, priority=10)
 
     patterns = [r.pattern for r in rq.list_rules(db_session)]
+
     assert patterns == ["B", "A"]
 
 
@@ -137,6 +138,7 @@ def test_apply_rules_leaves_categorized_transfer_leg(
 
     assert rq.apply_rules(db_session) == 0
     db_session.refresh(tx)
+
     assert tx.category_id == transfer.id
 
 
@@ -159,6 +161,7 @@ def test_apply_rules_re_categorizes_previous_rule_rows(
 
     assert rq.apply_rules(db_session) == 1
     db_session.refresh(tx)
+
     assert tx.category_id == new.id
 
 
@@ -179,6 +182,7 @@ def test_apply_rules_uses_raw_description_fallback(
 
     assert rq.apply_rules(db_session) == 1
     db_session.refresh(tx)
+
     assert tx.category_id == cat.id
 
 
@@ -222,13 +226,22 @@ def test_import_auto_categorizes_new_rows(
             NormalizedTransaction(date(2026, 5, 2), -1234, "SOME OTHER SHOP"),
         ]
     )
+    # owner_id mirrors the upload endpoint, which always stamps the uploader: the
+    # rows land private-to-them, and the post-import rule pass is scoped to match.
+    alice = users.create_user(db_session, username="alice", name="A", password="pw")
     summary = run_import(
-        db_session, account_id=account.id, importer=importer, filename="x.csv", data=b""
+        db_session,
+        account_id=account.id,
+        importer=importer,
+        filename="x.csv",
+        data=b"",
+        owner_id=alice.id,
     )
 
     assert summary.new == 2
     assert summary.auto_categorized == 1  # only the Biedronka row matched
     rows = db_session.exec(select(Transaction).where(Transaction.category_id == food.id)).all()
+
     assert len(rows) == 1
 
 
@@ -314,6 +327,7 @@ def test_apply_now_endpoint_reports_count(
     assert resp.headers["location"] == "/dashboard/rules?applied=1"
     # The follow-up GET renders the result flash.
     page = auth_client.get("/dashboard/rules?applied=1")
+
     assert "1 transaction categorized" in page.text
 
 
@@ -322,4 +336,5 @@ def test_prefill_pattern_in_form(
 ) -> None:
     make_category(name="Food")  # the create form only renders when a category exists
     resp = auth_client.get("/dashboard/rules?pattern=BIEDRONKA")
+
     assert 'value="BIEDRONKA"' in resp.text

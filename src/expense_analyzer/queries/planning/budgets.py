@@ -1,8 +1,8 @@
 """Budget queries — per-category monthly limits and how they compare to spending.
 
-The DB side of Phase 8 (design §7.6). A :class:`~expense_analyzer.models.Budget`
-is either a **recurring** default (``month is None``, applies every month) or a
-**one-off override** for a single ``"YYYY-MM"`` that wins for that month only.
+A :class:`~expense_analyzer.models.Budget` is either a **recurring** default
+(``month is None``, applies every month) or a **one-off override** for a single
+``"YYYY-MM"`` that wins for that month only.
 
 :func:`set_budget` is an upsert (find-or-update by category + month), so the app —
 the single writer — never creates a duplicate, including a second recurring row
@@ -34,8 +34,10 @@ def list_budgets(
     is only its owner's. ``viewer_id=None`` (the default) sees household only — the
     safe default for ambient/background callers, matching ``visible_to``."""
     stmt = select(Budget).order_by(col(Budget.category_id), col(Budget.month).nulls_first())
+
     if scope is not None:
         stmt = stmt.where(Budget.scope == scope)
+
     if viewer_id is None:
         stmt = stmt.where(Budget.scope == Scope.household)
     else:
@@ -51,8 +53,10 @@ def _get_visible_budget(
     else None. The single-row IDOR gate for the edit/delete endpoints, mirroring
     ``queries.money.transactions._get_visible``."""
     budget = session.get(Budget, budget_id)
+
     if budget is None:
         return None
+
     if budget.scope is Scope.private and budget.owner_id != viewer_id:
         return None
 
@@ -106,6 +110,7 @@ def set_budget(
         )
     else:
         budget.limit_amount = limit_amount
+
     session.add(budget)
     session.commit()
     session.refresh(budget)
@@ -121,6 +126,7 @@ def delete_budget(session: Session, budget_id: int, *, viewer_id: int | None = N
     a wrong limit is just re-entered, so this is a hard delete.
     """
     budget = _get_visible_budget(session, budget_id, viewer_id=viewer_id)
+
     if budget is None:
         return False
 
@@ -145,6 +151,7 @@ def effective_limits(budgets: list[Budget], month: str) -> dict[int, EffectiveLi
     overrides = {b.category_id: b.limit_amount for b in budgets if b.month == month}
 
     limits: dict[int, EffectiveLimit] = {}
+
     for category_id in recurring.keys() | overrides.keys():
         if category_id in overrides:
             limits[category_id] = EffectiveLimit(overrides[category_id], is_override=True)
@@ -221,17 +228,20 @@ def budget_overview(
     month figures anyway. Omit it for a self-contained single scan.
     """
     limits = effective_limits(list_budgets(session, scope=scope, viewer_id=viewer_id), month)
+
     if not limits:
         return []
 
     category_names = {
         c.id: c.name for c in session.exec(select(Category)).all() if c.id is not None
     }
+
     if spendable is None:
         # Spend must match the limits' scope: household budgets track household
         # spend; private budgets track the viewer's own private spend.
         spend_lens = Lens.home if scope is Scope.household else Lens.private
         spendable = stats.spendable_transactions(session, viewer_id=viewer_id, lens=spend_lens)
+
     # Transfer/loan-excluded month spend per category (the pure summary is cheap;
     # the DB scan it walks is what `spendable` lets the caller share).
     summary = stats.month_summary(spendable, month, category_names)

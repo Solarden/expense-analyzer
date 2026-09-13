@@ -30,11 +30,14 @@ def visible_to(
     One grouped ``or_(...)`` so it composes correctly with any other ``OR`` already
     on the query (e.g. the transaction-list search)."""
     household = Transaction.scope == Scope.household
+
     if lens is Lens.home:
         return query.where(household)
+
     if viewer_id is None:
         # No viewer: only ``all`` is meaningful, and it collapses to household.
         return query.where(household if lens is Lens.all else false())
+
     mine = and_(Transaction.scope == Scope.private, Transaction.owner_id == viewer_id)
 
     return query.where(mine if lens is Lens.private else or_(household, mine))
