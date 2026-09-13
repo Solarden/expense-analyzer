@@ -58,8 +58,14 @@ def collect_metrics(session: Session) -> list[Metric]:
     its own threshold automations off them.
     """
     today = local_today()
+    # No viewer: every figure here collapses to household-only, so a member's private
+    # rows never reach the broker (see queries.visibility).
     metrics = [
-        Metric("net_worth", "Net Worth", _pln(net_worth_queries.current_net_worth(session))),
+        Metric(
+            "net_worth",
+            "Net Worth",
+            _pln(net_worth_queries.current_net_worth(session, viewer_id=None)),
+        ),
     ]
 
     month = today.strftime("%Y-%m")
@@ -91,7 +97,7 @@ def collect_metrics(session: Session) -> list[Metric]:
             name=f"{balance.name} Balance",
             value=_pln(balance.balance),
         )
-        for balance in net_worth_queries.account_balances(session)
+        for balance in net_worth_queries.account_balances(session, viewer_id=None)
     ]
 
     # Reuse the spendable scan already loaded above instead of re-querying.

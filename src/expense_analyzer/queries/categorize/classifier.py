@@ -151,11 +151,25 @@ def _candidate_filter(query):
     )
 
 
+def classification_candidates(session: Session, *, viewer_id: int | None) -> list[Transaction]:
+    """The rows a categorization run may write, scoped to one viewer.
+
+    Categorizing writes to the row and, on the LLM path, sends its description to
+    the model host — so the candidate set is bounded by the same visibility rule as
+    the review queue that displays it.
+    """
+    return list(
+        session.exec(visible_to(_candidate_filter(select(Transaction)), viewer_id=viewer_id)).all()
+    )
+
+
 def _train_model(session: Session, settings: Settings) -> Classifier | None:
     return train(_training_samples(session), min_samples=settings.classifier_min_training_samples)
 
 
-def classify(session: Session, *, settings: Settings | None = None) -> ClassifyResult:
+def classify(
+    session: Session, *, settings: Settings | None = None, viewer_id: int | None = None
+) -> ClassifyResult:
     """Train on confirmed labels and auto-categorize confident candidates.
 
     Returns a :class:`ClassifyResult`. A confident prediction
@@ -164,7 +178,7 @@ def classify(session: Session, *, settings: Settings | None = None) -> ClassifyR
     the review queue. On a cold start (the model can't be trained) nothing changes.
     """
     settings = settings or get_settings()
-    candidates = list(session.exec(_candidate_filter(select(Transaction))).all())
+    candidates = classification_candidates(session, viewer_id=viewer_id)
 
     model = _train_model(session, settings)
 

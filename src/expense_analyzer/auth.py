@@ -41,6 +41,10 @@ def verify_password(plain: str, password_hash: str) -> bool:
 
 
 def login_session(request: Request, user: Owner) -> None:
+    # Clear first: an anonymous visitor already carries a signed session (the lens is
+    # written into it before login), so authenticating into that same session would
+    # let a planted cookie survive the login as a fixated session.
+    request.session.clear()
     request.session[_SESSION_USER_KEY] = user.id
 
 

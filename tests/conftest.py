@@ -53,10 +53,10 @@ os.environ["EA_DATABASE_URL"] = os.environ.get(
     "EA_TEST_DATABASE_URL",
     "postgresql+psycopg://ea_test:ea_test@localhost:55432/ea_test",
 )
-# Loan attachments (Phase 21) land in a throwaway temp dir, never the real data/.
+# Loan attachments land in a throwaway temp dir, never the real data/.
 os.environ["EA_ATTACHMENTS_PATH"] = str(_TEST_DATA_DIR / "attachments")
 os.environ.setdefault("EA_SECRET_KEY", "test-secret-not-for-production")  # app refuses default
-# Layer 3 (Phase 12) off by default in the suite: its logic is tested directly with
+# Layer 3 off by default in the suite: its logic is tested directly with
 # an injected fake embedder, so the real path must never load the heavy
 # sentence-transformers model (slow, and would reach the network for the weights).
 # Endpoint tests then exercise the fail-safe render (no suggestions, page still OK).
@@ -187,7 +187,6 @@ def db_session(_database: Engine) -> Iterator[Session]:
     Every table is wiped after each test (see ``_reset_all_tables``), so tests
     start from a clean slate — same semantics as the old per-test
     create_all/drop_all, at a fraction of the PostgreSQL cost."""
-
     try:
         with Session(_database) as session:
             yield session
@@ -200,7 +199,7 @@ def db_session(_database: Engine) -> Iterator[Session]:
 # needs several varied instances just calls it again. This covers the case that
 # would otherwise tempt factory_boy — without a new dependency or session wiring
 # (factory_boy is deferred until the model count/complexity actually grows, e.g.
-# Loan/Budget/InvestmentPosition in Phase 5-6).
+# Loan/Budget/InvestmentPosition).
 
 
 class FakeImporter:
@@ -252,7 +251,6 @@ def make_account(db_session: Session) -> Callable[..., Account]:
 @pytest.fixture
 def account(make_account: Callable[..., Account]) -> Account:
     """A ready-made bank account — the common 'I just need an account' case."""
-
     return make_account()
 
 
@@ -592,7 +590,6 @@ def _build_xtb_xlsx(
 @pytest.fixture
 def xtb_xlsx() -> Callable[..., bytes]:
     """Returns the in-memory XTB .xlsx builder (see :func:`_build_xtb_xlsx`)."""
-
     return _build_xtb_xlsx
 
 

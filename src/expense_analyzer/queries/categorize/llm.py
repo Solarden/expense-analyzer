@@ -22,11 +22,11 @@ import logging
 from sqlmodel import Session, col, select
 
 from expense_analyzer.config import Settings, get_settings
-from expense_analyzer.models import Category, CategoryKind, Transaction, TxSource
+from expense_analyzer.models import Category, CategoryKind, TxSource
 from expense_analyzer.ollama import OllamaClient, OllamaError
 from expense_analyzer.queries.categorize.classifier import (
     ClassifyResult,
-    _candidate_filter,
+    classification_candidates,
     classify,
 )
 
@@ -44,7 +44,11 @@ def _learnable_categories(session: Session) -> list[Category]:
 
 
 def classify_llm(
-    session: Session, *, settings: Settings | None = None, client: OllamaClient | None = None
+    session: Session,
+    *,
+    settings: Settings | None = None,
+    client: OllamaClient | None = None,
+    viewer_id: int | None = None,
 ) -> ClassifyResult:
     """Categorize uncategorized rows via the Ollama host, one call per row.
 
@@ -53,7 +57,7 @@ def classify_llm(
     the fallback only reconsiders what's left.
     """
     settings = settings or get_settings()
-    candidates = list(session.exec(_candidate_filter(select(Transaction))).all())
+    candidates = classification_candidates(session, viewer_id=viewer_id)
     categories = _learnable_categories(session)
 
     if not candidates or not categories:
@@ -99,22 +103,26 @@ def classify_llm(
 
 
 def categorize_uncategorized(
-    session: Session, *, settings: Settings | None = None, client: OllamaClient | None = None
+    session: Session,
+    *,
+    settings: Settings | None = None,
+    client: OllamaClient | None = None,
+    viewer_id: int | None = None,
 ) -> ClassifyResult:
     """The "classify now" entry point: LLM (Ollama host) primary, classifier fallback.
 
     With the LLM enabled and configured, try the Ollama host first; on :class:`OllamaError`
     (unreachable/slow/garbled) log a warning and fall back to the local classifier.
-    With the LLM off, this is just the classifier — the pre-PR-2 behaviour.
+    With the LLM off, this is just the classifier.
     """
     settings = settings or get_settings()
 
     if settings.llm_enabled and settings.llm_base_url:
         try:
-            return classify_llm(session, settings=settings, client=client)
+            return classify_llm(session, settings=settings, client=client, viewer_id=viewer_id)
         except OllamaError:
             # A silent fallback would hide a down Ollama host — the owner would think the
             # LLM is working when it never runs. Say so, then use the local model.
             log.warning("LLM categorizer unreachable; falling back to the local classifier")
 
-    return classify(session, settings=settings)
+    return classify(session, settings=settings, viewer_id=viewer_id)

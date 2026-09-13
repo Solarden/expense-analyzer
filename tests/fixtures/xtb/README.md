@@ -29,4 +29,4 @@ cf  # see conftest._build_xtb_xlsx for the exact calls (sample / edge_cases / br
 PY
 ```
 
-(see the generation block in the Phase 6 work / `conftest._build_xtb_xlsx`).
+(see `conftest._build_xtb_xlsx`).

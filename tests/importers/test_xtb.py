@@ -154,3 +154,58 @@ def test_zip_bomb_part_rejected(
 
     with pytest.raises(ImporterError, match="zip bomb"):
         XTBImporter().parse(xtb_xlsx())
+
+
+_ENTITY_DTD = (
+    b'<!DOCTYPE worksheet [<!ENTITY a0 "AAAAAAAAAA">'
+    b'<!ENTITY a1 "&a0;&a0;&a0;&a0;&a0;&a0;&a0;&a0;&a0;&a0;">]>'
+)
+_ENTITY_BODY = b"\n<worksheet><sheetData>&a1;</sheetData></worksheet>"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param(b'<?xml version="1.0"?>\n' + _ENTITY_DTD + _ENTITY_BODY, id="at-offset-0"),
+        # A byte scan with a fixed window misses this: XML allows unlimited comments
+        # between the declaration and the DTD.
+        pytest.param(
+            b'<?xml version="1.0"?>\n<!--' + b"P" * 6000 + b"-->\n" + _ENTITY_DTD + _ENTITY_BODY,
+            id="padded-past-a-scan-window",
+        ),
+        # And an ASCII pattern never matches these bytes at all, though expat still
+        # parses the document via the BOM.
+        pytest.param(
+            (
+                '<?xml version="1.0" encoding="UTF-16"?>\n'
+                + _ENTITY_DTD.decode()
+                + _ENTITY_BODY.decode()
+            ).encode("utf-16"),
+            id="utf-16",
+        ),
+    ],
+)
+def test_entity_expansion_is_refused(xtb_xlsx: Callable[..., bytes], payload: bytes) -> None:
+    """A DTD is refused wherever it sits, in whatever encoding.
+
+    ElementTree resolves no external entities, but it does expand internal ones, so a
+    few KB of nested definitions can demand hundreds of MB. The guard hooks the parsed
+    grammar rather than scanning bytes, which is what makes the last two cases fail.
+    """
+    import io
+    import zipfile
+
+    original = xtb_xlsx()
+    buf = io.BytesIO()
+
+    # workbook.xml is the first part the parser reads, so the guard must fire there.
+    with (
+        zipfile.ZipFile(io.BytesIO(original)) as src,
+        zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as dst,
+    ):
+        for item in src.infolist():
+            body = payload if item.filename == "xl/workbook.xml" else src.read(item.filename)
+            dst.writestr(item.filename, body)
+
+    with pytest.raises(ImporterError, match="document type declaration"):
+        XTBImporter().parse(buf.getvalue())

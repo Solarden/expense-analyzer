@@ -1,4 +1,4 @@
-/* Loan form progressive disclosure (Phase 17). Shared by the create form
+/* Loan form progressive disclosure. Shared by the create form
  * (loans.html) and the edit form (loan_edit.html) — extracted instead of
  * duplicating the IIFE in both, mirroring the vendored chart-theme.js.
  *

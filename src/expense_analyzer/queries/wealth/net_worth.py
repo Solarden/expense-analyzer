@@ -21,6 +21,7 @@ from expense_analyzer.loans import LoanScheduleError
 from expense_analyzer.models import AccountType, Transaction
 from expense_analyzer.queries.core.accounts import list_accounts
 from expense_analyzer.queries.planning import loans as loan_queries
+from expense_analyzer.queries.visibility import visible_to
 from expense_analyzer.queries.wealth import investments
 
 
@@ -33,14 +34,17 @@ class AccountBalance:
     note: str | None = None  # e.g. why a loan balance couldn't be computed
 
 
-def _cash_balance(session: Session, account_id: int) -> int:
-    """Sum of live transaction amounts on a bank/cash account (minor units)."""
-    total = session.exec(
-        select(func.coalesce(func.sum(Transaction.amount), 0)).where(
-            Transaction.account_id == account_id,
-            col(Transaction.deleted_at).is_(None),
-        )
-    ).one()
+def _cash_balance(session: Session, account_id: int, *, viewer_id: int | None) -> int:
+    """Sum of live transaction amounts on a bank/cash account (minor units).
+
+    Viewer-scoped like every other total: a balance that summed another member's
+    private rows would leak their history as an aggregate.
+    """
+    query = select(func.coalesce(func.sum(Transaction.amount), 0)).where(
+        Transaction.account_id == account_id,
+        col(Transaction.deleted_at).is_(None),
+    )
+    total = session.exec(visible_to(query, viewer_id=viewer_id)).one()
 
     return int(total)
 
@@ -52,15 +56,19 @@ def _loan_for_account(session: Session, account_id: int) -> int | None:
     ).first()
 
 
-def account_balances(session: Session) -> list[AccountBalance]:
-    """Current balance per account, in declaration order from :func:`list_accounts`."""
+def account_balances(session: Session, *, viewer_id: int | None) -> list[AccountBalance]:
+    """Current balance per account, in declaration order from :func:`list_accounts`.
+
+    Cash balances are viewer-scoped. Portfolio and loan figures are not: positions
+    and loans carry no scope or owner, they are shared household reference data.
+    """
     balances: list[AccountBalance] = []
 
     for account in list_accounts(session):
         note: str | None = None
 
         if account.type in (AccountType.bank, AccountType.cash):
-            balance = _cash_balance(session, account.id)
+            balance = _cash_balance(session, account.id, viewer_id=viewer_id)
         elif account.type == AccountType.portfolio:
             balance = investments.portfolio_value(session, account.id)
         elif account.type == AccountType.loan:
@@ -91,6 +99,6 @@ def account_balances(session: Session) -> list[AccountBalance]:
     return balances
 
 
-def current_net_worth(session: Session) -> int:
+def current_net_worth(session: Session, *, viewer_id: int | None) -> int:
     """Sum of every account balance (assets positive, loan debt negative)."""
-    return sum(b.balance for b in account_balances(session))
+    return sum(b.balance for b in account_balances(session, viewer_id=viewer_id))

@@ -20,7 +20,7 @@ router = APIRouter(
 
 @router.get("", response_class=HTMLResponse)
 def net_worth_page(request: Request, user: CurrentUser, session: DbSession) -> HTMLResponse:
-    balances = net_worth.account_balances(session)
+    balances = net_worth.account_balances(session, viewer_id=user.id)
 
     # A single chart axis lets a large mortgage squash every asset bar to a hair,
     # so split the figures: headline cards plus two independently-scaled charts.

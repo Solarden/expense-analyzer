@@ -3,6 +3,12 @@ services:
   app:
     build: .
     restart: unless-stopped
+    # A Python web server needs no Linux capabilities, and nothing here ever wants
+    # to gain privileges through a setuid binary.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       # An existing PostgreSQL server on your LAN (NOT a service of this
       # compose). Full URL incl. credentials, e.g.
@@ -53,6 +59,12 @@ services:
   worker:
     build: .
     restart: unless-stopped
+    # A Python web server needs no Linux capabilities, and nothing here ever wants
+    # to gain privileges through a setuid binary.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       # Same PostgreSQL server as the app (see above).
       EA_DATABASE_URL: ${EA_DATABASE_URL:?set EA_DATABASE_URL in your environment or .env}
@@ -83,6 +95,13 @@ services:
       context: .
       dockerfile: Dockerfile.caddy
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # The only capability it needs: binding :80/:443.
+      - NET_BIND_SERVICE
     environment:
       # The domain you reach the app at (e.g. expense.example.com); Caddy issues
       # a trusted Let's Encrypt cert for it via DNS-01. Must resolve to the host's

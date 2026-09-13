@@ -16,6 +16,7 @@ it manually if a removed rule left a stale tag.
 from sqlmodel import Session, col, select
 
 from expense_analyzer.models import Rule, Transaction, TxSource
+from expense_analyzer.queries.visibility import visible_to
 from expense_analyzer.rules import RuleSpec, match_category, sort_rules
 
 
@@ -66,9 +67,12 @@ def _rule_specs(rules: list[Rule]) -> list[RuleSpec]:
     )
 
 
-def apply_rules(session: Session) -> int:
+def apply_rules(session: Session, *, viewer_id: int | None = None) -> int:
     """Categorize eligible transactions with the current rules. Returns how many
     rows changed category.
+
+    Scoped to ``viewer_id``: applying rules writes to the row, so it may only reach
+    rows that viewer can see. ``None`` collapses to household-only.
 
     Eligible = not deleted, and either:
 
@@ -100,9 +104,12 @@ def apply_rules(session: Session) -> int:
         Transaction.source == TxSource.import_csv
     )
     candidates = session.exec(
-        select(Transaction).where(
-            col(Transaction.deleted_at).is_(None),
-            (Transaction.source == TxSource.rule) | imported_and_uncategorized,
+        visible_to(
+            select(Transaction).where(
+                col(Transaction.deleted_at).is_(None),
+                (Transaction.source == TxSource.rule) | imported_and_uncategorized,
+            ),
+            viewer_id=viewer_id,
         )
     ).all()
 

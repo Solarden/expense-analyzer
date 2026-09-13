@@ -10,9 +10,12 @@ from collections.abc import Callable
 
 from sqlmodel import Session
 
+from expense_analyzer.ha.metrics import collect_metrics
+from expense_analyzer.importers.pipeline import rollback_batch
 from expense_analyzer.models import (
     Account,
     Category,
+    ImportBatch,
     Lens,
     Loan,
     PlannedItem,
@@ -20,13 +23,18 @@ from expense_analyzer.models import (
     Transaction,
     TxSource,
 )
-from expense_analyzer.queries.categorize.classifier import confirmed_label_texts
+from expense_analyzer.queries.categorize.classifier import (
+    classification_candidates,
+    confirmed_label_texts,
+)
 from expense_analyzer.queries.core import users
+from expense_analyzer.queries.money import batches as batch_q
 from expense_analyzer.queries.money import transactions as tx_q
 from expense_analyzer.queries.money import transfers as transfer_q
 from expense_analyzer.queries.planning import budgets as budget_q
 from expense_analyzer.queries.planning import loans as loan_q
 from expense_analyzer.queries.planning import planned as plan_q
+from expense_analyzer.queries.wealth import net_worth as net_worth_q
 
 
 def test_transfers_never_expose_or_link_another_members_private(
@@ -255,3 +263,99 @@ def test_confirmed_labels_scoped_for_neighbours_not_the_classifier(
     all_texts = [t for t, _ in confirmed_label_texts(db_session)]
 
     assert any("ALICE-PRIVATE-SHOP" in t for t in all_texts)
+
+
+def test_net_worth_totals_exclude_another_members_private_rows(
+    db_session: Session,
+    account: Account,
+    make_transaction: Callable[..., Transaction],
+):
+    """Account balances and net worth are per-viewer, like every other total.
+
+    Imported rows default to private scope — nothing in the app ever sets a
+    transaction to household — so an unscoped balance sums the whole household's
+    private history into a figure every member can read.
+    """
+    alice = users.create_user(db_session, username="alice", name="A", password="pw")
+    bob = users.create_user(db_session, username="bob", name="B", password="pw")
+    make_transaction(account_id=account.id, amount=1000, day=1, scope=Scope.household)
+    make_transaction(
+        account_id=account.id, amount=500, day=2, owner_id=alice.id, scope=Scope.private
+    )
+
+    by_id = {b.account_id: b for b in net_worth_q.account_balances(db_session, viewer_id=bob.id)}
+
+    assert by_id[account.id].balance == 1000
+    assert net_worth_q.current_net_worth(db_session, viewer_id=bob.id) == 1000
+    assert net_worth_q.current_net_worth(db_session, viewer_id=alice.id) == 1500
+
+
+def test_ha_metrics_publish_household_only(
+    db_session: Session,
+    account: Account,
+    make_transaction: Callable[..., Transaction],
+):
+    """The MQTT export runs with no viewer, so it collapses to household-only."""
+    alice = users.create_user(db_session, username="alice", name="A", password="pw")
+    make_transaction(account_id=account.id, amount=1000, day=1, scope=Scope.household)
+    make_transaction(
+        account_id=account.id, amount=500, day=2, owner_id=alice.id, scope=Scope.private
+    )
+
+    metrics = {m.key: m.value for m in collect_metrics(db_session)}
+
+    assert metrics[f"account_{account.id}_balance"] == "10.00"
+    assert metrics["net_worth"] == "10.00"
+
+
+def test_import_batch_is_owned_and_rollback_refuses_another_member(
+    db_session: Session,
+    account: Account,
+    make_batch: Callable[..., ImportBatch],
+    make_transaction: Callable[..., Transaction],
+):
+    """A batch belongs to whoever imported it: only they list it or roll it back."""
+    alice = users.create_user(db_session, username="alice", name="A", password="pw")
+    bob = users.create_user(db_session, username="bob", name="B", password="pw")
+    batch = make_batch(owner_id=alice.id)
+    tx = make_transaction(
+        account_id=account.id,
+        amount=-500,
+        day=1,
+        import_batch_id=batch.id,
+        owner_id=alice.id,
+        scope=Scope.private,
+    )
+
+    assert [b.id for b in batch_q.recent_batches(db_session, viewer_id=bob.id)] == []
+    assert [b.id for b in batch_q.recent_batches(db_session, viewer_id=alice.id)] == [batch.id]
+    assert rollback_batch(db_session, batch.id, viewer_id=bob.id) is None
+
+    db_session.refresh(tx)
+
+    assert tx.deleted_at is None
+    assert rollback_batch(db_session, batch.id, viewer_id=alice.id) == 1
+
+
+def test_classify_never_writes_another_members_private_rows(
+    db_session: Session,
+    account: Account,
+    make_category: Callable[..., Category],
+    make_transaction: Callable[..., Transaction],
+):
+    """The classifier's candidate set is viewer-scoped, like the queue it feeds."""
+    alice = users.create_user(db_session, username="alice", name="A", password="pw")
+    bob = users.create_user(db_session, username="bob", name="B", password="pw")
+    make_category(name="Food")
+    private = make_transaction(
+        account_id=account.id,
+        amount=-500,
+        day=1,
+        owner_id=alice.id,
+        scope=Scope.private,
+        source=TxSource.import_csv,
+    )
+
+    candidates = classification_candidates(db_session, viewer_id=bob.id)
+
+    assert private.id not in {t.id for t in candidates}

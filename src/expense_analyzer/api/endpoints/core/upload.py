@@ -14,6 +14,10 @@ from expense_analyzer.importers.registry import available, get_importer
 from expense_analyzer.queries.core import accounts
 from expense_analyzer.templating import templates
 
+# A real bank CSV export is tens of KB; this is a generous ceiling that still
+# bounds what one request can pull into memory.
+MAX_CSV_BYTES = 10 * 1024 * 1024
+
 router = APIRouter(
     prefix="/dashboard/upload", tags=["import"], dependencies=[Depends(require_user)]
 )
@@ -48,7 +52,17 @@ async def upload(
     elif accounts.get_account(session, account_id) is None:
         context["error"] = f"Unknown account #{account_id}."
     else:
-        data = await file.read()
+        # Bounded read, like the XTB endpoint: an unbounded .read() pulls the whole
+        # upload into RAM and the decoder then makes a second full copy as str.
+        data = await file.read(MAX_CSV_BYTES + 1)
+
+        if len(data) > MAX_CSV_BYTES:
+            context["error"] = (
+                f"That file is larger than {MAX_CSV_BYTES // (1024 * 1024)} MiB — "
+                "a bank export is never this big."
+            )
+
+            return templates.TemplateResponse(request, "core/upload.html", context)
 
         try:
             summary = run_import(

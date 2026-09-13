@@ -113,8 +113,8 @@ def delete_rule(rule_id: int, session: DbSession) -> RedirectResponse:
 
 
 @router.post("/apply")
-def apply_rules(session: DbSession) -> RedirectResponse:
-    changed = rule_queries.apply_rules(session)
+def apply_rules(user: CurrentUser, session: DbSession) -> RedirectResponse:
+    changed = rule_queries.apply_rules(session, viewer_id=user.id)
 
     return RedirectResponse(
         f"/dashboard/rules?applied={changed}", status_code=status.HTTP_303_SEE_OTHER

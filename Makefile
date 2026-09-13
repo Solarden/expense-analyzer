@@ -61,7 +61,7 @@ logs: ## Tail docker logs
 deploy: ## Deploy on the Pi: backup DB -> build -> migrate -> restart, with rollback. Pass a="--pull"
 	scripts/deploy.sh $(a)
 
-backup: ## Back up the database to data/backups (also the design §10 cron target)
+backup: ## Back up the database to data/backups (also the cron target)
 	docker compose run --rm --no-deps -T app python -m expense_analyzer.backup
 
 check-update: ## Check our repo for a newer release tag and notify HA (notify-only, never deploys)

@@ -90,6 +90,7 @@ def run_import(
                 filename=filename,
                 record_count=0,
                 status=ImportStatus.active,
+                owner_id=owner_id,
             )
             session.add(batch)
             session.flush()  # assign batch.id
@@ -137,7 +138,7 @@ def run_import(
 
     if new:
         try:
-            auto_categorized = apply_rules(session)
+            auto_categorized = apply_rules(session, viewer_id=owner_id)
         except Exception:  # noqa: BLE001 — convenience step, never fail the import
             log.exception("rule auto-categorization failed after import; rows are committed")
             session.rollback()
@@ -157,16 +158,25 @@ def run_import(
     )
 
 
-def rollback_batch(session: Session, batch_id: int) -> int:
+def rollback_batch(session: Session, batch_id: int, *, viewer_id: int | None = None) -> int | None:
     """Soft-delete every transaction in a batch and mark the batch rolled back.
 
-    Returns the number of transactions soft-deleted. Idempotent: already
-    soft-deleted rows are left untouched. Nothing is hard-deleted.
+    Returns the number of transactions soft-deleted, or ``None`` when the batch is
+    not the viewer's to roll back. A rollback removes private rows the viewer cannot
+    see, so it is gated on ownership rather than on visibility.
+
+    Missing and not-yours both return ``None`` on purpose: distinguishable answers
+    would let a member enumerate other members' batch ids.
+
+    Idempotent: already soft-deleted rows are left untouched. Nothing is hard-deleted.
     """
     batch = session.get(ImportBatch, batch_id)
 
     if batch is None:
-        raise ValueError(f"no import batch with id {batch_id}")
+        return None
+
+    if viewer_id is not None and batch.owner_id != viewer_id:
+        return None
 
     now = utc_now()
     rows = session.exec(

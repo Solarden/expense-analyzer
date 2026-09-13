@@ -51,7 +51,24 @@ _COL_GROSS_PL = "Gross P/L"
 # caps leave a huge margin while bounding memory. MAX_PART_BYTES is checked against
 # the zip directory before decompressing any member.
 MAX_XLSX_BYTES = 10 * 1024 * 1024  # 10 MiB
-MAX_PART_BYTES = 50 * 1024 * 1024  # 50 MiB
+MAX_PART_BYTES = 5 * 1024 * 1024  # 5 MiB
+
+
+class _DoctypeFound(Exception):
+    """Raised out of the DTD callback; translated to an ImporterError below."""
+
+
+class _NoDoctypeBuilder(ET.TreeBuilder):
+    """Tree builder that refuses a document type declaration.
+
+    A real .xlsx part never carries a DTD, and internal entity expansion is the one
+    amplification ElementTree performs. The parser calls this hook from the parsed
+    grammar, so it catches a DTD at any offset and in any encoding — which a byte
+    scan for "<!DOCTYPE" would not (pad it past the window, or encode UTF-16).
+    """
+
+    def doctype(self, name: str, pubid: str | None, system: str | None) -> None:
+        raise _DoctypeFound
 
 
 class XTBImporter:
@@ -235,13 +252,17 @@ def _read_part(zf: zipfile.ZipFile, name: str) -> bytes:
 def _parse_xml(raw: bytes) -> ET.Element:
     """Parse an .xlsx XML part. Single point so the threat model is stated once.
 
-    The workbook is uploaded by the authenticated household user — single-user,
-    LAN-only, never publicly exposed — so the XML is not
-    attacker-controlled in this app's threat model. stdlib ElementTree (no new
-    dependency, in keeping with the project's minimalism) does not resolve
-    external entities; that plus the trust boundary is why B314 is suppressed here.
+    The uploader is an authenticated household member, not the public — but the app
+    is multi-user, so "trusted" does not stretch to "cannot be hostile". stdlib
+    ElementTree does not resolve *external* entities (no XXE, no SSRF), which is why
+    B314 is suppressed; it does expand *internal* ones, so a DTD is refused by
+    :class:`_NoDoctypeBuilder`.
     """
-    return ET.fromstring(raw)  # nosec B314 — see docstring (trusted, single-user upload)
+    try:
+        # nosec B314 — external entities are never resolved; a DTD is refused above
+        return ET.fromstring(raw, parser=ET.XMLParser(target=_NoDoctypeBuilder()))  # nosec B314
+    except _DoctypeFound:
+        raise ImporterError("the file contains an XML document type declaration") from None
 
 
 def _cell_text(cell: ET.Element, shared: list[str]) -> str:

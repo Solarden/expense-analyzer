@@ -3,7 +3,7 @@ rollback. The dashboard landing page (/dashboard) is the overview — see overvi
 
 Part of the dashboard — the working surface. Handlers stay thin: all
 DB access goes through ``expense_analyzer.queries``. Every route requires a
-logged-in user; the household view is shared (no per-user data isolation).
+logged-in user, and the import list is scoped to the member who imported it.
 """
 
 from typing import Annotated
@@ -33,7 +33,7 @@ def _settings_context(session: Session, user: Owner, **extra) -> dict:
         "user": user,
         "accounts": accounts.list_accounts(session),
         "categories": categories.list_categories(session),
-        "batches": batches.recent_batches(session),
+        "batches": batches.recent_batches(session, viewer_id=user.id),
         "account_types": [t.value for t in AccountType],
         "category_kinds": [k.value for k in CategoryKind],
         # Re-render helpers: an error path passes the submitted AccountForm back so
@@ -202,19 +202,23 @@ def edit_category(
 
 
 @router.post("/batches/{batch_id}/rollback")
-def rollback(batch_id: int, session: DbSession) -> RedirectResponse:
+def rollback(batch_id: int, user: CurrentUser, session: DbSession) -> RedirectResponse:
     # The Manual batch is a container for hand-entered rows, not a real import —
-    # rolling it back would wipe every cash entry at once. Those are deleted one at
-    # a time from the transactions list instead. Refuse it (defence in depth; the UI
-    # also hides the button for this batch).
+    # rolling it back would wipe every cash entry at once. Those are deleted one at a
+    # time from the transactions list instead. Checked against the caller's own batch,
+    # so a refusal never reveals whether someone else's batch exists.
     batch = session.get(ImportBatch, batch_id)
 
-    if batch is not None and batch.source == MANUAL_BATCH_SOURCE:
+    if batch is None or (batch.owner_id is not None and batch.owner_id != user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no such import batch")
+
+    if batch.source == MANUAL_BATCH_SOURCE:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="manual entries are deleted individually, not rolled back as a batch",
         )
 
-    rollback_batch(session, batch_id)
+    if rollback_batch(session, batch_id, viewer_id=user.id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no such import batch")
 
     return RedirectResponse("/dashboard/settings", status_code=status.HTTP_303_SEE_OTHER)

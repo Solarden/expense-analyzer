@@ -144,7 +144,7 @@ On PostgreSQL the backup is a `pg_dump --format=custom` archive (`.dump`),
 taken from inside the app image so the client always matches the deploy; on a
 SQLite dev database it's the online backup API (a consistent single `.db` file
 even while the app is writing). Wire `make backup` into cron on the Pi for
-periodic copies (design §10); `EA_BACKUP_KEEP` caps how many are retained.
+periodic copies; `EA_BACKUP_KEEP` caps how many are retained.
 Restore (stop the stack first — the restore resets the schema under whatever
 is connected):
 

@@ -155,6 +155,10 @@ class ImportBatch(SQLModel, table=True):
     imported_at: datetime = Field(default_factory=utc_now)
     record_count: int = 0
     status: ImportStatus = Field(default=ImportStatus.active)
+    # Who imported it. A rollback soft-deletes every row in the batch, including
+    # private ones, so only the importer may list or roll back their own batches.
+    # NULL = the shared Manual container, which nobody rolls back.
+    owner_id: int | None = Field(default=None, foreign_key="owner.id", index=True)
 
 
 class Transaction(SQLModel, table=True):

@@ -27,5 +27,21 @@
 	@notlan not remote_ip 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12 100.64.0.0/10 127.0.0.1/8
 	respond @notlan "Forbidden" 403
 
+	header {
+		# The app is all same-origin HTML forms, so framing is never legitimate —
+		# and SameSite=Lax does not help inside a frame, where a POST is same-site.
+		X-Frame-Options DENY
+		# 'unsafe-inline' is required, not lazy: the chart pages inline their data in
+		# a <script> block and 23 templates use inline style= attributes. The value
+		# here is frame-ancestors/base-uri/form-action; script-src is defence in depth
+		# on top of Jinja autoescaping (every <script> interpolation goes via tojson).
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+		# Caddy does not send HSTS on its own.
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
 	reverse_proxy app:8000
 }

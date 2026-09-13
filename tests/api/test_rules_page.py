@@ -22,6 +22,7 @@ from expense_analyzer.models import (
     TxSource,
 )
 from expense_analyzer.queries.categorize import rules as rq
+from expense_analyzer.queries.core import users
 
 # --- query layer ----------------------------------------------------------
 
@@ -225,8 +226,16 @@ def test_import_auto_categorizes_new_rows(
             NormalizedTransaction(date(2026, 5, 2), -1234, "SOME OTHER SHOP"),
         ]
     )
+    # owner_id mirrors the upload endpoint, which always stamps the uploader: the
+    # rows land private-to-them, and the post-import rule pass is scoped to match.
+    alice = users.create_user(db_session, username="alice", name="A", password="pw")
     summary = run_import(
-        db_session, account_id=account.id, importer=importer, filename="x.csv", data=b""
+        db_session,
+        account_id=account.id,
+        importer=importer,
+        filename="x.csv",
+        data=b"",
+        owner_id=alice.id,
     )
 
     assert summary.new == 2

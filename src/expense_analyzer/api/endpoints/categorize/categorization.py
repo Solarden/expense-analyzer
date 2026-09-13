@@ -94,8 +94,8 @@ def queue_page(
 
 
 @router.post("/classify")
-def classify(session: DbSession) -> RedirectResponse:
-    result = llm_queries.categorize_uncategorized(session)
+def classify(user: CurrentUser, session: DbSession) -> RedirectResponse:
+    result = llm_queries.categorize_uncategorized(session, viewer_id=user.id)
 
     return RedirectResponse(
         f"/dashboard/queue?categorized={result.categorized}&queued={result.queued}"
