@@ -20,7 +20,14 @@
               <tr>
                 <td>
                   <div>{{ a.name }}</div>
-                  <div class="muted text-[12px]">{{ a.type.value }} · {{ a.currency }}</div>
+                  <div class="muted text-[12px]">
+                    {{ a.type.value }} · {{ a.currency }} ·
+                    {%- if a.owner_id %}
+                      {{ owner_names.get(a.owner_id, "a member") }}'s — imports stay private
+                    {%- else %}
+                      shared — imports feed the home budget
+                    {%- endif %}
+                  </div>
                   {% if a.number %}
                     <div class="muted text-[12px]">
                       {{ a.number }}
@@ -66,6 +73,10 @@
                        name="number"
                        value="{{ rf.number if rf else (a.number or '') }}"
                        placeholder="Account no. / IBAN">
+                <label for="acct-owner-{{ a.id }}">Belongs to</label>
+                <select id="acct-owner-{{ a.id }}" name="owner_id">
+                  {{ ui.owner_options(owners, rf.owner_id if rf else (a.owner_id or '') ) }}
+                </select>
                 <div class="hstack mt-3">
                   <button type="submit">Save</button>
                   <a class="btn" href="#close">Close</a>
@@ -105,6 +116,8 @@
                    name="number"
                    value="{{ af.number if af else '' }}"
                    placeholder="Account no. / IBAN (optional)">
+            <label for="add-acct-owner">Belongs to</label>
+            <select id="add-acct-owner" name="owner_id">{{ ui.owner_options(owners, af.owner_id if af else '') }}</select>
             <div class="hstack mt-3">
               <button type="submit">Add account</button>
               <a class="btn" href="#close">Close</a>

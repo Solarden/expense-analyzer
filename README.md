@@ -10,7 +10,9 @@ Home Assistant, LAN-only.
 - Import bank transactions from CSV (idempotent — re-importing a file never
   duplicates rows).
 - Money stored as integer minor units, never float — balances always reconcile.
-- Categorize expenses and tag them private vs household.
+- Categorize expenses, and keep a shared home budget alongside private rows only
+  their owner can see. The destination account decides which an import becomes: a
+  shared account feeds the home budget, a member's own account imports private.
 - Track loans with repayment schedules and investment positions (informational).
 - Detect internal transfers between own accounts and keep them out of the
   spending/income figures.

@@ -1,9 +1,11 @@
 """Authentication: password hashing and the login-session dependency.
 
-Single shared household view — any active user, once logged in, sees the same
-data (no per-user isolation, no roles). The session stores only the user id in a
-signed cookie (Starlette ``SessionMiddleware``); ``SameSite=Lax`` gives baseline
-CSRF protection on the state-changing POST routes.
+Logging in proves who you are; what you may then see is a separate question,
+answered per row by :mod:`expense_analyzer.queries.visibility` — the shared
+household budget plus your own private rows. ``is_admin`` is a soft role over user
+management, not over data. The session stores only the user id in a signed cookie
+(Starlette ``SessionMiddleware``); ``SameSite=Lax`` gives baseline CSRF protection
+on the state-changing POST routes.
 """
 
 import bcrypt

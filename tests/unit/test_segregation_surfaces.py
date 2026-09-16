@@ -235,12 +235,15 @@ def test_added_by_filter_never_surfaces_a_private_row(
     assert alice_private.id not in ids
 
 
-def test_confirmed_labels_scoped_for_neighbours_not_the_classifier(
+def test_confirmed_labels_never_leave_the_viewer_boundary(
     db_session: Session,
     account: Account,
     make_category: Callable[..., Category],
     make_transaction: Callable[..., Transaction],
 ):
+    """Both learning layers draw from this, so a label that escapes it is readable:
+    as a neighbour's text in layer 3, or as layer 2's suggestion and confidence on a
+    row the reader planted."""
     alice = users.create_user(db_session, username="alice", name="A", password="pw")
     bob = users.create_user(db_session, username="bob", name="B", password="pw")
     food = make_category(name="Food")
@@ -255,14 +258,13 @@ def test_confirmed_labels_scoped_for_neighbours_not_the_classifier(
         merchant_normalized="ALICE-PRIVATE-SHOP",
     )
 
-    # Bob's neighbour index (viewer-scoped) never contains Alice's private label...
     bob_texts = [t for t, _ in confirmed_label_texts(db_session, viewer_id=bob.id)]
-    assert not any("ALICE-PRIVATE-SHOP" in t for t in bob_texts)
-    # ...but the classifier's model (unscoped) still trains on it — it exposes no text
-    # to a user, only a category on that user's own row.
-    all_texts = [t for t, _ in confirmed_label_texts(db_session)]
+    household_texts = [t for t, _ in confirmed_label_texts(db_session)]
+    alice_texts = [t for t, _ in confirmed_label_texts(db_session, viewer_id=alice.id)]
 
-    assert any("ALICE-PRIVATE-SHOP" in t for t in all_texts)
+    assert not any("ALICE-PRIVATE-SHOP" in t for t in bob_texts)
+    assert not any("ALICE-PRIVATE-SHOP" in t for t in household_texts)
+    assert any("ALICE-PRIVATE-SHOP" in t for t in alice_texts)
 
 
 def test_net_worth_totals_exclude_another_members_private_rows(
@@ -270,12 +272,9 @@ def test_net_worth_totals_exclude_another_members_private_rows(
     account: Account,
     make_transaction: Callable[..., Transaction],
 ):
-    """Account balances and net worth are per-viewer, like every other total.
-
-    Imported rows default to private scope — nothing in the app ever sets a
-    transaction to household — so an unscoped balance sums the whole household's
-    private history into a figure every member can read.
-    """
+    """Account balances and net worth are per-viewer, like every other total —
+    an unscoped balance would sum a member's private history into a figure every
+    other member can read."""
     alice = users.create_user(db_session, username="alice", name="A", password="pw")
     bob = users.create_user(db_session, username="bob", name="B", password="pw")
     make_transaction(account_id=account.id, amount=1000, day=1, scope=Scope.household)

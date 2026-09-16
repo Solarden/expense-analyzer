@@ -5,7 +5,15 @@ from datetime import date
 
 from sqlmodel import Session
 
-from expense_analyzer.models import Account, AccountType, InvestmentPosition, Loan, Transaction
+from expense_analyzer.models import (
+    Account,
+    AccountType,
+    InvestmentPosition,
+    Loan,
+    Scope,
+    Transaction,
+)
+from expense_analyzer.queries.core import users
 from expense_analyzer.queries.planning import loans as loan_queries
 from expense_analyzer.queries.wealth import investments, net_worth
 
@@ -115,3 +123,67 @@ def test_current_net_worth_sums_all(
     expected = 1_000_00 + 500_00 - outstanding
 
     assert net_worth.current_net_worth(db_session, viewer_id=None) == expected
+
+
+def test_another_members_account_is_absent_not_zero(
+    db_session: Session,
+    make_account: Callable[..., Account],
+    make_transaction: Callable[..., Transaction],
+) -> None:
+    """A scoped sum over someone else's account reads 0.00, which is indistinguishable
+    from an unused account and quietly drags net worth down. Leave it out instead."""
+    alice = users.create_user(db_session, username="alice", name="Alice", password="secret123")
+    bob = users.create_user(db_session, username="bob", name="Bob", password="secret123")
+    shared = make_account(name="Joint", type=AccountType.bank)
+    hers = make_account(name="Alice mBank", type=AccountType.bank, owner_id=alice.id)
+    make_transaction(account_id=shared.id, amount=1_000_00, scope=Scope.household)
+    make_transaction(account_id=hers.id, amount=700_00, owner_id=alice.id, scope=Scope.private)
+
+    bob_sees = {b.account_id for b in net_worth.account_balances(db_session, viewer_id=bob.id)}
+    alice_sees = {b.account_id for b in net_worth.account_balances(db_session, viewer_id=alice.id)}
+    exported = {b.account_id for b in net_worth.account_balances(db_session, viewer_id=None)}
+
+    assert bob_sees == {shared.id}
+    assert alice_sees == {shared.id, hers.id}
+    assert exported == {shared.id}
+    assert net_worth.current_net_worth(db_session, viewer_id=bob.id) == 1_000_00
+    assert net_worth.current_net_worth(db_session, viewer_id=alice.id) == 1_700_00
+
+
+def test_owned_portfolio_account_still_counts_for_everyone(
+    db_session: Session,
+    make_account: Callable[..., Account],
+    make_investment: Callable[..., InvestmentPosition],
+) -> None:
+    """A labelled portfolio or loan account still counts for every viewer."""
+    alice = users.create_user(db_session, username="alice", name="Alice", password="secret123")
+    bob = users.create_user(db_session, username="bob", name="Bob", password="secret123")
+    ike = make_account(name="IKE", type=AccountType.portfolio, owner_id=alice.id)
+    make_investment(account_id=ike.id, value=500_00, snapshot_date=date(2026, 4, 15))
+
+    bob_sees = {b.account_id for b in net_worth.account_balances(db_session, viewer_id=bob.id)}
+
+    assert ike.id in bob_sees
+    assert net_worth.current_net_worth(db_session, viewer_id=bob.id) == 500_00
+    assert net_worth.current_net_worth(db_session, viewer_id=None) == 500_00
+
+
+def test_household_row_on_a_personal_account_still_counts(
+    db_session: Session,
+    make_account: Callable[..., Account],
+    make_transaction: Callable[..., Transaction],
+) -> None:
+    """A household row on a personal account counts for everyone who can see it."""
+    alice = users.create_user(db_session, username="alice", name="Alice", password="secret123")
+    bob = users.create_user(db_session, username="bob", name="Bob", password="secret123")
+    hers = make_account(name="Alice mBank", type=AccountType.bank, owner_id=alice.id)
+    make_transaction(account_id=hers.id, amount=700_00, owner_id=alice.id, scope=Scope.private)
+    make_transaction(account_id=hers.id, amount=-100_00, scope=Scope.household)
+
+    bob_sees = {
+        b.account_id: b.balance for b in net_worth.account_balances(db_session, viewer_id=bob.id)
+    }
+
+    # Bob sees the account, holding only the shared row — never Alice's 700.
+    assert bob_sees[hers.id] == -100_00
+    assert net_worth.current_net_worth(db_session, viewer_id=alice.id) == 600_00

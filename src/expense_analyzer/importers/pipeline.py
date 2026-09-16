@@ -21,7 +21,14 @@ from expense_analyzer.importers.base import Importer
 from expense_analyzer.importers.fingerprint import compute_fingerprint
 from expense_analyzer.importers.merchant import normalize_merchant
 from expense_analyzer.importers.reconciliation import ReconciliationResult, reconcile
-from expense_analyzer.models import ImportBatch, ImportStatus, Transaction, TxSource
+from expense_analyzer.models import (
+    Account,
+    ImportBatch,
+    ImportStatus,
+    Scope,
+    Transaction,
+    TxSource,
+)
 from expense_analyzer.queries.categorize.rules import apply_rules
 from expense_analyzer.queries.money.transfers import detect_and_autolink
 
@@ -50,14 +57,27 @@ def run_import(
 ) -> ImportSummary:
     """Parse ``data`` with ``importer`` and idempotently upsert into ``account_id``.
 
-    Every new row is stamped with ``owner_id`` (the uploading user) so it can be
-    scoped per-user later; ``None`` leaves it unset (non-interactive imports).
+    The destination account decides what the rows become: a shared account (no
+    owner) imports ``household``, feeding the home budget; a member's own account
+    imports ``private``, owned by that member — not by whoever uploaded the file, or
+    the owner could not see their own statement. ``owner_id`` is the uploading user
+    and stays on the batch either way, because it is the batch that gates rollback.
 
     Commits the batch and its new transactions atomically. The batch is created
     lazily — only on the first new transaction — so re-importing the same file
     (all duplicates) adds nothing and leaves no empty batch behind.
     """
     result = importer.parse(data)
+    account = session.get(Account, account_id)
+
+    if account is None or account.owner_id is not None:
+        # No account is unreachable (the handler checks first); private is simply the
+        # direction a visibility default has to fail in when it cannot tell.
+        scope = Scope.private
+        row_owner_id = account.owner_id if account is not None else owner_id
+    else:
+        scope = Scope.household
+        row_owner_id = owner_id
 
     batch: ImportBatch | None = None
     new = 0
@@ -106,7 +126,8 @@ def run_import(
                 raw_description=nt.raw_description,
                 merchant_normalized=merchant,
                 source=TxSource.import_csv,
-                owner_id=owner_id,
+                scope=scope,
+                owner_id=row_owner_id,
                 fingerprint=fingerprint,
             )
         )
@@ -121,12 +142,15 @@ def run_import(
     # A transfer's counterpart may have arrived in an earlier batch on another
     # account, so scan *all* unmatched candidates, not just this run. Only
     # unambiguous pairs are auto-linked; the rest wait for manual confirmation.
+    #
+    # Both post-import steps below are viewer-scoped, so they run as the rows' owner
+    # and not the uploader — otherwise they would silently skip what was just written.
     auto_linked = 0
 
     if new:
         try:
             auto_linked, _ = detect_and_autolink(
-                session, window_days=get_settings().transfer_window_days, viewer_id=owner_id
+                session, window_days=get_settings().transfer_window_days, viewer_id=row_owner_id
             )
         except Exception:  # noqa: BLE001 — convenience step, never fail the import
             log.exception("transfer auto-link failed after import; rows are committed")
@@ -138,7 +162,7 @@ def run_import(
 
     if new:
         try:
-            auto_categorized = apply_rules(session, viewer_id=owner_id)
+            auto_categorized = apply_rules(session, viewer_id=row_owner_id)
         except Exception:  # noqa: BLE001 — convenience step, never fail the import
             log.exception("rule auto-categorization failed after import; rows are committed")
             session.rollback()

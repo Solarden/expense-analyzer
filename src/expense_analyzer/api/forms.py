@@ -35,9 +35,12 @@ class LoginForm(BaseModel):
 class AccountForm(BaseModel):
     # Used for both create and edit — the friendly ``name`` is what every picker
     # shows; ``number`` is the bank account number / IBAN (reference data, "" for none).
+    # ``owner_id`` is "" for a shared account and a member id for a personal one,
+    # which is what decides the scope of everything imported into it.
     name: str
     type: AccountType
     number: str = ""
+    owner_id: str = ""
 
 
 class CategoryForm(BaseModel):
@@ -86,7 +89,9 @@ class ManualTransactionForm(BaseModel):
     direction: TxDirection = TxDirection.expense
     description: str
     category_id: str = ""
-    scope: Scope = Scope.private
+    # The fallback for a post that omits the field — a forgotten scope should not
+    # create a row only its author can see. The template picks what is preselected.
+    scope: Scope = Scope.household
     note: str = ""
     return_to: str = ""
 

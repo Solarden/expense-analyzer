@@ -136,7 +136,7 @@ def main() -> None:
         shopping = categories.create_category(session, name="Shopping", kind=exp, color="#db61a2")
 
         # --- Transactions: 4 months (Mar–Jun 2026) -------------------------
-        def tx(account, d, amount, desc, cat, scope=Scope.private, note=None):
+        def tx(account, d, amount, desc, cat, scope=Scope.household, note=None):
             return transactions.create_manual_transaction(
                 session,
                 account_id=account.id,
@@ -159,7 +159,7 @@ def main() -> None:
         session.refresh(demo_batch)
         _seq = {"n": 0}
 
-        def imp(account, d, amount, desc, scope=Scope.private):
+        def imp(account, d, amount, desc, scope=Scope.household):
             _seq["n"] += 1
             row = Transaction(
                 account_id=account.id,
@@ -189,7 +189,6 @@ def main() -> None:
                 z(12000),
                 "ACME Sp. z o.o. salary",
                 salary.id,
-                Scope.household,
             )
             # Recurring subscriptions (drive subscription detection) — imported &
             # uncategorized so "Apply rules" demonstrably tags them.
@@ -202,25 +201,26 @@ def main() -> None:
                 z(-(280 + mo * 7)),
                 "Tauron energy",
                 utilities.id,
-                Scope.household,
             )
             # Groceries — a few per month, some uncategorized for the rules demo
-            imp(checking, date(yr, mo, 3), z(-214.30), "Biedronka 1234", Scope.household)
-            tx(checking, date(yr, mo, 11), z(-176.90), "Lidl Krakow", groceries.id, Scope.household)
-            imp(checking, date(yr, mo, 22), z(-198.40), "Biedronka 1234", Scope.household)
+            imp(checking, date(yr, mo, 3), z(-214.30), "Biedronka 1234")
+            tx(checking, date(yr, mo, 11), z(-176.90), "Lidl Krakow", groceries.id)
+            imp(checking, date(yr, mo, 22), z(-198.40), "Biedronka 1234")
             # Dining
             tx(checking, date(yr, mo, 7), z(-58.00), "Pod Wawelem restaurant", dining.id)
             tx(checking, date(yr, mo, 19), z(-34.50), "Uber Eats", dining.id)
             # Transport — uncategorized for rules
             imp(checking, date(yr, mo, 5), z(-260.00), "Orlen S.A. fuel")
             imp(cash, date(yr, mo, 17), z(-12.00), "Uber trip")
-            # Entertainment / shopping / health, varied
+            # Entertainment / shopping stay private — the "my own toys" case the
+            # lens switcher exists for; the rest of the demo is the home budget.
             tx(
                 checking,
                 date(yr, mo, 14),
                 z(-89.99),
                 "Empik",
                 shopping.id,
+                Scope.private,
                 note="Birthday gift for mum",
             )
             tx(checking, date(yr, mo, 24), z(-120.00), "Apteka Dbam o Zdrowie", health.id)
@@ -230,6 +230,7 @@ def main() -> None:
                 z(-49.00),
                 "Multikino tickets",
                 entertainment.id,
+                Scope.private,
                 note="Date night — splurge, skip next month",
             )
 

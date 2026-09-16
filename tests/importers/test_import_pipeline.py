@@ -7,6 +7,7 @@ the pipeline itself, independent of any specific bank's CSV format.
 from collections.abc import Callable
 from datetime import date
 
+import pytest
 from sqlmodel import Session, select
 
 from expense_analyzer.importers import (
@@ -16,7 +17,16 @@ from expense_analyzer.importers import (
     rollback_batch,
     run_import,
 )
-from expense_analyzer.models import Account, ImportBatch, ImportStatus, Transaction, TxSource
+from expense_analyzer.models import (
+    Account,
+    Category,
+    ImportBatch,
+    ImportStatus,
+    Rule,
+    Scope,
+    Transaction,
+    TxSource,
+)
 from expense_analyzer.queries.core import users
 
 
@@ -53,12 +63,24 @@ def test_import_inserts_new_transactions(
     assert batch.status == ImportStatus.active
 
 
-def test_import_stamps_owner_id(
-    db_session: Session, account: Account, make_importer: Callable[..., Importer]
+@pytest.mark.parametrize(
+    ("account_is_personal", "expected_scope"),
+    [(False, Scope.household), (True, Scope.private)],
+)
+def test_import_scope_and_owner_come_from_the_account(
+    db_session: Session,
+    make_account: Callable[..., Account],
+    make_importer: Callable[..., Importer],
+    account_is_personal: bool,
+    expected_scope: Scope,
 ):
-    """Imported rows carry the uploading user's id (provenance for per-user scoping)."""
+    """A shared account feeds the home budget; a member's own account imports private
+    and to that member, whoever happened to upload the file."""
     alice = users.create_user(db_session, username="alice", name="Alice", password="secret123")
-    run_import(
+    bob = users.create_user(db_session, username="bob", name="Bob", password="secret123")
+    account = make_account(owner_id=bob.id if account_is_personal else None)
+
+    summary = run_import(
         db_session,
         account_id=account.id,
         importer=make_importer(_records()),
@@ -68,8 +90,40 @@ def test_import_stamps_owner_id(
     )
 
     rows = db_session.exec(select(Transaction)).all()
+    expected_owner = bob.id if account_is_personal else alice.id
 
-    assert rows and all(tx.owner_id == alice.id for tx in rows)
+    assert rows and all(tx.scope == expected_scope for tx in rows)
+    assert all(tx.owner_id == expected_owner for tx in rows)
+    # The batch tracks who uploaded either way — that is what gates rollback.
+    assert db_session.get(ImportBatch, summary.batch_id).owner_id == alice.id
+
+
+def test_rules_still_fire_when_importing_into_another_members_account(
+    db_session: Session,
+    make_account: Callable[..., Account],
+    make_category: Callable[..., Category],
+    make_importer: Callable[..., Importer],
+):
+    """The post-import steps are viewer-scoped, so running them as the uploader would
+    skip rows that belong to the account's owner — and they swallow their own
+    exceptions, so nothing would say so."""
+    alice = users.create_user(db_session, username="alice", name="Alice", password="secret123")
+    bob = users.create_user(db_session, username="bob", name="Bob", password="secret123")
+    account = make_account(owner_id=bob.id)
+    groceries = make_category(name="Groceries")
+    db_session.add(Rule(pattern="biedronka", category_id=groceries.id))
+    db_session.commit()
+
+    summary = run_import(
+        db_session,
+        account_id=account.id,
+        importer=make_importer(_records()),
+        filename="may.csv",
+        data=b"",
+        owner_id=alice.id,
+    )
+
+    assert summary.auto_categorized == 1
 
 
 def test_reimport_same_file_is_idempotent(

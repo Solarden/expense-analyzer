@@ -121,7 +121,9 @@
         <option value="">— none —</option>
         {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
       </select>
-      <select name="scope" aria-label="Scope" class="flex-1 min-w-[120px]">{{ ui.scope_options(scopes, "") }}</select>
+      <select name="scope" aria-label="Scope" class="flex-1 min-w-[120px]">
+        {{ ui.scope_options(scopes, "household") }}
+      </select>
       <input type="text"
              name="note"
              placeholder="Note (optional)"

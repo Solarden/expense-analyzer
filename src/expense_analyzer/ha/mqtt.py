@@ -27,7 +27,7 @@ from sqlmodel import Session
 
 from expense_analyzer.config import Settings
 from expense_analyzer.ha import discovery
-from expense_analyzer.ha.metrics import Metric, collect_metrics
+from expense_analyzer.ha.metrics import Metric, collect_member_metrics, collect_metrics
 
 log = logging.getLogger("expense_analyzer.ha.mqtt")
 
@@ -305,7 +305,9 @@ def publish_snapshot(
     from expense_analyzer.queries.planning import planned as planned_queries
     from expense_analyzer.queries.planning import subscriptions as subscription_queries
 
-    metrics = collect_metrics(session)
+    # The household figures every dashboard shows, plus each member's own view of
+    # the same headlines — HA splits them per user with card visibility.
+    metrics = collect_metrics(session) + collect_member_metrics(session)
     publisher = MqttPublisher.from_settings(settings, client=client)
     publisher.publish_metrics(metrics)
 

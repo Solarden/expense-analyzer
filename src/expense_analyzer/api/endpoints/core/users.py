@@ -1,8 +1,9 @@
 """Users page: list login identities, add new ones, and (admins only) manage
 them — delete, toggle active, grant/revoke admin, or reset a password.
 
-No public registration. Data stays a single shared household view with no roles
-for *viewing*; ``is_admin`` is a soft management role. The first user created
+No public registration. Each member sees the shared household budget plus their
+own private rows (:mod:`expense_analyzer.queries.visibility`); ``is_admin`` is a
+soft management role, separate from that. The first user created
 bootstraps as admin (see :func:`expense_analyzer.queries.core.users.create_user`);
 everyone after is a plain member. Two guards keep an admin from locking the
 household out: you cannot act on your own account, and you cannot strip the last

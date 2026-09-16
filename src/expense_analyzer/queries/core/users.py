@@ -1,9 +1,9 @@
 """User (login identity) queries."""
 
-from sqlmodel import Session, col, func, select, update
+from sqlmodel import Session, col, delete, func, select, update
 
 from expense_analyzer.clock import utc_now
-from expense_analyzer.models import Account, Owner, Scope, Transaction
+from expense_analyzer.models import Account, Budget, ImportBatch, Owner, Scope, Transaction
 
 
 def get(session: Session, user_id: int) -> Owner | None:
@@ -96,7 +96,15 @@ def delete_user(session: Session, user: Owner) -> None:
       "who imported" ``owner_id`` tag is nulled.
     - **Private** transactions belong to this user alone — left owner-less they
       would be invisible to everyone and desync balances, so they are soft-deleted
-      (``deleted_at``) and their ``owner_id`` cleared: they leave with the user."""
+      (``deleted_at``) and their ``owner_id`` cleared: they leave with the user.
+    - **Import batches** keep their rows and lose their owner, which makes them the
+      shared un-rollbackable kind (``ImportBatch.owner_id``): a departed member's
+      batch must not become anyone else's to roll back.
+    - **Private budgets** are the only owned ones — :func:`set_budget` nulls the
+      owner on every household budget — so they simply go with the member.
+
+    Every table with an ``owner_id`` FK has to appear here, or the ``DELETE`` fails
+    the constraint and the Users page 500s instead of removing the member."""
     session.exec(
         update(Transaction)
         .where(col(Transaction.owner_id) == user.id, col(Transaction.scope) == Scope.private)
@@ -108,5 +116,9 @@ def delete_user(session: Session, user: Owner) -> None:
         .values(owner_id=None)
     )
     session.exec(update(Account).where(col(Account.owner_id) == user.id).values(owner_id=None))
+    session.exec(
+        update(ImportBatch).where(col(ImportBatch.owner_id) == user.id).values(owner_id=None)
+    )
+    session.exec(delete(Budget).where(col(Budget.owner_id) == user.id))
     session.delete(user)
     session.commit()
