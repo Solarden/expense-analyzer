@@ -1,9 +1,11 @@
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import Response
 
 # Importing the importers package registers the available bank parsers.
 import expense_analyzer.importers.registry  # noqa: F401
@@ -12,6 +14,25 @@ from expense_analyzer.auth import NotAuthenticatedError, NotAuthorizedError
 from expense_analyzer.config import INSECURE_DEFAULT_SECRET, get_settings
 from expense_analyzer.logging_config import configure_logging
 from expense_analyzer.templating import templates
+
+# Set here rather than in the Caddyfile because not every deployment is served through the
+# proxy this repo ships — one behind its own would otherwise get none of this.
+SECURITY_HEADERS = {
+    # 'unsafe-inline' is required, not lazy: the chart pages inline their data in a
+    # <script> block and nearly every template carries inline style= attributes.
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+        "frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    ),
+    # The app is all same-origin HTML forms, so framing is never legitimate — and
+    # SameSite=Lax does not help inside a frame, where a POST is same-site.
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "same-origin",
+    # Browsers ignore this over plain http, so it costs a LAN install nothing.
+    "Strict-Transport-Security": "max-age=31536000",
+}
 
 
 def create_app() -> FastAPI:
@@ -54,6 +75,17 @@ def create_app() -> FastAPI:
         StaticFiles(directory=str(Path(__file__).parent / "static")),
         name="static",
     )
+
+    # Registered after the session middleware, so it wraps it and covers error responses
+    # and redirects too, not just the routes below.
+    @app.middleware("http")
+    async def _add_security_headers(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        response = await call_next(request)
+        response.headers.update(SECURITY_HEADERS)
+
+        return response
 
     # One router per domain, registered from a single list (see api/__init__.py).
     for router in api.routers:
