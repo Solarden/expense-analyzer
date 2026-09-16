@@ -15,12 +15,13 @@ from sqlmodel import Session
 from expense_analyzer import iban
 from expense_analyzer.api.deps import CurrentUser, DbSession
 from expense_analyzer.api.forms import AccountForm, CategoryEditForm, CategoryForm
+from expense_analyzer.api.params import opt_int
 from expense_analyzer.auth import require_user
 from expense_analyzer.importers.pipeline import rollback_batch
 from expense_analyzer.models import AccountType, CategoryKind, ImportBatch, Owner
 from expense_analyzer.queries.categorize import categories
 from expense_analyzer.queries.categorize.categories import HEX_COLOR_RE
-from expense_analyzer.queries.core import accounts
+from expense_analyzer.queries.core import accounts, users
 from expense_analyzer.queries.money import batches
 from expense_analyzer.queries.money.transactions import MANUAL_BATCH_SOURCE
 from expense_analyzer.templating import templates
@@ -29,6 +30,8 @@ router = APIRouter(prefix="/dashboard", tags=["settings"], dependencies=[Depends
 
 
 def _settings_context(session: Session, user: Owner, **extra) -> dict:
+    members = users.list_users(session)
+
     return {
         "user": user,
         "accounts": accounts.list_accounts(session),
@@ -36,6 +39,8 @@ def _settings_context(session: Session, user: Owner, **extra) -> dict:
         "batches": batches.recent_batches(session, viewer_id=user.id),
         "account_types": [t.value for t in AccountType],
         "category_kinds": [k.value for k in CategoryKind],
+        "owners": members,
+        "owner_names": {m.id: m.name for m in members},
         # Re-render helpers: an error path passes the submitted AccountForm back so
         # the form keeps what the user typed; edit_id marks which row it belongs to.
         "account_form": None,
@@ -79,6 +84,66 @@ def _parse_number(raw: str) -> tuple[str | None, str | None]:
     return raw.strip(), None
 
 
+def _parse_owner(
+    session: Session, raw: str, *, user: Owner, current_owner_id: int | None
+) -> tuple[int | None, str | None]:
+    """Parse and authorize the account's owner. Returns ``(owner_id, error)``.
+
+    Only a genuinely blank value means "shared with the household". Text that is not
+    a member id is rejected rather than coerced: this field moves a privacy boundary,
+    and silently reading garbage as "shared" would turn a member's own account into
+    one the whole house can see. The member must exist and be active — an account
+    owned by a deactivated member would take imports nobody can reach, since they
+    cannot log in and no one else may see their private rows.
+
+    **Who may move it is the security question**, because the answer decides who owns
+    everything imported into the account afterwards (see
+    :func:`expense_analyzer.importers.pipeline.run_import`). Accounts are otherwise
+    shared config any member may rename, so without this an ordinary member could
+    point someone else's account at themselves, wait for them to upload their next
+    statement, and take private ownership of every row in it. A member may therefore
+    only claim an unowned account or release their own; moving anyone else's is the
+    admin's, who needs it to reclaim an account after a member leaves.
+    """
+    owner_id: int | None = None
+
+    if raw.strip():
+        owner_id = opt_int(raw)
+
+        # Unparseable is refused here rather than falling through as "unchanged" on a
+        # shared account, where it would read as a deliberate "leave it shared".
+        if owner_id is None:
+            return None, "That member doesn't exist."
+
+    # The form posts the current owner on every edit, so re-validating it here would
+    # let a later deactivation freeze the whole record against renames.
+    if owner_id == current_owner_id:
+        return owner_id, None
+
+    if owner_id is not None:
+        owner = session.get(Owner, owner_id)
+
+        if owner is None:
+            return None, "That member doesn't exist."
+
+        if not owner.is_active:
+            return None, f"{owner.name} is deactivated — reactivate them first."
+
+    if user.is_admin:
+        return owner_id, None
+
+    if current_owner_id not in (None, user.id):
+        holder = session.get(Owner, current_owner_id)
+        name = holder.name if holder else "another member"
+
+        return None, f"That account is {name}'s — only they or an admin can hand it on."
+
+    if owner_id not in (None, user.id):
+        return None, "You can only take an account for yourself, or leave it shared."
+
+    return owner_id, None
+
+
 # Setup page (accounts, categories, recent imports). Lives at /dashboard/settings
 # now that /dashboard itself is the overview — see overview.py.
 @router.get("/settings", response_class=HTMLResponse)
@@ -95,11 +160,17 @@ def create_account(
     # Name is the required field, so check it first — its error shouldn't be masked
     # by a number problem (mirrors create/edit category).
     number = None
+    owner_id = None
 
     if not form.name.strip():
         error = "Account name can't be empty."
     else:
         number, error = _parse_number(form.number)
+
+        if error is None:
+            # A new account has no holder yet, so the only question is whether the
+            # member is claiming it for themselves.
+            owner_id, error = _parse_owner(session, form.owner_id, user=user, current_owner_id=None)
 
     if error is not None:
         return templates.TemplateResponse(
@@ -109,7 +180,9 @@ def create_account(
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
-    accounts.create_account(session, name=form.name, type=form.type, number=number)
+    accounts.create_account(
+        session, name=form.name, type=form.type, number=number, owner_id=owner_id
+    )
 
     return RedirectResponse("/dashboard/settings", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -123,11 +196,21 @@ def edit_account(
     session: DbSession,
 ) -> Response:
     number = None
+    owner_id = None
+    existing = accounts.get_account(session, account_id)
+
+    if existing is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="account not found")
 
     if not form.name.strip():
         error = "Account name can't be empty."
     else:
         number, error = _parse_number(form.number)
+
+        if error is None:
+            owner_id, error = _parse_owner(
+                session, form.owner_id, user=user, current_owner_id=existing.owner_id
+            )
 
     if error is not None:
         return templates.TemplateResponse(
@@ -137,11 +220,15 @@ def edit_account(
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
-    if (
-        accounts.update_account(session, account_id, name=form.name, type=form.type, number=number)
-        is None
-    ):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="account not found")
+    # Exists — the handler 404'd above, so update_account cannot miss.
+    accounts.update_account(
+        session,
+        account_id,
+        name=form.name,
+        type=form.type,
+        number=number,
+        owner_id=owner_id,
+    )
 
     return RedirectResponse("/dashboard/settings", status_code=status.HTTP_303_SEE_OTHER)
 

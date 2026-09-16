@@ -37,10 +37,28 @@
   {%- endif -%}
 {%- endmacro %}
 {# Scope <option>s with friendly labels (submitted values stay private/household).
-   ``selected`` is the current value; pass "" for a new-row form (defaults to Private). #}
+   ``selected`` is the value to preselect; anything unmatched leaves the browser on
+   the first option, so a new-row form passes the default it wants explicitly. #}
 {% macro scope_options(scopes, selected) -%}
   {%- for s in scopes -%}
     <option value="{{ s }}"{{ ' selected' if s == selected else '' }}>{{ "Household (shared)" if s == "household" else "Private" }}
+    </option>
+  {%- endfor -%}
+{%- endmacro %}
+{# Owner <option>s for an account: blank = shared with the household, a member id =
+   that member's own account. This is what decides the scope of everything imported
+   into it, so the labels say that rather than naming the column. ``selected`` is
+   compared as a string, since the edit form hands back the raw posted value.
+   A deactivated member is labelled: the handler refuses to hand an account to one
+   (their imports would be private to someone who cannot log in), and an unmarked
+   entry that always errors reads as a broken form rather than a rule. #}
+{% macro owner_options(owners, selected) -%}
+  <option value=""{{ ' selected' if not selected else '' }}>Shared (household)
+  </option>
+  {%- for o in owners -%}
+    <option value="{{ o.id }}"
+            {{ ' selected' if o.id|string == selected|string else '' }}>{{ o.name }}
+      {{- " (deactivated)" if not o.is_active else " (private)" }}
     </option>
   {%- endfor -%}
 {%- endmacro %}

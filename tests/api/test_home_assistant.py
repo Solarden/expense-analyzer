@@ -61,3 +61,24 @@ def test_publish_now_pushes_and_reports_count(
     resp = auth_client.post("/dashboard/home-assistant/publish")
     assert resp.status_code == status.HTTP_200_OK
     assert "Published 4 sensors" in resp.text
+
+
+def test_page_previews_only_the_viewers_own_member_sensors(
+    auth_client: TestClient,
+    db_session: Session,
+    account: Account,
+    make_transaction: Callable[..., Transaction],
+) -> None:
+    """The page previews the viewer's own member sensors and nobody else's."""
+    from expense_analyzer.models import Scope
+    from expense_analyzer.queries.core import users
+
+    alice = users.create_user(db_session, username="alice", name="Alice", password="pw")
+    make_transaction(account_id=account.id, amount=1_000_00, scope=Scope.household)
+    make_transaction(account_id=account.id, amount=777_00, owner_id=alice.id, scope=Scope.private)
+
+    body = auth_client.get("/dashboard/home-assistant").text
+
+    assert "Net Worth" in body  # the household figure is still previewed
+    assert f"owner_{alice.id}_net_worth" not in body
+    assert "Alice" not in body

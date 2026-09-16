@@ -14,9 +14,14 @@ def get_account(session: Session, account_id: int) -> Account | None:
 
 
 def create_account(
-    session: Session, *, name: str, type: AccountType, number: str | None = None
+    session: Session,
+    *,
+    name: str,
+    type: AccountType,
+    number: str | None = None,
+    owner_id: int | None = None,
 ) -> Account:
-    account = Account(name=name.strip(), type=type, number=number)
+    account = Account(name=name.strip(), type=type, number=number, owner_id=owner_id)
     session.add(account)
     session.commit()
     session.refresh(account)
@@ -31,10 +36,16 @@ def update_account(
     name: str,
     type: AccountType,
     number: str | None,
+    owner_id: int | None,
 ) -> Account | None:
-    """Edit an account in place — rename, change type, set/clear the account number.
-    Returns the updated account, or ``None`` if the id doesn't exist (the handler
-    404s). The ``number`` arrives already normalised from the handler."""
+    """Edit an account in place — rename, change type, set/clear the account number,
+    hand it to a member or back to the household. Returns the updated account, or
+    ``None`` if the id doesn't exist (the handler 404s). The ``number`` arrives
+    already normalised from the handler.
+
+    ``owner_id`` steers only what *future* imports land as (see
+    :func:`expense_analyzer.importers.pipeline.run_import`); rows already imported
+    keep the scope they were given."""
     account = session.get(Account, account_id)
 
     if account is None:
@@ -43,6 +54,7 @@ def update_account(
     account.name = name.strip()
     account.type = type
     account.number = number
+    account.owner_id = owner_id
     session.add(account)
     session.commit()
     session.refresh(account)

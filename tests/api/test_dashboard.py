@@ -15,6 +15,7 @@ from sqlmodel import Session, select
 
 from expense_analyzer.importers import registry as importer_registry
 from expense_analyzer.models import Account, Category, CategoryKind, Transaction
+from expense_analyzer.queries.core import users
 
 
 def test_index_renders(auth_client: TestClient, db_session: Session):
@@ -88,6 +89,53 @@ def test_create_account_rejected_writes_nothing(
     resp = auth_client.post("/dashboard/accounts", data=data)
     assert resp.status_code == status.HTTP_400_BAD_REQUEST
     assert db_session.exec(select(Account)).all() == []  # nothing written
+
+
+@pytest.mark.parametrize(
+    ("submitted_owner", "expected_error"),
+    [
+        # Jinja escapes the apostrophe in "doesn't", so match on a plain fragment.
+        ("abc", "exist"),  # unparseable must be refused, not read as "shared"
+        ("9999", "exist"),
+        ("inactive", "deactivated"),
+    ],
+)
+def test_account_owner_must_be_a_real_active_member(
+    auth_client: TestClient, db_session: Session, submitted_owner: str, expected_error: str
+):
+    """A bad owner id is refused, never coerced to "shared"."""
+    gone = users.create_user(db_session, username="gone", name="Gone", password="pw123456")
+    gone.is_active = False
+    db_session.add(gone)
+    db_session.commit()
+    owner_id = str(gone.id) if submitted_owner == "inactive" else submitted_owner
+
+    resp = auth_client.post(
+        "/dashboard/accounts",
+        data={"name": "Acc", "type": "bank", "number": "", "owner_id": owner_id},
+    )
+
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    assert expected_error in resp.text
+    assert db_session.exec(select(Account)).all() == []
+
+
+def test_edit_account_assigns_and_clears_the_owner(
+    auth_client: TestClient, db_session: Session, make_account: Callable[..., Account]
+):
+    """A blank owner on the edit form means "shared" — full-form semantics."""
+    member = users.create_user(db_session, username="bob", name="Bob", password="pw123456")
+    acc = make_account(name="mBank")
+    base = {"name": "mBank", "type": "bank", "number": ""}
+
+    auth_client.post(f"/dashboard/accounts/{acc.id}/edit", data=base | {"owner_id": str(member.id)})
+    db_session.refresh(acc)
+    assert acc.owner_id == member.id
+
+    auth_client.post(f"/dashboard/accounts/{acc.id}/edit", data=base | {"owner_id": ""})
+    db_session.refresh(acc)
+
+    assert acc.owner_id is None
 
 
 def test_edit_account_renames_and_sets_number(
@@ -510,3 +558,110 @@ def test_categorize_unknown_transaction_404(auth_client: TestClient, db_session:
     )
 
     assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_member_cannot_take_over_another_members_account(
+    client: TestClient, db_session: Session, make_account: Callable[..., Account]
+):
+    """A member may not move an account that belongs to someone else."""
+    users.create_user(db_session, username="admin", name="Admin", password="pw123456")
+    alice = users.create_user(db_session, username="alice", name="Alice", password="pw123456")
+    bob = users.create_user(db_session, username="bob", name="Bob", password="pw123456")
+    bobs = make_account(name="Bob mBank", owner_id=bob.id)
+    client.post("/login", data={"username": "alice", "password": "pw123456"})
+
+    resp = client.post(
+        f"/dashboard/accounts/{bobs.id}/edit",
+        data={"name": "Bob mBank", "type": "bank", "number": "", "owner_id": str(alice.id)},
+    )
+    db_session.expire_all()
+
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    assert db_session.get(Account, bobs.id).owner_id == bob.id  # still Bob's
+
+
+def test_member_may_claim_a_shared_account_and_release_it(
+    client: TestClient, db_session: Session, make_account: Callable[..., Account]
+):
+    """A member may claim an unowned account and release their own."""
+    users.create_user(db_session, username="admin", name="Admin", password="pw123456")
+    alice = users.create_user(db_session, username="alice", name="Alice", password="pw123456")
+    acc = make_account(name="Spare")
+    client.post("/login", data={"username": "alice", "password": "pw123456"})
+    base = {"name": "Spare", "type": "bank", "number": ""}
+
+    client.post(f"/dashboard/accounts/{acc.id}/edit", data=base | {"owner_id": str(alice.id)})
+    db_session.expire_all()
+    assert db_session.get(Account, acc.id).owner_id == alice.id
+
+    client.post(f"/dashboard/accounts/{acc.id}/edit", data=base | {"owner_id": ""})
+    db_session.expire_all()
+
+    assert db_session.get(Account, acc.id).owner_id is None
+
+
+def test_member_may_still_rename_another_members_account(
+    client: TestClient, db_session: Session, make_account: Callable[..., Account]
+):
+    """Renaming another member's account still works — only moving ownership is gated."""
+    users.create_user(db_session, username="admin", name="Admin", password="pw123456")
+    users.create_user(db_session, username="alice", name="Alice", password="pw123456")
+    bob = users.create_user(db_session, username="bob", name="Bob", password="pw123456")
+    bobs = make_account(name="Bob mBank", owner_id=bob.id)
+    client.post("/login", data={"username": "alice", "password": "pw123456"})
+
+    client.post(
+        f"/dashboard/accounts/{bobs.id}/edit",
+        data={"name": "Bob mBank PLN", "type": "bank", "number": "", "owner_id": str(bob.id)},
+    )
+    db_session.expire_all()
+    acc = db_session.get(Account, bobs.id)
+
+    assert (acc.name, acc.owner_id) == ("Bob mBank PLN", bob.id)
+
+
+def test_deactivating_a_member_does_not_freeze_their_account(
+    client: TestClient, db_session: Session, make_account: Callable[..., Account]
+):
+    """An account whose owner was deactivated is still editable."""
+    users.create_user(db_session, username="admin", name="Admin", password="pw123456")
+    gone = users.create_user(db_session, username="gone", name="Gone", password="pw123456")
+    acc = make_account(name="Gone mBank", owner_id=gone.id)
+    gone.is_active = False
+    db_session.add(gone)
+    db_session.commit()
+    client.post("/login", data={"username": "admin", "password": "pw123456"})
+
+    resp = client.post(
+        f"/dashboard/accounts/{acc.id}/edit",
+        data={"name": "Gone mBank PLN", "type": "bank", "number": "", "owner_id": str(gone.id)},
+        follow_redirects=False,
+    )
+    db_session.expire_all()
+    fresh = db_session.get(Account, acc.id)
+
+    assert resp.status_code == status.HTTP_303_SEE_OTHER
+    assert (fresh.name, fresh.owner_id) == ("Gone mBank PLN", gone.id)
+
+
+def test_cannot_hand_an_account_to_a_deactivated_member(
+    client: TestClient, db_session: Session, make_account: Callable[..., Account]
+):
+    """...but nobody may newly hand an account to a deactivated member."""
+    users.create_user(db_session, username="admin", name="Admin", password="pw123456")
+    gone = users.create_user(db_session, username="gone", name="Gone", password="pw123456")
+    acc = make_account(name="Spare")
+    gone.is_active = False
+    db_session.add(gone)
+    db_session.commit()
+    client.post("/login", data={"username": "admin", "password": "pw123456"})
+
+    resp = client.post(
+        f"/dashboard/accounts/{acc.id}/edit",
+        data={"name": "Spare", "type": "bank", "number": "", "owner_id": str(gone.id)},
+    )
+    db_session.expire_all()
+
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    assert "deactivated" in resp.text
+    assert db_session.get(Account, acc.id).owner_id is None

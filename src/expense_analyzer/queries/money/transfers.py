@@ -18,7 +18,6 @@ from uuid import uuid4
 from sqlmodel import Session, col, select
 
 from expense_analyzer.models import Category, CategoryKind, Transaction
-from expense_analyzer.queries.money.transactions import _get_visible
 from expense_analyzer.queries.visibility import visible_to
 from expense_analyzer.transfers import DetectionResult, find_transfer_pairs
 
@@ -75,6 +74,10 @@ def link_transfer(
     a human confirming a pair may legitimately link two legs that booked further
     apart than the window, so manual confirmation is allowed to override it.
     """
+    # Deferred: transactions -> importers.merchant runs the importers package __init__,
+    # which imports pipeline, which imports this module. That cycle breaks seed_demo.
+    from expense_analyzer.queries.money.transactions import _get_visible
+
     # _get_visible enforces the privacy boundary: a leg the viewer may not see
     # (another member's private row) reads as absent, so it can't be linked (IDOR).
     a = _get_visible(session, tx_a_id, viewer_id=viewer_id)
@@ -161,7 +164,8 @@ def detect_and_autolink(
     unambiguous pairs. Returns ``(auto_linked_count, result)`` so the caller can also
     surface the ambiguous suggestions. Auto pairs are vertex-disjoint (mutual
     uniqueness), so linking them in sequence is safe. At import ``viewer_id`` is the
-    uploading user, so their own private transfers still auto-link."""
+    owner of the rows just written, so private transfers on a member's own account
+    still auto-link."""
     result = find_transfer_pairs(
         unmatched_candidates(session, viewer_id=viewer_id), window_days=window_days
     )

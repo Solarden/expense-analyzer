@@ -24,6 +24,10 @@ from expense_analyzer.queries.planning import loans as loan_queries
 from expense_analyzer.queries.visibility import visible_to
 from expense_analyzer.queries.wealth import investments
 
+# Only these two derive their balance from scoped transactions; a portfolio or a
+# loan is computed from positions and schedules, which carry no scope.
+_SCOPED_TYPES = (AccountType.bank, AccountType.cash)
+
 
 @dataclass(frozen=True)
 class AccountBalance:
@@ -49,6 +53,16 @@ def _cash_balance(session: Session, account_id: int, *, viewer_id: int | None) -
     return int(total)
 
 
+def _has_visible_rows(session: Session, account_id: int, *, viewer_id: int | None) -> bool:
+    """Whether the viewer can see any live transaction on this account."""
+    query = select(Transaction.id).where(
+        Transaction.account_id == account_id,
+        col(Transaction.deleted_at).is_(None),
+    )
+
+    return session.exec(visible_to(query, viewer_id=viewer_id).limit(1)).first() is not None
+
+
 def _loan_for_account(session: Session, account_id: int) -> int | None:
     """A loan account holds one loan; return its id (or None)."""
     return session.exec(
@@ -61,10 +75,30 @@ def account_balances(session: Session, *, viewer_id: int | None) -> list[Account
 
     Cash balances are viewer-scoped. Portfolio and loan figures are not: positions
     and loans carry no scope or owner, they are shared household reference data.
+
+    Another member's **bank or cash** account is dropped when the viewer can see
+    nothing on it: every row is private, so a scoped sum reads ``0.00`` —
+    indistinguishable from an account nobody has used, and it drags net worth down
+    with a number that looks real. A background job (``viewer_id=None``) sees the
+    shared ones only, for the same reason.
+
+    The test is what the viewer can *see*, not who owns the account, so a household
+    row booked against a member's own account still counts for everyone — otherwise
+    net worth would omit money that this month's spending figure includes, and the
+    two would stop reconciling.
+
+    Bank and cash only: a portfolio's value and a loan's debt come from positions and
+    schedules, which carry no scope at all, so there is no zero to avoid and nothing
+    private to withhold. Skipping those because someone labelled the account would
+    delete a real asset — or a mortgage — from every other member's net worth.
     """
     balances: list[AccountBalance] = []
 
     for account in list_accounts(session):
+        if account.type in _SCOPED_TYPES and account.owner_id not in (None, viewer_id):
+            if not _has_visible_rows(session, account.id, viewer_id=viewer_id):
+                continue
+
         note: str | None = None
 
         if account.type in (AccountType.bank, AccountType.cash):

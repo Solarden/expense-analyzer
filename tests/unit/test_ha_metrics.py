@@ -9,7 +9,7 @@ from collections.abc import Callable
 from sqlmodel import Session
 
 from expense_analyzer.clock import local_today
-from expense_analyzer.ha.metrics import collect_metrics
+from expense_analyzer.ha.metrics import collect_member_metrics, collect_metrics
 from expense_analyzer.models import (
     Account,
     AccountType,
@@ -17,8 +17,12 @@ from expense_analyzer.models import (
     Category,
     CategoryKind,
     Loan,
+    Scope,
     Transaction,
 )
+from expense_analyzer.queries.core import users
+
+_MONTH_KEYS = ("month_spending", "month_income", "month_net")
 
 
 def test_empty_database_still_yields_headline_metrics(db_session: Session) -> None:
@@ -141,3 +145,34 @@ def test_per_account_balance_sensor_named_after_account(
 
     # No loan defined yet -> outstanding 0 -> balance reads zero, not a crash.
     assert metric.value == "0.00"
+
+
+def test_member_metrics_add_each_members_own_view(
+    db_session: Session,
+    account: Account,
+    make_transaction: Callable[..., Transaction],
+) -> None:
+    """A member's sensor answers "mine and the house's"; the unprefixed one stays the
+    house alone, so a dashboard built on it keeps reading the same number."""
+    alice = users.create_user(db_session, username="alice", name="Alice", password="pw")
+    bob = users.create_user(db_session, username="bob", name="Bob", password="pw")
+    make_transaction(account_id=account.id, amount=1000, day=1, scope=Scope.household)
+    make_transaction(
+        account_id=account.id, amount=500, day=2, owner_id=alice.id, scope=Scope.private
+    )
+
+    household = {m.key: m.value for m in collect_metrics(db_session)}
+    member = {m.key: m for m in collect_member_metrics(db_session)}
+
+    assert household["net_worth"] == "10.00"
+    assert member[f"owner_{alice.id}_net_worth"].value == "15.00"
+    assert member[f"owner_{bob.id}_net_worth"].value == "10.00"
+    assert member[f"owner_{alice.id}_net_worth"].name == "Net Worth (Alice)"
+    # Per-account and per-budget sensors stay household-only.
+    assert not any(k.startswith(f"owner_{alice.id}_account_") for k in member)
+
+    # only_id is what keeps these off any in-app surface: they carry private rows,
+    # so a page may show the viewer's own and nobody else's.
+    mine = {m.key for m in collect_member_metrics(db_session, only_id=bob.id)}
+
+    assert mine == {f"owner_{bob.id}_{k}" for k in ("net_worth", *_MONTH_KEYS)}

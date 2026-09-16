@@ -106,24 +106,25 @@ def confirmed_label_texts(
     (``source = classifier``) are excluded so neither layer learns from machine
     output — a human or a rule has to vouch for a label first.
 
-    With ``viewer_id`` given, the set is restricted to labels that viewer may see
-    (:func:`visible_to`) — the per-viewer embeddings neighbours use this so another
-    member's private description never surfaces as a "Similar to" hint. With
-    ``viewer_id=None`` (the classifier) the whole confirmed set is used: that model
-    only ever outputs a category id on the user's *own* row, so it needs no split."""
+    The set is always restricted to labels the viewer may see (:func:`visible_to`),
+    so ``viewer_id=None`` means household-only here exactly as it does everywhere
+    else — see :mod:`expense_analyzer.queries.visibility`. Both layers lean on it:
+    layer 3 renders a neighbour's own text back to the user, and layer 2's fit would
+    otherwise turn its suggestion and confidence into a read of what another member
+    has filed a merchant under."""
     learnable = _learnable_category_ids(session)
 
     if not learnable:
         return []
 
-    query = select(Transaction).where(
-        col(Transaction.deleted_at).is_(None),
-        col(Transaction.category_id).in_(learnable),
-        col(Transaction.source).in_([TxSource.manual, TxSource.rule]),
+    query = visible_to(
+        select(Transaction).where(
+            col(Transaction.deleted_at).is_(None),
+            col(Transaction.category_id).in_(learnable),
+            col(Transaction.source).in_([TxSource.manual, TxSource.rule]),
+        ),
+        viewer_id=viewer_id,
     )
-
-    if viewer_id is not None:
-        query = visible_to(query, viewer_id=viewer_id)
     rows = session.exec(query).all()
 
     return [
@@ -133,11 +134,12 @@ def confirmed_label_texts(
     ]
 
 
-def _training_samples(session: Session) -> list[TrainingSample]:
+def _training_samples(session: Session, *, viewer_id: int | None) -> list[TrainingSample]:
     """Confirmed labels as the classifier's :class:`TrainingSample` type
     (see :func:`confirmed_label_texts` for what "confirmed" means)."""
     return [
-        TrainingSample(text=text, category_id=cid) for text, cid in confirmed_label_texts(session)
+        TrainingSample(text=text, category_id=cid)
+        for text, cid in confirmed_label_texts(session, viewer_id=viewer_id)
     ]
 
 
@@ -163,8 +165,13 @@ def classification_candidates(session: Session, *, viewer_id: int | None) -> lis
     )
 
 
-def _train_model(session: Session, settings: Settings) -> Classifier | None:
-    return train(_training_samples(session), min_samples=settings.classifier_min_training_samples)
+def _train_model(
+    session: Session, settings: Settings, *, viewer_id: int | None
+) -> Classifier | None:
+    return train(
+        _training_samples(session, viewer_id=viewer_id),
+        min_samples=settings.classifier_min_training_samples,
+    )
 
 
 def classify(
@@ -180,7 +187,7 @@ def classify(
     settings = settings or get_settings()
     candidates = classification_candidates(session, viewer_id=viewer_id)
 
-    model = _train_model(session, settings)
+    model = _train_model(session, settings, viewer_id=viewer_id)
 
     if model is None:
         return ClassifyResult(
@@ -242,7 +249,7 @@ def review_queue(
 
     # Train only when there's a page of rows to suggest for — an empty page (queue
     # cleared, or paged past the end) shouldn't pay to fit a model it won't use.
-    model = _train_model(session, settings) if rows else None
+    model = _train_model(session, settings, viewer_id=viewer_id) if rows else None
     suggestions: list[Prediction | None] = (
         model.predict_batch([build_text(tx.merchant_normalized, tx.raw_description) for tx in rows])
         if model is not None

@@ -92,6 +92,30 @@ def test_from_settings_refuses_when_not_configured() -> None:
         MqttPublisher.from_settings(settings)
 
 
+def test_publish_snapshot_includes_the_per_member_sensors(
+    db_session, make_account, make_transaction
+) -> None:
+    """publish_snapshot puts both the household and the per-member sensors on the wire."""
+    from expense_analyzer.ha.mqtt import publish_snapshot
+    from expense_analyzer.models import Scope
+    from expense_analyzer.queries.core import users
+
+    alice = users.create_user(db_session, username="alice", name="Alice", password="pw123456")
+    account = make_account()
+    make_transaction(account_id=account.id, amount=1_000_00, scope=Scope.household)
+    make_transaction(account_id=account.id, amount=500_00, owner_id=alice.id, scope=Scope.private)
+
+    client = FakeMqttClient()
+    publish_snapshot(db_session, Settings(mqtt_host="broker.local"), client=client)
+
+    state = json.loads(
+        next(p for p in client.published if p.topic == "expense_analyzer/state").payload
+    )
+
+    assert state["net_worth"] == "1000.00"  # the house, unchanged
+    assert state[f"owner_{alice.id}_net_worth"] == "1500.00"  # hers plus the house
+
+
 def test_publish_snapshot_fires_budget_exceeded_alert(
     db_session, make_account, make_category, make_transaction, make_budget
 ) -> None:

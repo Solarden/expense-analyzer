@@ -7,8 +7,17 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from expense_analyzer.auth import hash_password, verify_password
-from expense_analyzer.models import Account, Owner, Scope, Transaction
+from expense_analyzer.models import (
+    Account,
+    Budget,
+    Category,
+    ImportBatch,
+    Owner,
+    Scope,
+    Transaction,
+)
 from expense_analyzer.queries.core import users
+from expense_analyzer.queries.planning import budgets
 
 
 def test_hash_verify_roundtrip():
@@ -220,6 +229,45 @@ def test_delete_member_soft_deletes_private_keeps_household(
     db_session.refresh(shared)
     assert private.deleted_at is not None and private.owner_id is None  # left with the user
     assert shared.deleted_at is None and shared.owner_id is None  # kept, shared, untagged
+
+
+def test_delete_member_clears_every_owner_reference(
+    db_session: Session,
+    account: Account,
+    make_batch: Callable[..., ImportBatch],
+    make_category: Callable[..., Category],
+):
+    """Deleting a member clears every owner_id FK, so the DELETE cannot trip one."""
+    member = users.create_user(db_session, username="plain", name="Plain", password="pw")
+    batch = make_batch(owner_id=member.id)
+    food = make_category(name="Food")
+    # What set_budget actually writes: a household budget is never owned, a private
+    # one always is.
+    budgets.set_budget(db_session, category_id=food.id, month="2026-09", limit_amount=100)
+    budgets.set_budget(
+        db_session,
+        category_id=food.id,
+        month="2026-10",
+        limit_amount=200,
+        scope=Scope.private,
+        viewer_id=member.id,
+    )
+    account.owner_id = member.id
+    db_session.add(account)
+    db_session.commit()
+
+    users.delete_user(db_session, member)
+
+    db_session.expire_all()
+    remaining = db_session.exec(select(Budget)).all()
+
+    assert users.get(db_session, member.id) is None
+    assert db_session.get(ImportBatch, batch.id).owner_id is None  # nobody's to roll back
+    assert db_session.get(Account, account.id).owner_id is None  # back to shared
+    # The household budget is untouched; the private one leaves with them.
+    assert [(b.month, b.scope, b.owner_id) for b in remaining] == [
+        ("2026-09", Scope.household, None)
+    ]
 
 
 def test_admin_cannot_delete_self(client: TestClient, db_session: Session):

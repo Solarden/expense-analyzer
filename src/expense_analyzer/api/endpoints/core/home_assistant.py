@@ -19,7 +19,7 @@ from expense_analyzer.api.deps import CurrentUser, DbSession
 from expense_analyzer.auth import require_user
 from expense_analyzer.config import get_settings
 from expense_analyzer.ha import discovery
-from expense_analyzer.ha.metrics import collect_metrics
+from expense_analyzer.ha.metrics import collect_member_metrics, collect_metrics
 from expense_analyzer.ha.mqtt import MqttError, publish_snapshot
 from expense_analyzer.models import Owner
 from expense_analyzer.templating import templates
@@ -43,7 +43,9 @@ def _context(session: Session, user: Owner, **extra) -> dict:
         "mqtt_interval": settings.mqtt_publish_interval_minutes,
         "state_topic": discovery.state_topic(base),
         "discovery_prefix": settings.mqtt_discovery_prefix,
-        "metrics": collect_metrics(session),
+        # Only the viewer's own member sensors: the full set includes every
+        # member's private rows, which may reach the broker but never this page.
+        "metrics": collect_metrics(session) + collect_member_metrics(session, only_id=user.id),
         **extra,
     }
 
