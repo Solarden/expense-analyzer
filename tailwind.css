@@ -12,46 +12,35 @@
  * plain utilities (bg-panel, text-muted, border-line, ...).
  */
 @import "tailwindcss";
+/* The shared dark skin: tokens and the look of the base elements. Rules below carry
+ * size and layout only, plus anything that must beat it from the components layer. */
+@import "./skin.css" layer(base);
 
 /* Scan the Jinja templates for class names (relative to this file). */
 @source "./src/expense_analyzer/templates";
 
-/* The dark palette, ported 1:1 from the previous inline <style>. Each token
- * generates utilities: --color-foo -> bg-foo / text-foo / border-foo. */
-@theme {
-  --color-bg: #0f1115;
-  --color-panel: #1a1d24;
-  --color-line: #2a2f3a;
-  --color-fg: #e6e9ef;
-  --color-muted: #9aa3b2;
-  --color-accent: #4f8cff;
-  /* Darker accent for solid buttons only: white-on-#4f8cff is 3.2:1 (fails AA),
-   * but #4f8cff stays as-is for links/focus rings (5.2:1 on the dark bg). White
-   * on #3366cc is 5.4:1. WCAG 1.4.3. */
-  --color-accent-strong: #3366cc;
-  --color-pos: #3fb950;
-  --color-neg: #f0686b;
-  /* Field/secondary-control border. --color-line (#2a2f3a) is only ~1.3:1 on the
-   * panel, below the 3:1 that 1.4.11 wants for input boundaries; this is ~3.5:1
-   * while staying subtle. Structural dividers (tables, panels) keep --color-line. */
-  --color-field-border: #6b7280;
-  --font-sans: system-ui, -apple-system, sans-serif;
+/* The skin's tokens as utilities: --color-foo -> bg-foo / text-foo / border-foo.
+ * `inline` makes each utility read the skin variable itself (bg-panel ->
+ * var(--panel)); plain CSS below uses the skin names directly too. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-pos: var(--pos);
+  --color-neg: var(--neg);
+  --color-warn: var(--warn);
+  --color-field-border: var(--field-border);
+  --font-sans: var(--sans);
 }
 
 @layer base {
-  body {
-    @apply m-0 bg-bg text-fg font-sans leading-normal;
-    font-size: 15px;
-    /* Theme native controls (date picker icon + popup, scrollbars, spinners) for
-     * dark mode. Without this the <input type="date"> calendar indicator renders
-     * as a dark glyph on our dark field — effectively invisible, so the picker
-     * looks missing. Inherited by the inputs. */
-    color-scheme: dark;
-  }
-
   /* Header wraps on narrow screens so the nav links never overflow. */
   header {
-    @apply flex flex-wrap items-baseline gap-x-4 gap-y-3 border-b border-line px-5 py-3;
+    @apply flex flex-wrap items-baseline gap-x-4 gap-y-3 px-5 py-3;
   }
   header h1 {
     @apply m-0 text-base;
@@ -112,22 +101,16 @@
     @apply mb-2 mt-6 text-[15px] uppercase tracking-wider text-muted;
   }
 
-  table {
-    @apply w-full border-collapse;
-  }
   th,
   td {
-    @apply border-b border-line px-3 py-2.5 text-left;
-  }
-  th {
-    @apply text-[13px] font-semibold text-muted;
+    @apply px-3 py-2.5;
   }
 
   /* Vertical rhythm: a label binds to the field BELOW it (small gap under) and is
    * separated from the field ABOVE by a larger gap. Inline forms (filters, row
    * actions) opt out — their labels, if any, shouldn't carry this spacing. */
   label {
-    @apply mb-1 block text-[13px] text-muted;
+    @apply mb-1 block;
   }
   form:not(.hstack) label {
     @apply mt-4;
@@ -146,8 +129,7 @@
   input,
   select,
   button {
-    @apply h-10 max-w-full rounded-md border border-field-border bg-bg px-2 text-fg md:h-9;
-    font: inherit;
+    @apply h-10 max-w-full px-2 md:h-9;
   }
   /* Custom dropdown chevron: the native arrow crowds the right border at our
    * padding. Drop it (appearance:none) and draw our own (muted SVG), with room
@@ -171,7 +153,7 @@
     @apply inline-flex items-center;
   }
   button {
-    @apply cursor-pointer border-accent-strong bg-accent-strong text-white transition-colors hover:border-accent hover:bg-accent;
+    @apply transition-colors;
   }
   button.ghost {
     @apply border-field-border bg-transparent text-muted transition-colors hover:border-fg hover:bg-line hover:text-fg;
@@ -179,8 +161,7 @@
   /* Multi-line text input (transaction note). Mirrors the input look but no fixed
    * h-9. Width comes from the form:not(.hstack) rule above. */
   textarea {
-    @apply max-w-full rounded-md border border-field-border bg-bg px-2 py-1.5 text-fg;
-    font: inherit;
+    @apply max-w-full px-2 py-1.5;
   }
 
   code {
@@ -188,24 +169,10 @@
   }
 
   footer {
-    @apply border-t border-line px-5 py-3.5 text-center text-xs text-muted;
+    @apply px-5 py-3.5;
   }
   footer a {
     @apply text-muted hover:text-fg;
-  }
-
-  /* Keyboard focus ring. The UA default is faint on our dark palette, so draw a
-   * clear accent outline — only for :focus-visible, so a mouse click never shows
-   * it. Scoped to interactive elements (incl. the focusable .nav-trigger). */
-  a:focus-visible,
-  button:focus-visible,
-  select:focus-visible,
-  input:focus-visible,
-  textarea:focus-visible,
-  .nav-trigger:focus-visible,
-  .icon-btn:focus-visible {
-    outline: 2px solid var(--color-accent);
-    outline-offset: 2px;
   }
 }
 
@@ -214,7 +181,7 @@
    * blowing out the page width. Paired with .num (nowrap) so numeric columns
    * stay on one line and the scroll is meaningful. */
   .panel {
-    @apply mb-4 overflow-x-auto rounded-lg border border-line bg-panel p-4;
+    @apply mb-4 overflow-x-auto p-4;
   }
 
   .num {
@@ -226,15 +193,6 @@
    * the size, shape and a faint border so light chips stay visible on the panel. */
   .swatch {
     @apply mr-1.5 inline-block h-3 w-3 shrink-0 rounded-[3px] border border-line align-middle;
-  }
-  .muted {
-    @apply text-muted;
-  }
-  .pos {
-    @apply text-pos;
-  }
-  .neg {
-    @apply text-neg;
   }
 
   /* Multi-column layout row. NOT named `.grid` — that collides with Tailwind's
@@ -293,6 +251,8 @@
   .flash {
     @apply mb-4 rounded-md border border-pos bg-[#16321f] px-3.5 py-2.5 text-[#b9f6ca];
   }
+  /* Restated from the skin: .flash above sits in the components layer, which beats the
+   * skin's base-layer .flash.error whatever the specificity. */
   .flash.error {
     @apply border-neg bg-[#3a1c1e] text-[#ffd5d6];
   }
@@ -441,7 +401,7 @@
   /* Separate each card and the footer (totals) row. */
   .table-cards tbody tr + tr,
   .table-cards tfoot tr {
-    border-top: 1px solid var(--color-line);
+    border-top: 1px solid var(--line);
   }
   .table-cards td,
   .table-cards tfoot th {
@@ -453,7 +413,7 @@
   .table-cards td[data-label]::before,
   .table-cards tfoot th[data-label]::before {
     content: attr(data-label) ": ";
-    color: var(--color-muted);
+    color: var(--muted);
     font-size: 13px;
   }
   /* The inline editor / spanning cell gets a little breathing room above it. */
