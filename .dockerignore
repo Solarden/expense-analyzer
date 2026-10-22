@@ -9,7 +9,6 @@ data
 *.db-wal
 *.db-shm
 .env
-internal_docs
 tests
 .ruff_cache
 .pytest_cache
