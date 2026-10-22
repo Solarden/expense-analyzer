@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% import "_macros.html" as ui %}
 {% block content %}
-  <h2 style="margin-top:0">Edit transaction</h2>
+  <h1>Edit transaction</h1>
   <div class="panel">
     <p class="muted">
       {{ tx.booked_date | dpl }} ·
@@ -15,47 +15,67 @@
     <form method="post" action="/dashboard/transactions/{{ tx.id }}/edit">
       <input type="hidden" name="return_to" value="{{ return_to }}">
       {% if is_manual %}
-        <label for="account_id">Account</label>
-        <select id="account_id" name="account_id" required>
-          {% for a in accounts %}
-            <option value="{{ a.id }}" {% if a.id == tx.account_id %}selected{% endif %}>{{ a.name }}</option>
-          {% endfor %}
-        </select>
-        <label for="booked_date">Date</label>
-        <input id="booked_date"
-               type="date"
-               name="booked_date"
-               value="{{ tx.booked_date.isoformat() }}"
-               required>
-        <label for="amount">Amount (PLN)</label>
-        <input id="amount"
-               type="text"
-               name="amount"
-               inputmode="decimal"
-               value="{{ amount_magnitude }}"
-               required>
-        <label for="direction">Direction</label>
-        <select id="direction" name="direction">
-          {% for d in directions %}
-            <option value="{{ d }}" {% if d == direction %}selected{% endif %}>{{ d }}</option>
-          {% endfor %}
-        </select>
-        <label for="description">Description</label>
-        <input id="description"
-               type="text"
-               name="description"
-               value="{{ tx.raw_description }}"
-               required>
+        <div class="form-row">
+          <div class="field">
+            <label for="account_id">Account</label>
+            <select id="account_id" name="account_id" required>
+              {% for a in accounts %}
+                <option value="{{ a.id }}" {% if a.id == tx.account_id %}selected{% endif %}>{{ a.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="booked_date">Date</label>
+            <input id="booked_date"
+                   type="date"
+                   name="booked_date"
+                   value="{{ tx.booked_date.isoformat() }}"
+                   required>
+          </div>
+          <div class="field">
+            <label for="amount">Amount (PLN)</label>
+            <input id="amount"
+                   type="text"
+                   name="amount"
+                   inputmode="decimal"
+                   value="{{ amount_magnitude }}"
+                   required>
+          </div>
+          <div class="field">
+            <label for="direction">Direction</label>
+            <select id="direction" name="direction">
+              {% for d in directions %}
+                <option value="{{ d }}" {% if d == direction %}selected{% endif %}>{{ d }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
       {% endif %}
-      <label for="category_id">Category</label>
-      <select id="category_id" name="category_id">
-        <option value="">— none —</option>
-        {% for c in categories %}
-          <option value="{{ c.id }}" {% if c.id == tx.category_id %}selected{% endif %}>{{ c.name }}</option>
-        {% endfor %}
-      </select>
-      <label for="scope">Scope</label>
-      <select id="scope" name="scope">{{ ui.scope_options(scopes, tx.scope.value) }}</select>
+      <div class="form-row">
+        {% if is_manual %}
+          <div style="flex:2; min-width:200px;">
+            <label for="description">Description</label>
+            <input id="description"
+                   type="text"
+                   name="description"
+                   value="{{ tx.raw_description }}"
+                   required>
+          </div>
+        {% endif %}
+        <div class="field">
+          <label for="category_id">Category</label>
+          <select id="category_id" name="category_id">
+            <option value="">— none —</option>
+            {% for c in categories %}
+              <option value="{{ c.id }}" {% if c.id == tx.category_id %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="scope">Scope</label>
+          <select id="scope" name="scope">{{ ui.scope_options(scopes, tx.scope.value) }}</select>
+        </div>
+      </div>
       <label for="note">Note</label>
       <textarea id="note" name="note" rows="2" placeholder="Note (optional)">{{ tx.note or '' }}</textarea>
       <div class="hstack mt-3">
@@ -69,9 +89,9 @@
       <form class="hstack"
             method="post"
             action="/dashboard/transactions/{{ tx.id }}/delete"
-            onsubmit="return confirm('Delete this transaction?')">
+            data-confirm="Delete this transaction?">
         <input type="hidden" name="return_to" value="{{ return_to }}">
-        <button class="ghost" type="submit">Delete transaction</button>
+        <button class="quiet" type="submit">Delete transaction</button>
         <span class="muted">Removes this manual entry. Imported rows are removed by rolling back their import batch.</span>
       </form>
     </div>

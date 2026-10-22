@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Users — Expense Analyzer{% endblock %}
 {% block content %}
-  <h2 style="margin-top:0">Users</h2>
+  <h1>Users</h1>
   <div class="panel">
-    <table>
+    <table class="table-cards">
       <thead>
         <tr>
           <th>Username</th>
           <th>Name</th>
           <th>Role</th>
           <th>Active</th>
-          {% if user.is_admin %}<th>Manage</th>{% endif %}
+          {% if user.is_admin %}<th class="actions">Manage</th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -20,15 +20,15 @@
               {{ u.username }}
               {% if u.id == user.id %}<span class="muted">(you)</span>{% endif %}
             </td>
-            <td>{{ u.name }}</td>
-            <td>
+            <td data-label="Name">{{ u.name }}</td>
+            <td data-label="Role">
               {% if u.is_admin %}
                 admin
               {% else %}
                 <span class="muted">member</span>
               {% endif %}
             </td>
-            <td>
+            <td data-label="Active">
               {% if u.is_active %}
                 yes
               {% else %}
@@ -36,7 +36,7 @@
               {% endif %}
             </td>
             {% if user.is_admin %}
-              <td>
+              <td class="actions">
                 <div class="hstack">
                   {# Admin toggle is allowed on yourself (step down) — the
                      "last active admin" guard catches a lockout. #}
@@ -62,8 +62,15 @@
                     </form>
                     <form method="post"
                           action="/dashboard/users/{{ u.id }}/delete"
-                          onsubmit="return confirm('Delete this user? Their imported data stays.');">
-                      <button class="ghost" type="submit">Delete</button>
+                          data-confirm="Delete this user? Their imported data stays.">
+                      <button class="icon-btn"
+                              type="submit"
+                              title="Delete"
+                              aria-label="Delete the user {{ u.username }}">
+                        <svg class="act-ico" aria-hidden="true">
+                          <use href="#i-trash"></use>
+                        </svg>
+                      </button>
                     </form>
                   {% endif %}
                   {# Reset password — safe on yourself too (also the only in-app
@@ -71,10 +78,11 @@
                   <form method="post"
                         action="/dashboard/users/{{ u.id }}/reset-password"
                         class="hstack"
-                        onsubmit="return confirm('Set a new password for this user?');">
+                        data-confirm="Set a new password for this user?">
                     <input name="password"
                            type="password"
                            placeholder="New password"
+                           aria-label="New password for {{ u.username }}"
                            autocomplete="new-password"
                            required>
                     <button class="btn" type="submit">Set password</button>
@@ -99,6 +107,7 @@
              type="password"
              placeholder="Password"
              aria-label="Password"
+             autocomplete="new-password"
              required>
       <button type="submit">Add user</button>
     </form>

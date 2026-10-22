@@ -27,8 +27,9 @@ from expense_analyzer import attachments
 from expense_analyzer.api.deps import CurrentUser, DbSession
 from expense_analyzer.api.forms import LoanForm, PaymentLinkForm, RateChangeForm
 from expense_analyzer.auth import require_user
+from expense_analyzer.clock import local_today
 from expense_analyzer.config import get_settings
-from expense_analyzer.loans import LoanScheduleError
+from expense_analyzer.loans import LoanScheduleError, schedule_window
 from expense_analyzer.models import (
     AccountType,
     InstallmentType,
@@ -230,6 +231,8 @@ def loan_detail(
             "loan": loan,
             "account_name": (acc := accounts.get_account(session, loan.account_id)) and acc.name,
             "reconciliation": reconciliation,
+            "schedule_window": reconciliation
+            and schedule_window([r.scheduled.due_date for r in reconciliation.rows], local_today()),
             "schedule_error": schedule_error,
             "rate_changes": loan_queries.list_rate_changes(session, loan_id),
             "suggestions": suggestions,

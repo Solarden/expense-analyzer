@@ -221,6 +221,9 @@ __marimo__/
 internal_docs
 .claude/
 .DS_STORE
+# Working notes and rules for coding assistants. Local to this checkout.
+CLAUDE.md
+AGENTS.md
 
 # Expense Analyzer
 data/

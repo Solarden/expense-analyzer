@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-  <h2 style="margin-top:0">Net worth</h2>
+  <h1>Net worth</h1>
   <div class="cards">
     <div class="card">
       <div class="k">Net worth</div>
@@ -21,9 +21,9 @@
   </div>
   <div class="cols" style="margin-top:16px">
     <div class="panel">
-      <h2 style="margin-top:0">By account</h2>
+      <h2>By account</h2>
       {% if balances %}
-        <table>
+        <table class="table-cards">
           <thead>
             <tr>
               <th>Account</th>
@@ -38,11 +38,12 @@
                   {{ b.name }}
                   {% if b.note %}
                     <br>
-                    <span class="muted" style="font-size:12px">{{ b.note }}</span>
+                    <span class="muted text-[12px]">{{ b.note }}</span>
                   {% endif %}
                 </td>
-                <td class="muted">{{ b.type }}</td>
-                <td class="num {{ 'neg' if b.balance < 0 else 'pos' if b.balance > 0 else 'muted' }}">{{ b.balance | pln }}</td>
+                <td class="muted" data-label="Type">{{ b.type }}</td>
+                <td class="num {{ 'neg' if b.balance < 0 else 'pos' if b.balance > 0 else 'muted' }}"
+                    data-label="Balance">{{ b.balance | pln }}</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -65,43 +66,21 @@
     <div class="panel">
       {# Assets and liabilities are charted separately so a large mortgage on a
          shared axis can't squash every asset bar (each scales on its own). #}
-      <h2 style="margin-top:0">Assets</h2>
+      <h2>Assets</h2>
       {% if assets_chart.labels %}
-        <canvas id="assetsChart" height="200"></canvas>
+        <canvas id="assetsChart" data-chart="assets" height="200"></canvas>
+        <script type="application/json" id="assetsChart-data">{{ assets_chart | tojson }}</script>
       {% else %}
         <p class="muted">No assets to chart.</p>
       {% endif %}
       <h2>Liabilities</h2>
       {% if liabilities_chart.labels %}
-        <canvas id="liabilitiesChart" height="160"></canvas>
+        <canvas id="liabilitiesChart" data-chart="liabilities" height="160"></canvas>
+        <script type="application/json" id="liabilitiesChart-data">{{ liabilities_chart | tojson }}</script>
       {% else %}
         <p class="muted">No liabilities — debt-free.</p>
       {% endif %}
     </div>
   </div>
-  {% if assets_chart.labels or liabilities_chart.labels %}
-    <script src="/static/chart.min.js"></script>
-    <script src="/static/chart-theme.js"></script>
-    <script>
-  // Integer minor units (1/100 PLN); fmt divides by 100 in one place.
-  const fmt = (minor) => (minor / 100).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' });
-  // Shared horizontal-bar config; only the colour differs between the two.
-  const barChart = (id, chart, colour) =>
-    new Chart(document.getElementById(id), {
-      type: 'bar',
-      data: { labels: chart.labels, datasets: [{ data: chart.data, backgroundColor: colour }] },
-      options: {
-        indexAxis: 'y',
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => fmt(c.parsed.x) } } },
-        scales: { x: { ticks: { callback: fmt } } },
-      },
-    });
-
-  const assets = {{ assets_chart | tojson }};
-  if (assets.labels.length) barChart('assetsChart', assets, '#3fb950');
-
-  const liabilities = {{ liabilities_chart | tojson }};
-  if (liabilities.labels.length) barChart('liabilitiesChart', liabilities, '#f0686b');
-    </script>
-  {% endif %}
+  {% if assets_chart.labels or liabilities_chart.labels %}<script src="/static/chart.min.js"></script>{% endif %}
 {% endblock %}

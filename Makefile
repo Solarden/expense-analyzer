@@ -70,6 +70,10 @@ check-update: ## Check our repo for a newer release tag and notify HA (notify-on
 audit: ## Scan dependencies for known CVEs (maintenance — run scheduled, not per-commit)
 	uvx pip-audit
 
+# The macOS release binary ships with a signature that does not match its own bytes, and
+# the OS answers that with SIGKILL and no message. Re-signing ad hoc is what makes it run,
+# and a failed signing deletes the download — kept, it would satisfy the `test -x` check and
+# every later build would run straight into that silent kill.
 tailwind-cli: ## Download the Tailwind standalone CLI for this platform (once)
 	@test -x $(TAILWIND_BIN) && echo "Tailwind CLI present" || ( \
 		mkdir -p tools && \
@@ -84,7 +88,9 @@ tailwind-cli: ## Download the Tailwind standalone CLI for this platform (once)
 		echo "downloading $$asset ($(TAILWIND_VERSION))" ; \
 		curl -sL -o $(TAILWIND_BIN) \
 			https://github.com/tailwindlabs/tailwindcss/releases/download/$(TAILWIND_VERSION)/$$asset && \
-		chmod +x $(TAILWIND_BIN) )
+		chmod +x $(TAILWIND_BIN) && \
+		case "$$os" in Darwin) codesign --force --sign - $(TAILWIND_BIN) || \
+			{ rm -f $(TAILWIND_BIN) ; false ; } ;; esac )
 
 css: tailwind-cli ## Build the dashboard CSS (minified) into static/app.css
 	$(TAILWIND_BIN) -i $(TAILWIND_INPUT) -o $(TAILWIND_OUTPUT) --minify

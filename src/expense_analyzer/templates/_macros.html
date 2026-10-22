@@ -8,32 +8,30 @@
 {% endif -%}
 {%- endmacro %}
 {# How a transaction got its category (llm / rule / classifier / manual). Nothing
-   is shown for still-uncategorized (import_csv) rows. The LLM badge is tinted with
-   the accent colour so auto-tagged rows are easy to spot-check; the others are
-   muted. Plain palette utilities (run `make css` after touching this). #}
+   is shown for still-uncategorized (import_csv) rows. The LLM pill is in fg so
+   auto-tagged rows are easy to spot-check; the others are muted. #}
 {% macro source_badge(source) -%}
   {%- if source and source != "import_csv" -%}
-    <span class="rounded border px-1.5 py-0.5 text-[11px] align-middle {{ "border-accent text-accent" if source == "llm" else "border-line text-muted" }}"
+    <span class="pill{{ '' if source == "llm" else ' muted' }}"
           title="Categorized by: {{ source }}">{{ source }}</span>
   {%- endif -%}
 {%- endmacro %}
 {# A "shared" pill on household-scoped rows so it's clear at a glance which
    transactions count toward the shared home budget (vs a member's private ones).
-   Nothing is shown for private rows. Plain palette utilities (run `make css`). #}
+   Nothing is shown for private rows. #}
 {% macro household_badge(scope) -%}
   {%- if scope == "household" -%}
-    <span class="rounded border px-1.5 py-0.5 text-[11px] align-middle border-accent text-accent"
+    <span class="pill"
           title="Shared with the household — counts toward the home budget">shared</span>
   {%- endif -%}
 {%- endmacro %}
 {# "Added by <name>" on a shared row so the home budget shows which member put a
    transaction into the shared pot. Muted pill (matches the non-LLM source_badge);
    renders nothing for private rows or when the owner is unknown (a departed
-   member's rows are owner-less). Plain palette utilities (run `make css`). #}
+   member's rows are owner-less). #}
 {% macro owner_badge(scope, name) -%}
   {%- if scope == "household" and name -%}
-    <span class="rounded border px-1.5 py-0.5 text-[11px] align-middle border-line text-muted"
-          title="Added to the shared budget by {{ name }}">{{ name }}</span>
+    <span class="pill muted" title="Added to the shared budget by {{ name }}">{{ name }}</span>
   {%- endif -%}
 {%- endmacro %}
 {# Scope <option>s with friendly labels (submitted values stay private/household).

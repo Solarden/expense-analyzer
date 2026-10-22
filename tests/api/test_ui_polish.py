@@ -8,6 +8,7 @@ disclosure JS) is CSS/JS and isn't asserted here beyond the markup hooks it need
 
 from collections.abc import Callable
 
+import pytest
 from fastapi.testclient import TestClient
 
 from expense_analyzer.models import Account, AccountType, Loan
@@ -102,14 +103,14 @@ def test_base_renders_burger_and_nav_id(auth_client: TestClient):
     assert 'class="nav-toggle' in resp.text
     assert 'id="primary-nav"' in resp.text
 
-    # Escape-to-close handler (a11y follow-up) ships in the base layout.
-    assert "if (e.key !== 'Escape') return;" in resp.text
+    assert '<script src="/static/app.js" defer></script>' in resp.text
+    assert "onclick=" not in resp.text
 
 
-def test_overview_includes_dark_chart_theme_script(auth_client: TestClient):
-    resp = auth_client.get("/dashboard/stats")
+def test_page_script_is_served(auth_client: TestClient):
+    resp = auth_client.get("/static/app.js")
     assert resp.status_code == 200
-    assert "/static/chart-theme.js" in resp.text
+    assert "if (e.key !== 'Escape') return;" in resp.text
 
 
 def test_loan_form_has_variable_disclosure_hook(
@@ -120,4 +121,21 @@ def test_loan_form_has_variable_disclosure_hook(
     resp = auth_client.get("/dashboard/loans")
     assert resp.status_code == 200
     assert 'id="variable-only"' in resp.text
-    assert "/static/loan-form.js" in resp.text
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/dashboard/stats",
+        "/dashboard/transactions",
+        "/dashboard/plan",
+        "/dashboard/settings",
+        "/dashboard/users",
+    ],
+)
+def test_page_has_one_h1_and_the_app_name_is_brand(auth_client: TestClient, path: str):
+    body = auth_client.get(path).text
+
+    assert body.count("<h1") == 1
+    assert '<p class="brand">' in body
+    assert '<a href="/dashboard">Expense Analyzer</a>' in body

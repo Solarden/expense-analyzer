@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Ask — Expense Analyzer{% endblock %}
 {% block content %}
-  <h2 style="margin-top:0">Ask</h2>
+  <h1>Ask</h1>
   {% if not llm_enabled %}
     <div class="panel">
       <p class="muted" style="margin:0">
@@ -11,11 +11,7 @@
     </div>
   {% else %}
     <div class="panel">
-      <form class="hstack"
-            method="get"
-            action="/dashboard/ask"
-            style="flex-wrap:wrap;
-                   gap:10px">
+      <form class="hstack w-full" method="get" action="/dashboard/ask">
         <input type="search"
                name="q"
                value="{{ q }}"
@@ -50,8 +46,8 @@
         {% if result.breakdown %}
           <div class="panel" style="margin-top:16px">
             {% if result.group_by == 'category' %}
-              <h2 style="margin-top:0">By category</h2>
-              <table>
+              <h2>By category</h2>
+              <table class="table-cards">
                 <thead>
                   <tr>
                     <th>Category</th>
@@ -62,14 +58,14 @@
                   {% for c in result.breakdown %}
                     <tr>
                       <td>{{ c.name }}</td>
-                      <td class="num">{{ c.total | pln }}</td>
+                      <td class="num" data-label="Total">{{ c.total | pln }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>
               </table>
             {% else %}
-              <h2 style="margin-top:0">By month</h2>
-              <table>
+              <h2>By month</h2>
+              <table class="table-cards">
                 <thead>
                   <tr>
                     <th>Month</th>
@@ -82,9 +78,9 @@
                   {% for m in result.breakdown %}
                     <tr>
                       <td>{{ m.month }}</td>
-                      <td class="num neg">{{ m.spending | pln }}</td>
-                      <td class="num pos">{{ m.income | pln }}</td>
-                      <td class="num {{ 'pos' if m.net >= 0 else 'neg' }}">{{ m.net | pln }}</td>
+                      <td class="num neg" data-label="Spending">{{ (-m.spending) | pln }}</td>
+                      <td class="num pos" data-label="Income">{{ m.income | pln }}</td>
+                      <td class="num {{ 'pos' if m.net >= 0 else 'neg' }}" data-label="Net">{{ m.net | pln }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

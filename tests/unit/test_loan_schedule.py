@@ -10,6 +10,7 @@ from expense_analyzer.loans import (
     expand_monthly_rates,
     generate_schedule,
     reconcile,
+    schedule_window,
 )
 from expense_analyzer.models import InstallmentType, RateType, Transaction
 
@@ -254,3 +255,25 @@ def test_reconcile_extra_payment_goes_to_unmatched() -> None:
 
     assert all(r.payment is None for r in result.rows)
     assert result.unmatched_payments == [extra, beyond]
+
+
+# --- schedule_window -------------------------------------------------------
+
+MONTHLY = [_add_months(START, k) for k in range(24)]  # 15 Jan 2026 .. 15 Dec 2027
+
+
+@pytest.mark.parametrize(
+    ("today", "expected"),
+    [
+        (date(2026, 7, 1), (3, 12)),  # next due is 15 Jul (index 6): 3 back, 6 ahead
+        (date(2026, 7, 15), (3, 12)),  # due today counts as upcoming
+        (date(2025, 12, 1), (0, 6)),  # not started: the first six
+        (date(2028, 1, 1), (21, 24)),  # paid off: the last three
+    ],
+)
+def test_schedule_window(today: date, expected: tuple[int, int]) -> None:
+    assert schedule_window(MONTHLY, today) == expected
+
+
+def test_schedule_window_short_loan_shows_whole() -> None:
+    assert schedule_window(MONTHLY[:5], date(2026, 3, 1)) == (0, 5)

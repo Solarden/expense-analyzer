@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-  <h2 style="margin-top:0">Loans</h2>
+  <h1>Loans</h1>
   <div class="panel">
     {% if loans %}
       <table class="table-cards">
@@ -13,7 +13,7 @@
             <th class="num">Rate</th>
             <th>Start</th>
             <th class="num">Term</th>
-            <th></th>
+            <th class="actions"></th>
           </tr>
         </thead>
         <tbody>
@@ -31,13 +31,27 @@
               </td>
               <td class="muted" data-label="Start">{{ loan.start_date | dpl }}</td>
               <td class="num" data-label="Term">{{ loan.term_months }}</td>
-              <td>
-                <div class="hstack">
-                  <a class="btn" href="/dashboard/loans/{{ loan.id }}/edit">Edit</a>
+              <td class="actions">
+                <div class="hstack gap-1">
+                  <a class="icon-btn"
+                     href="/dashboard/loans/{{ loan.id }}/edit"
+                     title="Edit"
+                     aria-label="Edit the loan {{ accounts.get(loan.account_id, "#" ~ loan.account_id) }}">
+                    <svg class="act-ico" aria-hidden="true">
+                      <use href="#i-pencil"></use>
+                    </svg>
+                  </a>
                   <form method="post"
                         action="/dashboard/loans/{{ loan.id }}/delete"
-                        onsubmit="return confirm('Delete this loan and its schedule? Linked payments are kept but unlinked.');">
-                    <button class="ghost" type="submit">Delete</button>
+                        data-confirm="Delete this loan and its schedule? Linked payments are kept but unlinked.">
+                    <button class="icon-btn"
+                            type="submit"
+                            title="Delete"
+                            aria-label="Delete the loan {{ accounts.get(loan.account_id, "#" ~ loan.account_id) }}">
+                      <svg class="act-ico" aria-hidden="true">
+                        <use href="#i-trash"></use>
+                      </svg>
+                    </button>
                   </form>
                 </div>
               </td>
@@ -105,7 +119,6 @@
           <button type="submit">Create loan</button>
         </p>
       </form>
-      <script src="/static/loan-form.js"></script>
     {% else %}
       <p class="muted">
         No loan accounts yet. <a href="/dashboard/settings">Create an account of type "loan"</a> first.

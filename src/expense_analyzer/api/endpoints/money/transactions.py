@@ -136,20 +136,6 @@ def _list_context(
     # gone from the table, so their old rows resolve to no name -> no pill.
     household_members = users.list_users(session)
     owner_names = {u.id: u.name for u in household_members}
-    # Per-row data for the inline edit modal (mirrors _edit_context, precomputed
-    # here so the template stays declarative): which rows are hand-entered (fully
-    # editable), and the unsigned magnitude + direction the amount field needs.
-    manual_batch = transactions.manual_batch_id(session)  # one query, not one per row
-    edit_meta = {
-        tx.id: {
-            "is_manual": tx.import_batch_id == manual_batch,
-            "magnitude": str(from_minor_units(abs(tx.amount))),
-            "direction": (
-                TxDirection.income.value if tx.amount >= 0 else TxDirection.expense.value
-            ),
-        }
-        for tx in result.rows
-    }
 
     return {
         "user": user,
@@ -163,7 +149,6 @@ def _list_context(
         else [],
         "categories": all_categories,
         "category_colors": {c.id: c.color for c in all_categories if c.id is not None},
-        "edit_meta": edit_meta,
         "months": stats.available_months(session, viewer_id=user.id, lens=lens),
         "scopes": [s.value for s in Scope],
         "directions": [d.value for d in TxDirection],

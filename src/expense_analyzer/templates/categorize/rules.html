@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-  <h2 style="margin-top:0">Categorization rules</h2>
+  <h1>Categorization rules</h1>
   <div class="panel">
     <p class="muted" style="margin:0 0 8px">
       A rule assigns a category when its text appears (case-insensitive) in a
@@ -58,7 +58,7 @@
             <th>Priority</th>
             <th>Pattern</th>
             <th>Category</th>
-            <th></th>
+            <th class="actions"></th>
           </tr>
         </thead>
         <tbody>
@@ -67,12 +67,19 @@
               <td data-label="Priority">{{ r.priority }}</td>
               <td data-label="Pattern">{{ r.pattern }}</td>
               <td data-label="Category">{{ category_names.get(r.category_id, "#" ~ r.category_id) }}</td>
-              <td>
+              <td class="actions">
                 <form class="hstack"
                       method="post"
                       action="/dashboard/rules/{{ r.id }}/delete"
-                      onsubmit="return confirm('Delete this rule?');">
-                  <button class="ghost" type="submit">Delete</button>
+                      data-confirm="Delete this rule?">
+                  <button class="icon-btn"
+                          type="submit"
+                          title="Delete"
+                          aria-label="Delete the rule {{ r.pattern }}">
+                    <svg class="act-ico" aria-hidden="true">
+                      <use href="#i-trash"></use>
+                    </svg>
+                  </button>
                 </form>
               </td>
             </tr>

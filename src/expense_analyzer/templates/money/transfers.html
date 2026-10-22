@@ -6,15 +6,15 @@
     · <span class="num {{ 'neg' if tx.amount < 0 else 'pos' }}">{{ tx.amount | pln }}</span>
     · <span class="muted">{{ tx.merchant_normalized or tx.raw_description }}</span>
   {% endmacro %}
-  <h2 style="margin-top:0">Transfers</h2>
+  <h1>Transfers</h1>
   <div class="panel">
-    <p class="muted" style="margin-top:0">
+    <p class="muted">
       Internal transfers between your own accounts — not spending, not income.
       Unambiguous pairs are linked automatically on import; anything with a choice
       is suggested below for you to confirm.
     </p>
     <form class="hstack" method="post" action="/dashboard/transfers/rescan">
-      <button class="ghost" type="submit">Rescan now</button>
+      <button class="quiet" type="submit">Rescan now</button>
     </form>
   </div>
   <h2>Suggested pairs</h2>
@@ -26,7 +26,7 @@
             <th>Out</th>
             <th>In</th>
             <th class="num">Gap</th>
-            <th></th>
+            <th class="actions"></th>
           </tr>
         </thead>
         <tbody>
@@ -35,7 +35,7 @@
               <td data-label="Out">{{ leg(pair.outflow) }}</td>
               <td data-label="In">{{ leg(pair.inflow) }}</td>
               <td class="num muted" data-label="Gap">{{ pair.date_gap_days }}d</td>
-              <td>
+              <td class="actions">
                 <form class="hstack" method="post" action="/dashboard/transfers/confirm">
                   <input type="hidden" name="tx_a_id" value="{{ pair.outflow.id }}">
                   <input type="hidden" name="tx_b_id" value="{{ pair.inflow.id }}">
@@ -57,7 +57,7 @@
         <thead>
           <tr>
             <th>Legs</th>
-            <th></th>
+            <th class="actions"></th>
           </tr>
         </thead>
         <tbody>
@@ -69,12 +69,12 @@
                   {% if not loop.last %}<br>{% endif %}
                 {% endfor %}
               </td>
-              <td>
+              <td class="actions">
                 <form class="hstack"
                       method="post"
                       action="/dashboard/transfers/{{ group[0].transfer_group_id }}/unlink"
-                      onsubmit="return confirm('Unlink this transfer? Both legs go back to uncategorized.');">
-                  <button class="ghost" type="submit">Unlink</button>
+                      data-confirm="Unlink this transfer? Both legs go back to uncategorized.">
+                  <button class="linkish" type="submit">Unlink</button>
                 </form>
               </td>
             </tr>
