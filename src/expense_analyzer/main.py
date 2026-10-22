@@ -18,10 +18,10 @@ from expense_analyzer.templating import templates
 # Set here rather than in the Caddyfile because not every deployment is served through the
 # proxy this repo ships — one behind its own would otherwise get none of this.
 SECURITY_HEADERS = {
-    # 'unsafe-inline' is required, not lazy: the chart pages inline their data in a
-    # <script> block and nearly every template carries inline style= attributes.
+    # Scripts come only from /static (app.js, chart.min.js); chart data is a JSON block, which
+    # the browser never runs. Styles keep 'unsafe-inline': nearly every template carries style=.
     "Content-Security-Policy": (
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+        "default-src 'self'; script-src 'self'; "
         "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
         "frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     ),

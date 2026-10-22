@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-  <h2 style="margin-top:0">Home Assistant</h2>
+  <h1>Home Assistant</h1>
   <div class="panel">
     {% if mqtt_configured %}
       <p>
@@ -31,10 +31,10 @@
   <h2>Metrics</h2>
   <div class="panel">
     {% if metrics %}
-      <p class="muted" style="margin-top:0">
+      <p class="muted">
         Published as one retained JSON document to <code>{{ state_topic }}</code>; each row is one HA sensor.
       </p>
-      <table>
+      <table class="table-cards">
         <thead>
           <tr>
             <th>Sensor</th>
@@ -46,10 +46,10 @@
           {% for m in metrics %}
             <tr>
               <td>{{ m.name }}</td>
-              <td class="muted">
+              <td class="muted" data-label="Key">
                 <code>{{ m.key }}</code>
               </td>
-              <td class="num">{{ m.value }}</td>
+              <td class="num" data-label="Value (PLN)">{{ m.value }}</td>
             </tr>
           {% endfor %}
         </tbody>

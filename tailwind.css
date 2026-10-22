@@ -11,7 +11,9 @@
  * only the genuinely-responsive bits change. New markup can use the palette as
  * plain utilities (bg-panel, text-muted, border-line, ...).
  */
-@import "tailwindcss";
+/* source(none): only the templates below are scanned. Left on, Tailwind reads every file in the
+ * tree and a word in a Python comment ("shadow", "fixed", "visible") becomes a utility in the sheet. */
+@import "tailwindcss" source(none);
 /* The shared dark skin: tokens and the look of the base elements. Rules below carry
  * size and layout only, plus anything that must beat it from the components layer. */
 @import "./skin.css" layer(base);
@@ -42,49 +44,54 @@
   header {
     @apply flex flex-wrap items-baseline gap-x-4 gap-y-3 px-5 py-3;
   }
-  header h1 {
-    @apply m-0 text-base;
-  }
   header nav {
     @apply flex flex-wrap items-center gap-x-4 gap-y-2;
   }
   /* Icon + small label: compact and less shouty than the old big text links,
    * while every item stays readable (icon-only is too cryptic for 14 entries). */
   header nav a {
-    @apply inline-flex items-center gap-1.5 text-[12px] leading-none text-muted no-underline hover:text-fg;
+    @apply inline-flex items-center gap-1 text-[12px] leading-none text-muted no-underline hover:text-fg;
   }
   /* Grouped nav: 14 links collapse into a few labelled dropdowns (Money, Planning,
-   * …). Pure-CSS hover menu — no JS. Opens on :hover (mouse) and :focus-within
-   * (keyboard tab / touch tap on the focusable trigger). The menu overlays
-   * (absolute) so it never shifts the page, and sits flush under the trigger
-   * (top-full, no gap) so the mouse can cross into it without the hover dropping. */
+   * …). Opens on :hover (mouse) and on .is-open, which app.js toggles from the trigger
+   * button with its aria-expanded (Enter, Space, tap). Without the script, :focus-within
+   * opens it for the keyboard. The menu overlays (absolute) so it never shifts the page,
+   * and sits flush under the trigger (top-full, no gap) so the mouse can cross into it
+   * without the hover dropping. */
   header nav .nav-group {
     @apply relative inline-flex items-center;
   }
   header nav .nav-trigger {
-    @apply inline-flex cursor-pointer select-none items-center gap-1 text-[12px] leading-none text-muted;
+    @apply inline-flex h-auto cursor-pointer select-none items-center gap-1 border-0 bg-transparent p-0 text-[12px] font-normal leading-none text-muted;
   }
   header nav .nav-trigger::after {
     content: "▾";
-    @apply text-[10px] opacity-70;
+    @apply text-[12px] opacity-70;
   }
   header nav .nav-group:hover .nav-trigger,
-  header nav .nav-group:focus-within .nav-trigger {
+  header nav .nav-group.is-open .nav-trigger,
+  .no-js header nav .nav-group:focus-within .nav-trigger {
     @apply text-fg;
   }
   header nav .menu {
-    @apply absolute left-0 top-full z-40 hidden min-w-[180px] flex-col gap-1 rounded-md border border-line bg-panel p-2 pt-3 shadow-lg;
+    @apply absolute left-0 top-full z-40 hidden min-w-[180px] flex-col gap-1 rounded-md border border-line bg-panel p-2 pt-3;
   }
   header nav .nav-group:hover .menu,
-  header nav .nav-group:focus-within .menu {
+  header nav .nav-group.is-open .menu,
+  .no-js header nav .nav-group:focus-within .menu {
     @apply flex;
   }
   header nav .menu a {
     @apply gap-2 text-[13px];
   }
 
+  /* p-5 on every side, the header's and footer's side inset too, so the page title lines up
+   * under the app name. A first child's own top margin would stack on the padding. */
   main {
-    @apply mx-auto max-w-[1400px] px-6 py-5;
+    @apply mx-auto max-w-[1400px] p-5;
+  }
+  main > :first-child {
+    @apply mt-0;
   }
   /* In-content links read as links (Preflight strips the browser default). */
   main a {
@@ -97,13 +104,18 @@
     @apply my-2 list-disc pl-5;
   }
 
+  /* The page's one h1 names it and opens main, so it takes no top margin; it shares the
+   * section look with h2 (skin). */
+  h1 {
+    @apply mb-2 mt-0;
+  }
   h2 {
-    @apply mb-2 mt-6 text-[15px] uppercase tracking-wider text-muted;
+    @apply mb-2 mt-6;
   }
 
   th,
   td {
-    @apply px-3 py-2.5;
+    @apply px-3 py-2;
   }
 
   /* Vertical rhythm: a label binds to the field BELOW it (small gap under) and is
@@ -147,29 +159,40 @@
   form:not(.hstack) :is(input, select, textarea) {
     @apply w-full;
   }
-  /* File input: its native "Choose file" button + filename text sit top-aligned in
-   * our fixed-height field. inline-flex + items-center vertically centres them. */
+  /* File input: flex centring never reaches the browser's own parts, so the line box is
+   * the field's inner height (h-10 / md:h-9 less the 2px border) and both the file name
+   * and the "Choose file" part sit on its middle. That part reads as a quiet button. */
   input[type="file"] {
-    @apply inline-flex items-center;
+    @apply inline-block py-0 pl-0 align-middle leading-[38px] md:leading-[34px];
+  }
+  input[type="file"]::file-selector-button {
+    height: 100%;
+    margin: 0 0.5rem 0 0;
+    padding: 0 0.5rem;
+    border-right: 1px solid var(--field-border);
+    background: var(--bg);
+    color: var(--fg);
+    font-weight: 600;
+    cursor: pointer;
+  }
+  input[type="file"]::file-selector-button:hover {
+    background: var(--panel);
   }
   button {
     @apply transition-colors;
   }
-  button.ghost {
-    @apply border-field-border bg-transparent text-muted transition-colors hover:border-fg hover:bg-line hover:text-fg;
-  }
   /* Multi-line text input (transaction note). Mirrors the input look but no fixed
    * h-9. Width comes from the form:not(.hstack) rule above. */
   textarea {
-    @apply max-w-full px-2 py-1.5;
+    @apply max-w-full px-2 py-2;
   }
 
   code {
-    @apply rounded bg-bg px-1 text-[0.9em];
+    @apply rounded-md bg-bg px-1 text-[13px];
   }
 
   footer {
-    @apply px-5 py-3.5;
+    @apply px-5 py-3;
   }
   footer a {
     @apply text-muted hover:text-fg;
@@ -183,16 +206,34 @@
   .panel {
     @apply mb-4 overflow-x-auto p-4;
   }
+  /* Its padding is the inset: a first child's own top margin (an h2, a p) would add to it. */
+  .panel > :first-child {
+    @apply mt-0;
+  }
 
   .num {
     @apply whitespace-nowrap text-right tabular-nums;
+  }
+
+  /* A trailing cell of row actions (and its header): from md as narrow as its controls
+   * and flush right, so the last button meets the table's edge. Phone cards keep them
+   * at the left, under the row's other cells. */
+  .actions {
+    @apply md:w-[1%] md:whitespace-nowrap md:text-right;
+  }
+  .actions .hstack {
+    @apply md:flex-nowrap md:justify-end;
+  }
+
+  .mono {
+    font-family: var(--mono);
   }
 
   /* Per-category colour chip before a category name / on the colour picker row.
    * The colour itself is set inline (data-driven); this only carries
    * the size, shape and a faint border so light chips stay visible on the panel. */
   .swatch {
-    @apply mr-1.5 inline-block h-3 w-3 shrink-0 rounded-[3px] border border-line align-middle;
+    @apply mr-1 inline-block h-3 w-3 shrink-0 rounded-md border border-line align-middle;
   }
 
   /* Multi-column layout row. NOT named `.grid` — that collides with Tailwind's
@@ -213,22 +254,30 @@
   .field {
     @apply min-w-[160px] flex-1;
   }
+  /* Inside a row the gap spaces the fields, so a label keeps no top margin (a form's
+   * own label rule would add one on every row but the first); stacked rows get it back. */
+  form:not(.hstack) .form-row label {
+    @apply mt-0;
+  }
+  .form-row + .form-row {
+    @apply mt-4;
+  }
 
   .cards {
     @apply flex flex-wrap gap-4;
   }
   .card {
-    @apply min-w-[160px] flex-1 rounded-lg border border-line bg-panel px-4 py-3.5;
+    @apply min-w-[160px] flex-1 rounded-lg border border-line bg-panel p-4;
   }
   .card .k {
-    @apply text-[13px] uppercase tracking-wider text-muted;
+    @apply text-[13px] font-semibold uppercase tracking-[.04em] text-muted;
   }
   .card .v {
-    @apply mt-1 text-[22px] tabular-nums;
+    @apply mt-1 text-base font-bold tabular-nums;
   }
 
   .userbox {
-    @apply ml-auto flex items-center gap-2.5 text-[13px] text-muted;
+    @apply ml-auto flex items-center gap-2 text-[13px] text-muted;
   }
   .linkbtn {
     @apply cursor-pointer border-none bg-transparent p-0 text-accent hover:underline;
@@ -249,16 +298,11 @@
   }
 
   .flash {
-    @apply mb-4 rounded-md border border-pos bg-[#16321f] px-3.5 py-2.5 text-[#b9f6ca];
-  }
-  /* Restated from the skin: .flash above sits in the components layer, which beats the
-   * skin's base-layer .flash.error whatever the specificity. */
-  .flash.error {
-    @apply border-neg bg-[#3a1c1e] text-[#ffd5d6];
+    @apply mb-4 px-4 py-3;
   }
 
   .pager {
-    @apply mt-3 flex flex-wrap items-center justify-center gap-2.5;
+    @apply mt-3 flex flex-wrap items-center justify-center gap-2;
   }
   .pager .muted {
     @apply m-0;
@@ -269,13 +313,13 @@
    * which wins by @layer order (utilities after components) regardless of
    * specificity — silently breaking the flex layout. Same trap as `.cols`. */
   .hstack {
-    @apply m-0 inline-flex flex-wrap items-center gap-1.5;
+    @apply m-0 inline-flex flex-wrap items-center gap-2;
   }
 
   /* Link styled as a button — inline-flex + h-9 so it matches real <button>/select
    * height and centres its label (an inline-block link would top-align at h-9). */
   a.btn {
-    @apply inline-flex h-10 items-center whitespace-nowrap rounded-md border border-field-border bg-bg px-2 text-fg no-underline transition-colors hover:border-fg hover:bg-line md:h-9;
+    @apply inline-flex h-10 items-center whitespace-nowrap rounded-md border border-field-border bg-bg px-2 font-semibold text-fg no-underline transition-colors hover:border-fg hover:bg-line md:h-9;
   }
   a.btn[aria-disabled="true"] {
     @apply pointer-events-none text-muted opacity-50;
@@ -293,35 +337,48 @@
   .icon-btn {
     @apply inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted no-underline hover:bg-line hover:text-fg md:h-9 md:w-9;
   }
-  /* The commit action (Save category) reads as the primary one. */
-  .icon-btn.primary {
-    @apply text-accent hover:text-fg;
+  /* A control with nothing to do yet (the first row's Move up, a variable amount's copy):
+   * the skin's disabled look, and its hover stays put. */
+  .icon-btn:is(:disabled, [aria-disabled="true"]) {
+    @apply cursor-not-allowed opacity-50 hover:bg-transparent hover:text-muted;
+  }
+  /* Data the row lacks (no account number): dimmed until pointed at, then a link to add it. */
+  .icon-btn.is-missing {
+    @apply opacity-50 hover:opacity-100 focus-visible:opacity-100;
   }
   /* Styled hover tooltip for the note icon (data-tip). Pops to the LEFT of the
-   * icon, vertically centred — staying inside the row band and panel width, so
-   * the panel's overflow-x-auto never clips it (a tooltip above/below would).
-   * Pure CSS, instant, no JS; the note text also stays on aria-label for SR. */
+   * icon, vertically centred: the icon ends the row at the table's right edge, so
+   * opening rightwards would run off the screen, and above/below would leave the
+   * row band where the panel's overflow-x-auto clips it.
+   * The note text also stays on aria-label for SR. WCAG 1.4.13: the tooltip takes
+   * the pointer and touches the icon (a margin gap would drop the hover on the way
+   * across), so moving onto it keeps it open, and Escape hides it (.tip-off,
+   * set by the Escape handler in app.js until the pointer leaves). */
   .tip {
     @apply relative;
   }
   .tip::after {
     content: attr(data-tip);
-    @apply pointer-events-none invisible absolute left-full top-1/2 z-50 ml-2 w-max max-w-[260px] -translate-y-1/2 whitespace-normal rounded-md border border-field-border bg-panel px-2 py-1 text-left text-[12px] font-normal normal-case leading-snug text-fg opacity-0 shadow-lg transition-opacity;
+    @apply invisible absolute right-full top-1/2 z-50 w-max max-w-[260px] -translate-y-1/2 whitespace-normal rounded-md border border-field-border bg-panel px-2 py-1 text-left text-[12px] font-normal normal-case leading-snug text-fg opacity-0 transition-opacity;
   }
   .tip:hover::after,
   .tip:focus-visible::after {
     @apply visible opacity-100;
   }
-  /* A row that already has a note: its note icon glows so it's spottable at a
-   * glance (the data-tip tooltip above carries the note text for a hover peek). */
+  .tip.tip-off::after {
+    @apply invisible opacity-0;
+  }
+  /* fg among muted icons: the commit action (Save category), and the note icon of a row that
+   * already has a note, so it is spottable at a glance (data-tip carries the text). */
+  .icon-btn.primary,
   .icon-btn.has-note {
-    @apply text-accent;
+    @apply text-fg;
   }
 
-  /* Pure-CSS modal via :target — no JS, so it works offline and degrades to a
-   * normal anchor jump. The note button is a link to #note-<id>; the matching
-   * .modal becomes a centred overlay. A backdrop link (and Close) point at a
-   * non-existent #close- target, which clears :target and hides it again. */
+  /* A centred overlay, opened two ways. Settings' modals use :target: a link to #edit-…
+   * opens one, and the backdrop and Close point at a missing #close target. The
+   * transactions note modal uses .is-open, which app.js sets after filling it from the
+   * row; without the script its trigger opens the row's edit page instead. */
   .modal {
     @apply hidden;
   }
@@ -336,7 +393,7 @@
     @apply relative z-10 max-h-[85vh] w-full max-w-[460px] overflow-y-auto rounded-lg border border-line bg-panel p-4;
   }
   .modal-card h3 {
-    @apply m-0 mb-2 text-[15px] uppercase tracking-wider text-muted;
+    @apply m-0 mb-2 text-[13px] font-semibold uppercase tracking-[.04em] text-muted;
   }
 }
 
@@ -388,7 +445,6 @@
     border: 0;
     background: transparent;
     padding: 4px 0 4px 16px;
-    box-shadow: none;
   }
 
   .table-cards thead {
@@ -396,7 +452,7 @@
   }
   .table-cards tr {
     display: block;
-    padding: 10px 0;
+    padding: 12px 0;
   }
   /* Separate each card and the footer (totals) row. */
   .table-cards tbody tr + tr,
@@ -407,7 +463,7 @@
   .table-cards tfoot th {
     display: block;
     border: 0;
-    padding: 2px 0;
+    padding: 4px 0;
     text-align: left;
   }
   .table-cards td[data-label]::before,
@@ -418,6 +474,11 @@
   }
   /* The inline editor / spanning cell gets a little breathing room above it. */
   .table-cards td[colspan] {
-    margin-top: 6px;
+    margin-top: 8px;
+  }
+  /* No hover on a phone, and the panel's overflow-x-auto would clip it: the note
+   * prints under the description instead. */
+  .tip::after {
+    display: none;
   }
 }

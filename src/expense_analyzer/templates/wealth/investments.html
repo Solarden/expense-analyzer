@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-  <h2 style="margin-top:0">Investments</h2>
+  <h1>Investments</h1>
   {% if not portfolios %}
     <div class="panel">
       <p class="muted">
@@ -12,7 +12,7 @@
     <div class="cols">
       {% if myfund_configured %}
         <div class="panel">
-          <h2 style="margin-top:0">Fetch from myFund</h2>
+          <h2>Fetch from myFund</h2>
           <form method="post" action="/dashboard/investments/fetch">
             <div class="form-row">
               <div class="field">
@@ -30,7 +30,7 @@
         </div>
       {% endif %}
       <div class="panel">
-        <h2 style="margin-top:0">Upload XTB export</h2>
+        <h2>Upload XTB export</h2>
         <form method="post"
               action="/dashboard/investments/upload"
               enctype="multipart/form-data">
@@ -68,7 +68,8 @@
         {% if h.positions %}
           {% if loop.first and allocation_chart.labels %}
             <div style="max-width:460px; height:440px; margin:0 auto">
-              <canvas id="allocationChart"></canvas>
+              <canvas id="allocationChart" data-chart="allocation"></canvas>
+              <script type="application/json" id="allocationChart-data">{{ allocation_chart | tojson }}</script>
             </div>
           {% endif %}
           <table class="table-cards" style="margin-top:12px">
@@ -104,40 +105,6 @@
         {% endif %}
       </div>
     {% endfor %}
-    {% if allocation_chart.labels %}
-      <script src="/static/chart.min.js"></script>
-      <script src="/static/chart-theme.js"></script>
-      <script>
-  const allocation = {{ allocation_chart | tojson }};
-  // Amounts are integer minor units (1/100 PLN); fmt divides by 100 in one place.
-  const fmt = (minor) => (minor / 100).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' });
-  // Per-segment palette: Chart.js v4 ships no default colour cycle, so a doughnut
-  // with only `data` renders as bare outlines. Distinct hues from the dashboard
-  // palette, cycled per ticker; the panel-coloured border keeps slices separated.
-  const SLICE_COLORS = ['#58a6ff', '#f778ba', '#d29922', '#a371f7', '#3fb950', '#ff7b72', '#39c5cf', '#db61a2'];
-  new Chart(document.getElementById('allocationChart'), {
-    type: 'doughnut',
-    data: {
-      labels: allocation.labels,
-      datasets: [{
-        data: allocation.data,
-        backgroundColor: allocation.labels.map((_, i) => SLICE_COLORS[i % SLICE_COLORS.length]),
-        borderColor: '#1a1d24',
-        borderWidth: 2,
-      }],
-    },
-    options: {
-      // Fill the bounded wrapper instead of expanding to the full panel width
-      // (a doughnut keeps a 1:1 ratio, so an unbounded container makes it huge).
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'bottom' },
-        tooltip: { callbacks: { label: (c) => `${c.label}: ${fmt(c.parsed)}` } },
-      },
-    },
-  });
-      </script>
-    {% endif %}
+    {% if allocation_chart.labels %}<script src="/static/chart.min.js"></script>{% endif %}
   {% endif %}
 {% endblock %}

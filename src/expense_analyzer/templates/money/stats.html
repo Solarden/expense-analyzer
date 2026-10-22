@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
-  <h2 style="margin-top:0">Overview</h2>
+  <h1>Overview</h1>
   <div class="panel">
     <form class="hstack" method="get" action="/dashboard/stats">
       <label style="margin:0" for="stats_month">Month</label>
-      <select id="stats_month" name="month" onchange="this.form.submit()">
+      <select id="stats_month" name="month" data-autosubmit>
         {% for m in months %}
           <option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ m }}</option>
         {% endfor %}
@@ -19,7 +19,7 @@
   <div class="cards">
     <div class="card">
       <div class="k">Spending</div>
-      <div class="v neg">{{ summary.spending | pln }}</div>
+      <div class="v neg">{{ (-summary.spending) | pln }}</div>
     </div>
     <div class="card">
       <div class="k">Income</div>
@@ -32,9 +32,10 @@
   </div>
   <div class="cols" style="margin-top:16px">
     <div class="panel">
-      <h2 style="margin-top:0">Spending by category — {{ month }}</h2>
+      <h2>Spending by category — {{ month }}</h2>
       {% if summary.by_category %}
-        <canvas id="categoryChart" height="220"></canvas>
+        <canvas id="categoryChart" data-chart="category" height="220"></canvas>
+        <script type="application/json" id="categoryChart-data">{{ category_chart | tojson }}</script>
         <table style="margin-top:12px">
           <thead>
             <tr>
@@ -46,7 +47,7 @@
             {% for c in summary.by_category %}
               <tr>
                 <td>{{ c.name }}</td>
-                <td class="num neg">{{ c.total | pln }}</td>
+                <td class="num neg">{{ (-c.total) | pln }}</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -56,9 +57,13 @@
       {% endif %}
     </div>
     <div class="panel">
-      <h2 style="margin-top:0">Trend (last {{ trend | length }} month{{ '' if trend | length == 1 else 's' }})</h2>
+      <h2>
+        Trend
+        {% if trend %}(last {{ trend | length }} month{{ '' if trend | length == 1 else 's' }}){% endif %}
+      </h2>
       {% if trend %}
-        <canvas id="trendChart" height="220"></canvas>
+        <canvas id="trendChart" data-chart="trend" height="220"></canvas>
+        <script type="application/json" id="trendChart-data">{{ trend_chart | tojson }}</script>
       {% else %}
         <p class="muted">
           No data yet. <a href="/dashboard/upload">Import a CSV →</a>
@@ -67,54 +72,4 @@
     </div>
   </div>
   <script src="/static/chart.min.js"></script>
-  <script src="/static/chart-theme.js"></script>
-  <script>
-  const categoryData = {{ category_chart | tojson }};
-  const trendData = {{ trend_chart | tojson }};
-  // Amounts arrive as integer minor units (1/100 PLN). Chart.js gets them raw;
-  // fmt is the single place that divides by 100, for axis ticks and tooltips.
-  const fmt = (minor) => (minor / 100).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' });
-
-  if (categoryData.labels.length) {
-    new Chart(document.getElementById('categoryChart'), {
-      type: 'bar',
-      data: {
-        labels: categoryData.labels,
-        datasets: [{ label: 'Spending', data: categoryData.data, backgroundColor: categoryData.colors }],
-      },
-      options: {
-        indexAxis: 'y',
-        // Click a bar to drill into that category's transactions for the month.
-        onClick: (evt, elements) => {
-          if (elements.length) {
-            const link = categoryData.links[elements[0].index];
-            if (link) window.location = link;
-          }
-        },
-        onHover: (evt, elements) => {
-          evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
-        },
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => fmt(c.parsed.x) } } },
-        scales: { x: { ticks: { callback: fmt } } },
-      },
-    });
-  }
-
-  if (trendData.labels.length) {
-    new Chart(document.getElementById('trendChart'), {
-      type: 'bar',
-      data: {
-        labels: trendData.labels,
-        datasets: [
-          { label: 'Spending', data: trendData.spending, backgroundColor: '#f0686b' },
-          { label: 'Income', data: trendData.income, backgroundColor: '#3fb950' },
-        ],
-      },
-      options: {
-        plugins: { tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${fmt(c.parsed.y)}` } } },
-        scales: { y: { ticks: { callback: fmt } } },
-      },
-    });
-  }
-  </script>
 {% endblock %}

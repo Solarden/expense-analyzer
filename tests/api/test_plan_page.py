@@ -329,6 +329,22 @@ def test_payment_card_has_copy_buttons(
     assert "PL61109010140000071219812874" in resp.text
 
 
+def test_variable_amount_and_missing_account_cannot_be_copied(
+    auth_client: TestClient,
+    make_planned_item: Callable[..., PlannedItem],
+) -> None:
+    item = make_planned_item(name="Electricity", expected_amount=None)
+
+    resp = auth_client.get("/dashboard/plan?month=2026-06")
+
+    # No amount yet: the copy-amount control is there but carries nothing to copy.
+    assert 'aria-disabled="true"' in resp.text
+    assert 'aria-label="Copy amount, variable amount: nothing to copy yet"' in resp.text
+    # No account number: the control becomes a link to the item's edit form instead.
+    assert f'href="/dashboard/plan?month=2026-06&edit={item.id}#payee_account"' in resp.text
+    assert "Copy account number" not in resp.text
+
+
 def test_for_living_chart_hidden_on_empty_plan(auth_client: TestClient) -> None:
     resp = auth_client.get("/dashboard/plan")
 

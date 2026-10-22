@@ -8,11 +8,13 @@ over HTTP is then asserted against ``db_session``.
 from collections.abc import Callable
 from datetime import date
 
+import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session, col, select
 
 from expense_analyzer.models import Account, Category, CategoryKind, Scope, Transaction, TxSource
+from expense_analyzer.queries.core import users
 from expense_analyzer.queries.money import transactions
 from expense_analyzer.queries.money.transactions import TransactionFilters
 
@@ -268,11 +270,13 @@ def test_note_modal_renders_on_list(
 ):
     tx = make_transaction(account_id=account.id, amount=-500, note="reimburse me")
     resp = auth_client.get("/dashboard/transactions")
-    # The per-row note modal and its trigger are present, and the note text shows
-    # in the trigger's title (the at-a-glance peek).
-    assert f'id="note-{tx.id}"' in resp.text
-    assert 'href="#note-' in resp.text
-    assert "reimburse me" in resp.text
+    # One note modal per page; each row's trigger carries its note for app.js to fill in.
+    assert resp.text.count('class="modal"') == 1
+    assert f'data-note-for="{tx.id}"' in resp.text
+    assert 'data-note="reimburse me"' in resp.text
+    # Opened and closed by app.js (.is-open), never by a URL hash a reload would replay.
+    assert 'id="note-modal"' in resp.text
+    assert 'href="#close-note"' not in resp.text
 
 
 def test_set_note_via_endpoint(
@@ -390,6 +394,24 @@ def test_nav_uses_icon_sprite_and_groups(auth_client: TestClient):
     assert 'class="nav-trigger"' in resp.text
 
     for group in ("Money", "Planning", "Categorize", "Wealth", "System"):
-        assert f">{group}</span>" in resp.text
+        assert f">{group}</button>" in resp.text
 
     assert "Transactions" in resp.text  # the items still live inside the menus
+
+
+@pytest.mark.parametrize(("scope", "shows"), [(Scope.household, True), (Scope.private, False)])
+def test_pill_row_renders_only_when_a_pill_shows(
+    auth_client: TestClient,
+    db_session: Session,
+    account: Account,
+    make_transaction: Callable[..., Transaction],
+    scope: Scope,
+    shows: bool,
+):
+    # An imported private row has no source, shared or owner pill.
+    viewer = users.get_by_username(db_session, "tester")
+    make_transaction(account_id=account.id, amount=-500, scope=scope, owner_id=viewer.id)
+
+    resp = auth_client.get("/dashboard/transactions")
+
+    assert ('class="mt-1 flex flex-wrap gap-1"' in resp.text) is shows

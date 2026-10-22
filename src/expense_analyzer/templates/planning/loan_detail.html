@@ -1,9 +1,57 @@
 {% extends "base.html" %}
 {% block content %}
-  <p style="margin-top:0">
+  {% macro schedule_table(rows, loan_id) %}
+    <table class="table-cards">
+      <thead>
+        <tr>
+          <th class="num">#</th>
+          <th>Due</th>
+          <th class="num">Payment</th>
+          <th class="num">Interest</th>
+          <th class="num">Principal</th>
+          <th class="num">Balance after</th>
+          <th>Actual</th>
+          <th class="num">Diff</th>
+          <th class="actions"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td class="num muted" data-label="#">{{ row.scheduled.index }}</td>
+            <td class="muted" data-label="Due">{{ row.scheduled.due_date | dpl }}</td>
+            <td class="num" data-label="Payment">{{ row.scheduled.payment | pln }}</td>
+            <td class="num muted" data-label="Interest">{{ row.scheduled.interest | pln }}</td>
+            <td class="num" data-label="Principal">{{ row.scheduled.principal_paid | pln }}</td>
+            <td class="num muted" data-label="Balance after">{{ row.scheduled.balance_after | pln }}</td>
+            {% if row.payment %}
+              <td data-label="Actual">
+                <span class="muted">{{ row.payment.booked_date | dpl }}</span>
+                · {{ row.payment.amount | abs | pln }}
+              </td>
+              <td class="num {{ 'neg' if row.amount_diff and row.amount_diff > 0 else ('pos' if row.amount_diff and row.amount_diff < 0 else 'muted') }}"
+                  data-label="Diff">{{ row.amount_diff | pln }}</td>
+              <td class="actions">
+                <form class="hstack"
+                      method="post"
+                      action="/dashboard/loans/{{ loan_id }}/payments/{{ row.payment.id }}/unlink">
+                  <button class="linkish" type="submit">Unlink</button>
+                </form>
+              </td>
+            {% else %}
+              <td class="muted" data-label="Actual">—</td>
+              <td class="num muted" data-label="Diff">—</td>
+              <td class="actions"></td>
+            {% endif %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endmacro %}
+  <p>
     <a href="/dashboard/loans">← Loans</a>
   </p>
-  <h2 style="margin-top:0">{{ account_name or ("Loan #" ~ loan.id) }}</h2>
+  <h1>{{ account_name or ("Loan #" ~ loan.id) }}</h1>
   <div class="cards">
     <div class="card">
       <div class="k">Principal</div>
@@ -14,7 +62,7 @@
       <div class="v">
         {{ "%.2f"|format(loan.rate_bp / 100) }}%
         {% if loan.rate_type.value == "variable" %}
-          <span class="muted" style="font-size:14px;">+ {{ loan.base_rate_ref or "base" }}</span>
+          <span class="muted text-[13px] font-normal">+ {{ loan.base_rate_ref or "base" }}</span>
         {% endif %}
       </div>
     </div>
@@ -29,15 +77,13 @@
     {% if loan.contract_number %}
       <div class="card">
         <div class="k">Contract</div>
-        <div class="v">{{ loan.contract_number }}</div>
+        <div class="v mono">{{ loan.contract_number }}</div>
       </div>
     {% endif %}
   </div>
   <h2>Documents</h2>
   <div class="panel">
-    <p class="muted" style="margin-top:0">
-      Contract, repayment schedule, payment proofs. Stored locally on this device only.
-    </p>
+    <p class="muted">Contract, repayment schedule, payment proofs. Stored locally on this device only.</p>
     {% if documents %}
       <table class="table-cards">
         <thead>
@@ -45,23 +91,31 @@
             <th>File</th>
             <th class="num">Size</th>
             <th>Uploaded</th>
-            <th></th>
+            <th class="actions"></th>
           </tr>
         </thead>
         <tbody>
           {% for doc in documents %}
             <tr>
               <td data-label="File">
-                <a href="/dashboard/loans/{{ loan.id }}/documents/{{ doc.id }}">{{ doc.filename }}</a>
+                <a class="mono"
+                   href="/dashboard/loans/{{ loan.id }}/documents/{{ doc.id }}">{{ doc.filename }}</a>
               </td>
               <td class="num muted" data-label="Size">{{ (doc.size_bytes / 1024) | round(1) }} KB</td>
               <td class="muted" data-label="Uploaded">{{ doc.uploaded_at | dpl }}</td>
-              <td>
+              <td class="actions">
                 <form class="hstack"
                       method="post"
                       action="/dashboard/loans/{{ loan.id }}/documents/{{ doc.id }}/delete"
-                      onsubmit="return confirm('Delete this document?');">
-                  <button class="ghost" type="submit">Delete</button>
+                      data-confirm="Delete this document?">
+                  <button class="icon-btn"
+                          type="submit"
+                          title="Delete"
+                          aria-label="Delete {{ doc.filename }}">
+                    <svg class="act-ico" aria-hidden="true">
+                      <use href="#i-trash"></use>
+                    </svg>
+                  </button>
                 </form>
               </td>
             </tr>
@@ -83,7 +137,7 @@
              required>
       <button type="submit">Upload</button>
     </form>
-    <p class="muted" style="font-size:14px;">{{ allowed_types }} · up to {{ max_upload_mb }} MB.</p>
+    <p class="muted text-[13px]">{{ allowed_types }} · up to {{ max_upload_mb }} MB.</p>
   </div>
   {% if loan.rate_type.value == "variable" %}
     <h2>Base rate history</h2>
@@ -127,75 +181,36 @@
     </div>
   {% endif %}
   {% if schedule_error %}
-    <div class="flash error">Cannot build the schedule: {{ schedule_error }}</div>
+    <div class="flash error" role="alert">Cannot build the schedule: {{ schedule_error }}</div>
   {% elif reconciliation %}
     <h2>Schedule — plan vs reality</h2>
     <div class="panel">
-      <p class="muted" style="margin-top:0">
+      <p class="muted">
         Total to repay: <span class="num">{{ reconciliation.rows | map(attribute="scheduled.payment") | sum | pln }}</span>
         · interest: <span class="num">{{ (reconciliation.rows | map(attribute="scheduled.interest") | sum) | pln }}</span>.
         Link a real outflow to an installment to track plan vs reality.
       </p>
-      <table class="table-cards">
-        <thead>
-          <tr>
-            <th class="num">#</th>
-            <th>Due</th>
-            <th class="num">Payment</th>
-            <th class="num">Interest</th>
-            <th class="num">Principal</th>
-            <th class="num">Balance after</th>
-            <th>Actual</th>
-            <th class="num">Diff</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in reconciliation.rows %}
-            <tr>
-              <td class="num muted" data-label="#">{{ row.scheduled.index }}</td>
-              <td class="muted" data-label="Due">{{ row.scheduled.due_date | dpl }}</td>
-              <td class="num" data-label="Payment">{{ row.scheduled.payment | pln }}</td>
-              <td class="num muted" data-label="Interest">{{ row.scheduled.interest | pln }}</td>
-              <td class="num" data-label="Principal">{{ row.scheduled.principal_paid | pln }}</td>
-              <td class="num muted" data-label="Balance after">{{ row.scheduled.balance_after | pln }}</td>
-              {% if row.payment %}
-                <td data-label="Actual">
-                  <span class="muted">{{ row.payment.booked_date | dpl }}</span>
-                  · {{ row.payment.amount | abs | pln }}
-                </td>
-                <td class="num {{ 'neg' if row.amount_diff and row.amount_diff > 0 else ('pos' if row.amount_diff and row.amount_diff < 0 else 'muted') }}"
-                    data-label="Diff">{{ row.amount_diff | pln }}</td>
-                <td>
-                  <form class="hstack"
-                        method="post"
-                        action="/dashboard/loans/{{ loan.id }}/payments/{{ row.payment.id }}/unlink">
-                    <button class="ghost" type="submit">Unlink</button>
-                  </form>
-                </td>
-              {% else %}
-                <td class="muted" data-label="Actual">—</td>
-                <td class="num muted" data-label="Diff">—</td>
-                <td></td>
-              {% endif %}
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      {% set lo, hi = schedule_window %}
+      {{ schedule_table(reconciliation.rows[lo:hi], loan.id) }}
+      {% set rest = reconciliation.rows[:lo] + reconciliation.rows[hi:] %}
+      {% if rest %}
+        <details class="mt-3">
+          <summary class="cursor-pointer">The other {{ rest | length }} installments</summary>
+          {{ schedule_table(rest, loan.id) }}
+        </details>
+      {% endif %}
     </div>
     {% if reconciliation.unmatched_payments %}
       <h2>Linked but unassigned</h2>
       <div class="panel">
-        <p class="muted" style="margin-top:0">
-          Payments linked to this loan that don't map to a scheduled installment (e.g. an overpayment).
-        </p>
+        <p class="muted">Payments linked to this loan that don't map to a scheduled installment (e.g. an overpayment).</p>
         <table class="table-cards">
           <thead>
             <tr>
               <th>Date</th>
               <th>Account</th>
               <th class="num">Amount</th>
-              <th></th>
+              <th class="actions"></th>
             </tr>
           </thead>
           <tbody>
@@ -204,11 +219,11 @@
                 <td class="muted" data-label="Date">{{ tx.booked_date | dpl }}</td>
                 <td class="muted" data-label="Account">{{ accounts.get(tx.account_id, "#" ~ tx.account_id) }}</td>
                 <td class="num" data-label="Amount">{{ tx.amount | abs | pln }}</td>
-                <td>
+                <td class="actions">
                   <form class="hstack"
                         method="post"
                         action="/dashboard/loans/{{ loan.id }}/payments/{{ tx.id }}/unlink">
-                    <button class="ghost" type="submit">Unlink</button>
+                    <button class="linkish" type="submit">Unlink</button>
                   </form>
                 </td>
               </tr>
@@ -220,9 +235,7 @@
     <h2>Suggested payments</h2>
     <div class="panel">
       {% if suggestions %}
-        <p class="muted" style="margin-top:0">
-          Outflows near an unpaid installment's due date and amount. Confirm to link them.
-        </p>
+        <p class="muted">Outflows near an unpaid installment's due date and amount. Confirm to link them.</p>
         <table class="table-cards">
           <thead>
             <tr>
@@ -231,7 +244,7 @@
               <th class="num">Amount</th>
               <th class="num">Diff</th>
               <th class="num">Gap</th>
-              <th></th>
+              <th class="actions"></th>
             </tr>
           </thead>
           <tbody>
@@ -246,7 +259,7 @@
                 <td class="num" data-label="Amount">{{ s.transaction.amount | abs | pln }}</td>
                 <td class="num muted" data-label="Diff">{{ s.amount_diff | pln }}</td>
                 <td class="num muted" data-label="Gap">{{ s.date_gap_days }}d</td>
-                <td>
+                <td class="actions">
                   <form class="hstack"
                         method="post"
                         action="/dashboard/loans/{{ loan.id }}/payments/link">

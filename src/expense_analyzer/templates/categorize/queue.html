@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% import "_macros.html" as ui %}
 {% block content %}
-  <h2 style="margin-top:0">Review queue</h2>
+  <h1>Review queue</h1>
   <div class="panel">
     <p class="muted" style="margin:0 0 8px">
       Transactions still without a category. The classifier (trained on your
@@ -17,7 +17,7 @@
   <div class="panel">
     {% if page.rows %}
       {% if not page.trained %}
-        <p class="muted" style="margin:0 0 10px">
+        <p class="muted" style="margin:0 0 8px">
           Not enough categorized transactions to train the classifier yet — no
           suggestions until a few more are tagged.
         </p>
@@ -30,7 +30,7 @@
             <th class="num">Amount</th>
             <th>Suggestion</th>
             <th>Similar to</th>
-            <th>Categorize</th>
+            <th class="actions">Categorize</th>
           </tr>
         </thead>
         <tbody>
@@ -67,7 +67,7 @@
                   <span class="muted">—</span>
                 {% endif %}
               </td>
-              <td>
+              <td class="actions">
                 <form class="hstack md:flex-nowrap"
                       method="post"
                       action="/dashboard/queue/{{ tx.id }}/categorize?page={{ page.page }}">
@@ -81,7 +81,14 @@
                     {% endfor %}
                   </select>
                   <select name="scope" aria-label="Scope">{{ ui.scope_options(scopes, tx.scope.value) }}</select>
-                  <button type="submit">Save</button>
+                  <button class="icon-btn primary"
+                          type="submit"
+                          title="Save category"
+                          aria-label="Save category">
+                    <svg class="act-ico" aria-hidden="true">
+                      <use href="#i-check"></use>
+                    </svg>
+                  </button>
                 </form>
               </td>
             </tr>

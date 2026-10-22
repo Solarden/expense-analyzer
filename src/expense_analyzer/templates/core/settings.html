@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% import "_macros.html" as ui %}
 {% block content %}
+  <h1>Accounts &amp; categories</h1>
   <div class="cols">
     <div class="panel">
       <div class="flex flex-wrap items-center justify-between gap-2">
@@ -12,7 +13,7 @@
           <thead>
             <tr>
               <th>Name</th>
-              <th></th>
+              <th class="actions"></th>
             </tr>
           </thead>
           <tbody>
@@ -30,13 +31,28 @@
                   </div>
                   {% if a.number %}
                     <div class="muted text-[12px]">
-                      {{ a.number }}
-                      <button type="button" class="ghost" data-copy="{{ a.number }}">Copy</button>
+                      <span class="mono">{{ a.number }}</span>
+                      <button type="button"
+                              class="icon-btn"
+                              data-copy="{{ a.number }}"
+                              title="Copy account number"
+                              aria-label="Copy account number">
+                        <svg class="act-ico" aria-hidden="true">
+                          <use href="#i-card"></use>
+                        </svg>
+                      </button>
                     </div>
                   {% endif %}
                 </td>
-                <td>
-                  <a class="btn" href="#edit-account-{{ a.id }}">Edit</a>
+                <td class="actions">
+                  <a class="icon-btn"
+                     href="#edit-account-{{ a.id }}"
+                     title="Edit"
+                     aria-label="Edit {{ a.name }}">
+                    <svg class="act-ico" aria-hidden="true">
+                      <use href="#i-pencil"></use>
+                    </svg>
+                  </a>
                 </td>
               </tr>
             {% endfor %}
@@ -136,7 +152,7 @@
           <thead>
             <tr>
               <th>Name</th>
-              <th></th>
+              <th class="actions"></th>
             </tr>
           </thead>
           <tbody>
@@ -146,8 +162,15 @@
                   <div>{{ ui.swatch(c.color) }}{{ c.name }}</div>
                   <div class="muted text-[12px]">{{ c.kind.value }}</div>
                 </td>
-                <td>
-                  <a class="btn" href="#edit-cat-{{ c.id }}">Edit</a>
+                <td class="actions">
+                  <a class="icon-btn"
+                     href="#edit-cat-{{ c.id }}"
+                     title="Edit"
+                     aria-label="Edit {{ c.name }}">
+                    <svg class="act-ico" aria-hidden="true">
+                      <use href="#i-pencil"></use>
+                    </svg>
+                  </a>
                 </td>
               </tr>
             {% endfor %}
@@ -179,7 +202,7 @@
                        value="{{ c.color or '#4f8cff' }}">
                 <div class="hstack mt-3">
                   <button type="submit">Save</button>
-                  {% if c.color %}<button class="ghost" type="submit" name="clear" value="1">Clear</button>{% endif %}
+                  {% if c.color %}<button class="quiet" type="submit" name="clear" value="1">Clear</button>{% endif %}
                   <a class="btn" href="#close">Close</a>
                 </div>
               </form>
@@ -226,13 +249,13 @@
             <th>When</th>
             <th class="num">Records</th>
             <th>Status</th>
-            <th></th>
+            <th class="actions"></th>
           </tr>
         </thead>
         <tbody>
           {% for b in batches %}
             <tr>
-              <td data-label="File">{{ b.filename }}</td>
+              <td class="mono" data-label="File">{{ b.filename }}</td>
               <td class="muted" data-label="Source">{{ b.source }}</td>
               <td class="muted" data-label="When">{{ b.imported_at.strftime("%d.%m.%Y %H:%M") }}</td>
               <td class="num" data-label="Records">{{ b.record_count }}</td>
@@ -243,15 +266,15 @@
                   <span class="muted">{{ b.status.value }}</span>
                 {% endif %}
               </td>
-              <td>
+              <td class="actions">
                 {# The Manual batch holds hand-entered rows (deleted one at a time
                    from the transactions list), so it offers no bulk rollback. #}
                 {% if b.status.value == "active" and b.source != "Manual" %}
                   <form class="hstack"
                         method="post"
                         action="/dashboard/batches/{{ b.id }}/rollback"
-                        onsubmit="return confirm('Roll back this import? Its transactions will be marked deleted.');">
-                    <button class="ghost" type="submit">Roll back</button>
+                        data-confirm="Roll back this import? Its transactions will be marked deleted.">
+                    <button class="quiet" type="submit">Roll back</button>
                   </form>
                 {% elif b.source == "Manual" %}
                   <span class="muted text-[12px]">edit on Transactions</span>
@@ -267,6 +290,4 @@
       </p>
     {% endif %}
   </div>
-  {# Delegated [data-copy] click handler — copies an account number to the clipboard. #}
-  <script src="/static/plan-copy.js"></script>
 {% endblock %}

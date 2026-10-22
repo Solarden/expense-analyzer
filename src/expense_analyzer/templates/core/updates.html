@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 {% block content %}
-  <h2 style="margin-top:0">Updates</h2>
+  <h1>Updates</h1>
   <div class="panel">
     {% if status is none %}
-      <p class="muted" style="margin-top:0">
+      <p class="muted">
         No update check has run yet. The Pi checks for a newer release on a schedule
         (<code>make check-update</code>, wired into cron — see the README). This page
         shows the result of that check; it never contacts the internet itself.
       </p>
     {% elif status.update_available %}
-      <p style="margin-top:0">
+      <p>
         <strong class="pos">A new version is available.</strong>
       </p>
       <table class="table-cards">
@@ -43,7 +43,7 @@
         </p>
       {% endif %}
     {% else %}
-      <p style="margin-top:0">
+      <p>
         <strong class="pos">You're on the latest release.</strong>
         {% if status.latest %}<span class="muted">({{ status.latest }})</span>{% endif %}
       </p>

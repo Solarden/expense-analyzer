@@ -1,16 +1,12 @@
 {% extends "base.html" %}
 {% import "_macros.html" as ui %}
 {% block content %}
-  <h2 style="margin-top:0">Transactions</h2>
+  <h1>Transactions</h1>
   <div class="panel">
-    <form class="hstack"
-          method="get"
-          action="/dashboard/transactions"
-          style="flex-wrap:wrap;
-                 gap:10px">
+    <form class="hstack w-full" method="get" action="/dashboard/transactions">
       <select name="account_id"
               aria-label="Filter by account"
-              onchange="this.form.submit()"
+              data-autosubmit
               class="flex-1 min-w-[150px]">
         <option value="">— all accounts —</option>
         {% for a in accounts %}
@@ -19,7 +15,7 @@
       </select>
       <select name="month"
               aria-label="Filter by month"
-              onchange="this.form.submit()"
+              data-autosubmit
               class="flex-1 min-w-[150px]">
         <option value="">— all months —</option>
         {% for m in months %}
@@ -28,7 +24,7 @@
       </select>
       <select name="category"
               aria-label="Filter by category"
-              onchange="this.form.submit()"
+              data-autosubmit
               class="flex-1 min-w-[150px]">
         <option value="">— all categories —</option>
         <option value="none" {% if f_category == 'none' %}selected{% endif %}>— uncategorized —</option>
@@ -42,7 +38,7 @@
       {% if lens.value == 'home' %}
         <select name="added_by"
                 aria-label="Filter by who added it"
-                onchange="this.form.submit()"
+                data-autosubmit
                 class="flex-1 min-w-[150px]">
           <option value="">— anyone —</option>
           {% for u in users %}
@@ -57,11 +53,11 @@
              value="{{ f_q }}"
              placeholder="Search description…"
              aria-label="Search transactions"
-             onchange="this.form.submit()"
+             data-autosubmit
              class="flex-[2] min-w-[200px]">
       <select name="size"
               aria-label="Rows per page"
-              onchange="this.form.submit()"
+              data-autosubmit
               class="min-w-[110px]">
         {% for s in page_sizes %}
           <option value="{{ s }}" {% if s == f_page_size %}selected{% endif %}>{{ s }} / page</option>
@@ -83,11 +79,9 @@
     <summary class="cursor-pointer">
       Add transaction <span class="muted">(cash / manual)</span>
     </summary>
-    <form class="hstack mt-3"
+    <form class="hstack mt-3 w-full"
           method="post"
-          action="/dashboard/transactions/add"
-          style="flex-wrap:wrap;
-                 gap:10px">
+          action="/dashboard/transactions/add">
       <input type="hidden" name="return_to" value="{{ return_to }}">
       <select name="account_id"
               aria-label="Account"
@@ -146,7 +140,7 @@
             <th class="num">Amount</th>
             <th>Category</th>
             <th>Scope</th>
-            <th></th>
+            <th class="actions"></th>
           </tr>
         </thead>
         <tbody>
@@ -163,9 +157,12 @@
                 {% endif %}
                 <span class="muted">{{ tx.raw_description }}</span>
                 {% if tx.transfer_group_id %}<span class="muted" title="Internal transfer">⇄ transfer</span>{% endif %}
-                {{ ui.source_badge(tx.source.value) }}
-                {{ ui.household_badge(tx.scope.value) }}
-                {{ ui.owner_badge(tx.scope.value, owner_names.get(tx.owner_id) ) }}
+                {# A row of their own: inline, a wrapped pill touches the line above. #}
+                {% set pills %}
+                  {{ ui.source_badge(tx.source.value) }}{{ ui.household_badge(tx.scope.value) }}{{ ui.owner_badge(tx.scope.value, owner_names.get(tx.owner_id) ) }}
+                {% endset %}
+                {% if pills | trim %}<div class="mt-1 flex flex-wrap gap-1">{{ pills }}</div>{% endif %}
+                {% if tx.note %}<div class="muted text-[12px] md:hidden">{{ tx.note }}</div>{% endif %}
               </td>
               <td class="num {{ 'neg' if tx.amount < 0 else 'pos' }}"
                   data-label="Amount">{{ tx.amount | pln }}</td>
@@ -202,7 +199,7 @@
                   {{ ui.scope_options(scopes, tx.scope.value) }}
                 </select>
               </td>
-              <td>
+              <td class="actions">
                 <div class="hstack md:flex-nowrap">
                   <form id="cat-{{ tx.id }}"
                         class="hstack"
@@ -218,131 +215,53 @@
                       </svg>
                     </button>
                   </form>
-                  <a class="icon-btn {% if tx.note %}has-note tip{% endif %}"
-                     href="#note-{{ tx.id }}"
-                     {% if tx.note %}data-tip="{{ tx.note }}" aria-label="Note: {{ tx.note }}"{% else %}title="Add note" aria-label="Add note"{% endif %}>
-                    <svg class="act-ico" aria-hidden="true">
-                      <use href="#i-note"></use>
-                    </svg>
-                  </a>
                   <a class="icon-btn"
-                     href="#edit-{{ tx.id }}"
+                     href="/dashboard/transactions/{{ tx.id }}/edit?return_to={{ return_to | urlencode }}"
                      title="Edit"
                      aria-label="Edit">
                     <svg class="act-ico" aria-hidden="true">
                       <use href="#i-pencil"></use>
                     </svg>
                   </a>
-                </div>
-                <div id="note-{{ tx.id }}" class="modal">
-                  <a href="#close-note" class="modal-backdrop" aria-label="Close"></a>
-                  <div class="modal-card"
-                       role="dialog"
-                       aria-modal="true"
-                       aria-label="Edit note">
-                    <h3>Note</h3>
-                    <p class="muted">{{ tx.merchant_normalized or tx.raw_description }} · {{ tx.booked_date | dpl }}</p>
-                    <form method="post" action="/dashboard/transactions/{{ tx.id }}/note">
-                      <input type="hidden" name="return_to" value="{{ return_to }}">
-                      <textarea name="note"
-                                rows="3"
-                                placeholder="What was this for? Anything to remember…">{{ tx.note or '' }}</textarea>
-                      <div class="hstack mt-3">
-                        <button type="submit">Save note</button>
-                        <a class="btn" href="#close-note">Close</a>
-                      </div>
-                    </form>
-                  </div>
-                </div>
-                {# Edit modal — same pure-CSS :target pattern as the note modal.
-                   The full-page /edit route stays as a no-JS/deep-link fallback. #}
-                {% set em = edit_meta[tx.id] %}
-                <div id="edit-{{ tx.id }}" class="modal">
-                  <a href="#close-edit" class="modal-backdrop" aria-label="Close"></a>
-                  <div class="modal-card"
-                       role="dialog"
-                       aria-modal="true"
-                       aria-label="Edit transaction">
-                    <h3>Edit transaction</h3>
-                    <p class="muted">
-                      {{ tx.booked_date | dpl }} ·
-                      <span class="{{ 'neg' if tx.amount < 0 else 'pos' }}">{{ tx.amount | pln }}</span>
-                      · {{ tx.raw_description }}
-                      {% if not em.is_manual %}
-                        <br>
-                        Imported row — amount, date and description come from the bank and are read-only.
-                      {% endif %}
-                    </p>
-                    <form method="post" action="/dashboard/transactions/{{ tx.id }}/edit">
-                      <input type="hidden" name="return_to" value="{{ return_to }}">
-                      {% if em.is_manual %}
-                        <label for="edit-account-{{ tx.id }}">Account</label>
-                        <select id="edit-account-{{ tx.id }}" name="account_id" required>
-                          {% for a in accounts %}
-                            <option value="{{ a.id }}" {% if a.id == tx.account_id %}selected{% endif %}>{{ a.name }}</option>
-                          {% endfor %}
-                        </select>
-                        <label for="edit-date-{{ tx.id }}">Date</label>
-                        <input id="edit-date-{{ tx.id }}"
-                               type="date"
-                               name="booked_date"
-                               value="{{ tx.booked_date.isoformat() }}"
-                               required>
-                        <label for="edit-amount-{{ tx.id }}">Amount (PLN)</label>
-                        <input id="edit-amount-{{ tx.id }}"
-                               type="text"
-                               name="amount"
-                               inputmode="decimal"
-                               value="{{ em.magnitude }}"
-                               required>
-                        <label for="edit-direction-{{ tx.id }}">Direction</label>
-                        <select id="edit-direction-{{ tx.id }}" name="direction">
-                          {% for d in directions %}
-                            <option value="{{ d }}" {% if d == em.direction %}selected{% endif %}>{{ d }}</option>
-                          {% endfor %}
-                        </select>
-                        <label for="edit-description-{{ tx.id }}">Description</label>
-                        <input id="edit-description-{{ tx.id }}"
-                               type="text"
-                               name="description"
-                               value="{{ tx.raw_description }}"
-                               required>
-                      {% endif %}
-                      <label for="edit-category-{{ tx.id }}">Category</label>
-                      <select id="edit-category-{{ tx.id }}" name="category_id">
-                        <option value="">— none —</option>
-                        {% for c in categories %}
-                          <option value="{{ c.id }}" {% if c.id == tx.category_id %}selected{% endif %}>{{ c.name }}</option>
-                        {% endfor %}
-                      </select>
-                      <label for="edit-scope-{{ tx.id }}">Scope</label>
-                      <select id="edit-scope-{{ tx.id }}" name="scope">{{ ui.scope_options(scopes, tx.scope.value) }}</select>
-                      <label for="edit-note-{{ tx.id }}">Note</label>
-                      <textarea id="edit-note-{{ tx.id }}"
-                                name="note"
-                                rows="2"
-                                placeholder="Note (optional)">{{ tx.note or '' }}</textarea>
-                      <div class="hstack mt-3">
-                        <button type="submit">Save</button>
-                        <a class="btn" href="#close-edit">Close</a>
-                      </div>
-                    </form>
-                    {% if em.is_manual %}
-                      <form class="hstack mt-3"
-                            method="post"
-                            action="/dashboard/transactions/{{ tx.id }}/delete"
-                            onsubmit="return confirm('Delete this transaction?')">
-                        <input type="hidden" name="return_to" value="{{ return_to }}">
-                        <button class="ghost" type="submit">Delete transaction</button>
-                      </form>
-                    {% endif %}
-                  </div>
+                  {# Last in the row, at the table's right edge: its tooltip opens to the left, over
+                     the cells beside it, and takes the pointer while it shows. #}
+                  <a class="icon-btn {% if tx.note %}has-note tip{% endif %}"
+                     href="/dashboard/transactions/{{ tx.id }}/edit?return_to={{ return_to | urlencode }}"
+                     data-note-for="{{ tx.id }}"
+                     data-note="{{ tx.note or '' }}"
+                     data-note-subject="{{ tx.merchant_normalized or tx.raw_description }} · {{ tx.booked_date | dpl }}"
+                     {% if tx.note %}data-tip="{{ tx.note }}" aria-label="Note: {{ tx.note }}"{% else %}title="Add note" aria-label="Add note"{% endif %}>
+                    <svg class="act-ico" aria-hidden="true">
+                      <use href="#i-note"></use>
+                    </svg>
+                  </a>
                 </div>
               </td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
+      <div id="note-modal" class="modal">
+        <a href="#" class="modal-backdrop" data-modal-close aria-label="Close"></a>
+        <div class="modal-card"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="note-title">
+          <h3 id="note-title">Note</h3>
+          <p class="muted" data-note-subject></p>
+          <form method="post" action="">
+            <input type="hidden" name="return_to" value="{{ return_to }}">
+            <textarea name="note"
+                      rows="3"
+                      aria-label="Note"
+                      placeholder="What was this for? Anything to remember…"></textarea>
+            <div class="hstack mt-3">
+              <button type="submit">Save note</button>
+              <a class="btn" href="#" data-modal-close>Close</a>
+            </div>
+          </form>
+        </div>
+      </div>
       <div class="pager">
         <a class="btn"
            href="?{{ page_query(page.page - 1) }}"

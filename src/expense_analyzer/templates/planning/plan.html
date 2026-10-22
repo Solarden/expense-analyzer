@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% import "_macros.html" as ui %}
 {% block content %}
-  <h2 style="margin-top:0">Monthly plan</h2>
+  <h1>Monthly plan</h1>
   <div class="panel">
     <div class="hstack" style="gap:12px; flex-wrap:wrap;">
       <form class="hstack" method="get" action="/dashboard/plan">
         <label style="margin:0" for="plan_month">Month</label>
-        <select id="plan_month" name="month" onchange="this.form.submit()">
+        <select id="plan_month" name="month" data-autosubmit>
           {% for m in months %}
             <option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ m }}</option>
           {% endfor %}
@@ -22,7 +22,7 @@
     </div>
   </div>
   <div class="panel">
-    <h2 style="margin-top:0">{{ month }}</h2>
+    <h2>{{ month }}</h2>
     {% if overview.rows %}
       <table class="table-cards">
         <thead>
@@ -30,7 +30,7 @@
             <th>Item</th>
             <th class="num">Expected</th>
             <th>Status</th>
-            <th></th>
+            <th class="actions"></th>
           </tr>
         </thead>
         <tbody>
@@ -41,7 +41,9 @@
                 {% if row.is_loan_backed %}<span class="muted">· loan</span>{% endif %}
                 {% if row.item.due_day %}<span class="muted">· due {{ row.item.due_day }}</span>{% endif %}
                 {% if row.item.note %}<div class="muted text-[12px]">{{ row.item.note }}</div>{% endif %}
-                {% if not row.paid and row.payee_account %}<div class="muted text-[12px]">{{ row.payee_account }}</div>{% endif %}
+                {% if not row.paid and row.payee_account %}
+                  <div class="muted mono text-[12px]">{{ row.payee_account }}</div>
+                {% endif %}
               </td>
               <td class="num {{ 'pos' if row.is_income else 'neg' }}"
                   data-label="Expected">
@@ -68,63 +70,101 @@
                   <span class="muted">unpaid</span>
                 {% endif %}
               </td>
-              <td>
+              <td class="actions">
                 {# All "pay this" affordances live here on the right: the copyable
                    how-to-pay helpers, then the state action (mark paid / undo /
                    manage), then the link-a-payment suggestions — one tidy stack. #}
-                <div style="display:flex;
-                            flex-direction:column;
-                            align-items:flex-start;
-                            gap:6px">
-                  {% if not row.paid %}
-                    <div class="hstack text-[12px]" style="flex-wrap:wrap; gap:4px;">
-                      <button type="button" class="ghost" data-copy="{{ row.transfer_title }}">Copy title</button>
-                      {% if row.effective_amount is not none %}
-                        <button type="button"
-                                class="ghost"
-                                data-copy="{{ row.effective_amount | plain }}">Copy amount</button>
-                      {% endif %}
-                      {% if row.payee_account %}
-                        <button type="button" class="ghost" data-copy="{{ row.payee_account }}">Copy account</button>
-                      {% endif %}
-                    </div>
-                  {% endif %}
+                <div class="flex flex-col items-start gap-2 md:items-end">
                   {% if row.is_loan_backed %}
                     {# Read-only overlay: the payment lives in the Loans module. #}
-                    <a class="btn" href="/dashboard/loans/{{ row.loan_id }}">Manage in Loans</a>
+                    <a href="/dashboard/loans/{{ row.loan_id }}">Manage in Loans</a>
                   {% elif row.paid %}
                     {% if row.linked %}
                       <form method="post" action="/dashboard/plan/{{ row.item.id }}/unlink">
                         <input type="hidden" name="month" value="{{ month }}">
-                        <button class="ghost" type="submit">Unlink</button>
+                        <button class="linkish" type="submit">Unlink</button>
                       </form>
                     {% else %}
                       <form method="post" action="/dashboard/plan/{{ row.item.id }}/mark-unpaid">
                         <input type="hidden" name="month" value="{{ month }}">
-                        <button class="ghost" type="submit">Undo</button>
+                        <button class="linkish" type="submit">Undo</button>
                       </form>
                     {% endif %}
                   {% else %}
-                    <form method="post" action="/dashboard/plan/{{ row.item.id }}/mark-paid">
-                      <input type="hidden" name="month" value="{{ month }}">
-                      <button type="submit">Mark paid</button>
-                    </form>
+                    <div class="hstack">
+                      <span class="hstack gap-1">
+                        <button type="button"
+                                class="icon-btn"
+                                data-copy="{{ row.transfer_title }}"
+                                title="Copy transfer title"
+                                aria-label="Copy transfer title">
+                          <svg class="act-ico" aria-hidden="true">
+                            <use href="#i-text"></use>
+                          </svg>
+                        </button>
+                        {% if row.effective_amount is not none %}
+                          <button type="button"
+                                  class="icon-btn"
+                                  data-copy="{{ row.effective_amount | plain }}"
+                                  title="Copy amount"
+                                  aria-label="Copy amount">
+                            <svg class="act-ico" aria-hidden="true">
+                              <use href="#i-hash"></use>
+                            </svg>
+                          </button>
+                        {% else %}
+                          <button type="button"
+                                  class="icon-btn"
+                                  aria-disabled="true"
+                                  title="Variable amount: nothing to copy yet"
+                                  aria-label="Copy amount, variable amount: nothing to copy yet">
+                            <svg class="act-ico" aria-hidden="true">
+                              <use href="#i-hash"></use>
+                            </svg>
+                          </button>
+                        {% endif %}
+                        {% if row.payee_account %}
+                          <button type="button"
+                                  class="icon-btn"
+                                  data-copy="{{ row.payee_account }}"
+                                  title="Copy account number"
+                                  aria-label="Copy account number">
+                            <svg class="act-ico" aria-hidden="true">
+                              <use href="#i-card"></use>
+                            </svg>
+                          </button>
+                        {% else %}
+                          <a class="icon-btn is-missing"
+                             href="/dashboard/plan?month={{ month }}&edit={{ row.item.id }}#payee_account"
+                             title="No account number set: add one"
+                             aria-label="No account number set: add one">
+                            <svg class="act-ico" aria-hidden="true">
+                              <use href="#i-card"></use>
+                            </svg>
+                          </a>
+                        {% endif %}
+                      </span>
+                      <form method="post" action="/dashboard/plan/{{ row.item.id }}/mark-paid">
+                        <input type="hidden" name="month" value="{{ month }}">
+                        <button type="submit">Mark paid</button>
+                      </form>
+                    </div>
                     {% set matches = suggestions.get(row.item.id) %}
                     {% if matches %}
-                      <div class="text-[12px]">
-                        <div class="muted" style="margin-bottom:4px;">Link a payment:</div>
-                        <div class="hstack" style="flex-wrap:wrap; gap:4px;">
-                          {% for tx in matches %}
-                            <form method="post" action="/dashboard/plan/{{ row.item.id }}/link">
-                              <input type="hidden" name="month" value="{{ month }}">
-                              <input type="hidden" name="tx_id" value="{{ tx.id }}">
-                              <button class="ghost" type="submit">
-                                {{ tx.booked_date | dpl }} · {{ tx.amount | abs | pln }}
-                                · {{ tx.merchant_normalized or tx.raw_description }}
-                              </button>
-                            </form>
-                          {% endfor %}
-                        </div>
+                      <div class="text-[12px] muted">
+                        Link a payment:
+                        {% for tx in matches %}
+                          <form class="hstack"
+                                method="post"
+                                action="/dashboard/plan/{{ row.item.id }}/link">
+                            <input type="hidden" name="month" value="{{ month }}">
+                            <input type="hidden" name="tx_id" value="{{ tx.id }}">
+                            <button class="linkish" type="submit">
+                              {{ tx.booked_date | dpl }} · {{ tx.amount | abs | pln }}
+                              · {{ tx.merchant_normalized or tx.raw_description }}
+                            </button>
+                          </form>
+                        {% endfor %}
                       </div>
                     {% endif %}
                   {% endif %}
@@ -150,7 +190,7 @@
             <td class="num {{ 'pos' if overview.for_living >= 0 else 'neg' }}">{{ overview.for_living | pln }}</td>
             <td colspan="2">
               {% if overview.unestimated_count %}
-                <span class="muted text-[12px]">{{ overview.unestimated_count }} variable item(s) not yet estimated — total is approximate.</span>
+                <span class="muted text-[12px]">{{ overview.unestimated_count }} variable item{{ '' if overview.unestimated_count == 1 else 's' }} not yet estimated — total is approximate.</span>
               {% endif %}
             </td>
           </tr>
@@ -162,8 +202,9 @@
   </div>
   {% if items and for_living_chart.labels %}
     <div class="panel">
-      <h2 style="margin-top:0">For living trend</h2>
-      <canvas id="forLivingChart" height="200"></canvas>
+      <h2>For living trend</h2>
+      <canvas id="forLivingChart" data-chart="line" height="200"></canvas>
+      <script type="application/json" id="forLivingChart-data">{{ for_living_chart | tojson }}</script>
     </div>
   {% endif %}
   {% if edit_item %}
@@ -271,8 +312,8 @@
           <tr>
             <th class="w-full">Item</th>
             <th class="num">Expected</th>
-            <th>Due day</th>
-            <th></th>
+            <th class="whitespace-nowrap">Due day</th>
+            <th class="actions"></th>
           </tr>
         </thead>
         <tbody>
@@ -291,29 +332,67 @@
                 {% endif %}
               </td>
               <td data-label="Due day">{{ it.due_day or "—" }}</td>
-              <td>
-                <div class="hstack md:flex-nowrap">
+              <td class="actions">
+                <div class="hstack gap-1 md:flex-nowrap">
                   <form method="post" action="/dashboard/plan/{{ it.id }}/move">
                     <input type="hidden" name="month" value="{{ month }}">
                     <input type="hidden" name="dir" value="up">
-                    <button class="ghost" type="submit" aria-label="Move up">↑</button>
+                    <button class="icon-btn"
+                            type="submit"
+                            title="Move up"
+                            aria-label="Move up"
+                            {% if loop.first %}disabled{% endif %}>
+                      <svg class="act-ico" aria-hidden="true">
+                        <use href="#i-arrow-up"></use>
+                      </svg>
+                    </button>
                   </form>
                   <form method="post" action="/dashboard/plan/{{ it.id }}/move">
                     <input type="hidden" name="month" value="{{ month }}">
                     <input type="hidden" name="dir" value="down">
-                    <button class="ghost" type="submit" aria-label="Move down">↓</button>
+                    <button class="icon-btn"
+                            type="submit"
+                            title="Move down"
+                            aria-label="Move down"
+                            {% if loop.last %}disabled{% endif %}>
+                      <svg class="act-ico" aria-hidden="true">
+                        <use href="#i-arrow-down"></use>
+                      </svg>
+                    </button>
                   </form>
-                  <a class="btn"
-                     href="/dashboard/plan?month={{ month }}&edit={{ it.id }}#name">Edit</a>
+                  <a class="icon-btn"
+                     href="/dashboard/plan?month={{ month }}&edit={{ it.id }}#name"
+                     title="Edit"
+                     aria-label="Edit">
+                    <svg class="act-ico" aria-hidden="true">
+                      <use href="#i-pencil"></use>
+                    </svg>
+                  </a>
                   <form method="post" action="/dashboard/plan/{{ it.id }}/toggle-active">
                     <input type="hidden" name="month" value="{{ month }}">
-                    <button class="ghost" type="submit">{{ "Activate" if not it.active else "Retire" }}</button>
+                    {% if it.active %}
+                      <button class="icon-btn" type="submit" title="Retire" aria-label="Retire">
+                        <svg class="act-ico" aria-hidden="true">
+                          <use href="#i-pause"></use>
+                        </svg>
+                      </button>
+                    {% else %}
+                      <button class="icon-btn" type="submit" title="Activate" aria-label="Activate">
+                        <svg class="act-ico" aria-hidden="true">
+                          <use href="#i-play"></use>
+                        </svg>
+                      </button>
+                    {% endif %}
                   </form>
                   <form method="post"
                         action="/dashboard/plan/{{ it.id }}/delete"
-                        onsubmit="return confirm('Delete this plan item?');">
+                        data-confirm="Delete this plan item?">
                     <input type="hidden" name="month" value="{{ month }}">
-                    <button class="ghost" type="submit">Delete</button>
+                    <button class="icon-btn" type="submit" title="Delete" aria-label="Delete">
+                      <svg class="act-ico" aria-hidden="true">
+                        <use href="#i-trash"></use>
+                      </svg>
+                    </button>
                   </form>
                 </div>
               </td>
@@ -323,27 +402,5 @@
       </table>
     </div>
   {% endif %}
-  <script src="/static/plan-copy.js"></script>
-  {% if items and for_living_chart.labels %}
-    <script src="/static/chart.min.js"></script>
-    <script src="/static/chart-theme.js"></script>
-    <script>
-      const forLivingData = {{ for_living_chart | tojson }};
-      // Values are integer minor units (1/100 PLN); fmt divides by 100 for ticks/tooltips.
-      const fmtFL = (minor) => (minor / 100).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' });
-      if (window.Chart && forLivingData.labels.length) {
-        new Chart(document.getElementById('forLivingChart'), {
-          type: 'line',
-          data: {
-            labels: forLivingData.labels,
-            datasets: [{ label: 'FOR LIVING', data: forLivingData.data, borderColor: '#4f8cff', tension: 0.2 }],
-          },
-          options: {
-            plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => fmtFL(c.parsed.y) } } },
-            scales: { y: { ticks: { callback: fmtFL } } },
-          },
-        });
-      }
-    </script>
-  {% endif %}
+  {% if items and for_living_chart.labels %}<script src="/static/chart.min.js"></script>{% endif %}
 {% endblock %}

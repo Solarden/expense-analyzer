@@ -263,20 +263,6 @@ def is_manual_entry(session: Session, tx: Transaction) -> bool:
     return batch is not None and batch.source == MANUAL_BATCH_SOURCE
 
 
-def manual_batch_id(session: Session) -> int | None:
-    """The active Manual batch's id, or ``None`` if no manual entry exists yet.
-
-    Read-only counterpart to :func:`ensure_manual_batch` (never creates a row): for
-    classifying a whole list of rows in one query — compare ``tx.import_batch_id``
-    against it — instead of a per-row :func:`is_manual_entry` lookup."""
-    return session.exec(
-        select(col(ImportBatch.id)).where(
-            ImportBatch.source == MANUAL_BATCH_SOURCE,
-            ImportBatch.status == ImportStatus.active,
-        )
-    ).first()
-
-
 def create_manual_transaction(
     session: Session,
     *,

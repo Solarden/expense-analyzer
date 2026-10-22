@@ -299,3 +299,14 @@ def reconcile(schedule: Schedule, payments: list[Transaction]) -> Reconciliation
             )
 
     return Reconciliation(rows=rows, unmatched_payments=unmatched)
+
+
+def schedule_window(
+    due_dates: list[date], today: date, *, past: int = 3, ahead: int = 6
+) -> tuple[int, int]:
+    """``[start, end)`` of the installments worth showing around ``today``: the last ``past``
+    already due and the next ``ahead``. A 30-year mortgage has 360 rows; the page shows these
+    and folds the rest away."""
+    upcoming = next((i for i, due in enumerate(due_dates) if due >= today), len(due_dates))
+
+    return max(0, upcoming - past), min(len(due_dates), upcoming + ahead)
