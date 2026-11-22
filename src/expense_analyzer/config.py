@@ -115,6 +115,9 @@ class Settings(BaseSettings):
     mqtt_port: int = Field(default=1883, ge=1, le=65535)
     mqtt_username: str = ""
     mqtt_password: SecretStr = SecretStr("")  # masked in logs/repr
+    # Connect over TLS, verifying the broker's certificate against the system CA store.
+    # EA_MQTT_HOST must then be the name on that certificate, not an IP address.
+    mqtt_tls: bool = False
     # Topic prefix for this app's own state/availability/alert topics.
     mqtt_base_topic: str = "expense_analyzer"
     # Where HA listens for MQTT discovery configs (HA's default is "homeassistant").

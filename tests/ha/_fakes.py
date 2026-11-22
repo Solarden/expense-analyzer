@@ -37,10 +37,14 @@ class FakeMqttClient:
     published: list[_Published] = field(default_factory=list)
     will: tuple[str, str, bool] | None = None
     credentials: tuple[str, str | None] | None = None
+    tls: bool = False
     connected_to: tuple[str, int] | None = None
     loop_started: bool = False
     loop_stopped: bool = False
     disconnected: bool = False
+
+    def tls_set(self) -> None:
+        self.tls = True
 
     def username_pw_set(self, username: str, password: str | None = None) -> None:
         self.credentials = (username, password)

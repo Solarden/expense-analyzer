@@ -34,6 +34,7 @@ services:
       # these for the manual "Publish now" button; the worker auto-publishes.
       EA_MQTT_HOST: ${EA_MQTT_HOST:-}
       EA_MQTT_PORT: ${EA_MQTT_PORT:-1883}
+      EA_MQTT_TLS: ${EA_MQTT_TLS:-false}
       EA_MQTT_USERNAME: ${EA_MQTT_USERNAME:-}
       EA_MQTT_PASSWORD: ${EA_MQTT_PASSWORD:-}
       EA_MQTT_BASE_TOPIC: ${EA_MQTT_BASE_TOPIC:-expense_analyzer}
@@ -75,6 +76,7 @@ services:
       # positive interval are set; the broker is your HA broker on the LAN.
       EA_MQTT_HOST: ${EA_MQTT_HOST:-}
       EA_MQTT_PORT: ${EA_MQTT_PORT:-1883}
+      EA_MQTT_TLS: ${EA_MQTT_TLS:-false}
       EA_MQTT_USERNAME: ${EA_MQTT_USERNAME:-}
       EA_MQTT_PASSWORD: ${EA_MQTT_PASSWORD:-}
       EA_MQTT_BASE_TOPIC: ${EA_MQTT_BASE_TOPIC:-expense_analyzer}
