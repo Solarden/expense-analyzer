@@ -43,6 +43,7 @@ class MqttError(Exception):
 class MqttClient(Protocol):
     """The slice of ``paho.mqtt.client.Client`` that :class:`MqttPublisher` uses."""
 
+    def tls_set(self) -> object: ...
     def username_pw_set(self, username: str, password: str | None = ...) -> object: ...
     def will_set(self, topic: str, payload: str, qos: int = ..., retain: bool = ...) -> object: ...
     def connect(self, host: str, port: int, keepalive: int = ...) -> object: ...
@@ -68,10 +69,12 @@ class MqttPublisher:
         password: str,
         base_topic: str,
         discovery_prefix: str,
+        tls: bool = False,
         client: MqttClient | None = None,
     ) -> None:
         self._host = host
         self._port = port
+        self._tls = tls
         self._username = username
         self._password = password
         self._base_topic = base_topic
@@ -92,6 +95,7 @@ class MqttPublisher:
             password=settings.mqtt_password.get_secret_value(),
             base_topic=settings.mqtt_base_topic,
             discovery_prefix=settings.mqtt_discovery_prefix,
+            tls=settings.mqtt_tls,
             client=client,
         )
 
@@ -226,6 +230,10 @@ class MqttPublisher:
         client = self._client or self._build_client()
 
         try:
+            if self._tls:
+                # System CA store, certificate and hostname both verified (paho's defaults).
+                client.tls_set()
+
             if self._username:
                 client.username_pw_set(self._username, self._password or None)
 

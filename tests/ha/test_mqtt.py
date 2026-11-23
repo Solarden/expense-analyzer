@@ -49,6 +49,16 @@ def test_credentials_only_set_when_a_username_is_configured() -> None:
     assert authed.credentials == ("ha", "pw")
 
 
+@pytest.mark.parametrize("tls", [True, False])
+def test_tls_follows_the_setting(tls: bool) -> None:
+    client = FakeMqttClient()
+    settings = Settings(mqtt_host="broker.local", mqtt_tls=tls)
+
+    MqttPublisher.from_settings(settings, client=client).publish_metrics([])
+
+    assert client.tls is tls
+
+
 def test_publish_alert_is_a_non_retained_event() -> None:
     client = FakeMqttClient()
 
