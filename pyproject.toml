@@ -39,6 +39,9 @@ dependencies = [
     # are baked into the Docker image at build time and read offline at runtime
     # (HF_HUB_OFFLINE=1), so nothing leaves the host.
     "sentence-transformers>=3.0",
+    # Listed directly only so [tool.uv.sources] below can point it at the CPU index
+    # (uv applies sources to direct dependencies only).
+    "torch>=2.13.0",
 ]
 
 [project.optional-dependencies]
@@ -50,6 +53,16 @@ dev = [
     # linter: djlint's lint rules are mostly inapplicable here, see PROGRESS.md).
     "djlint>=1.36",
 ]
+
+# On Linux, torch comes from the PyTorch CPU index: the PyPI wheels pull ~2 GB of
+# CUDA libraries that a CPU-only server never uses. macOS keeps the PyPI wheel.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [build-system]
 requires = ["hatchling"]
